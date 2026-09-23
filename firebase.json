@@ -1,0 +1,44 @@
+{
+  "hosting": [
+    {
+      "target": "landing",
+      "public": "landing",
+      "cleanUrls": true,
+      "trailingSlash": false,
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**", "README-landing.md"],
+      "headers": [
+        {
+          "source": "**/*.@(js|css|svg)",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
+        }
+      ]
+    },
+    {
+      "target": "app",
+      "public": "frontend/dist",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [
+        {
+          "source": "/api/**",
+          "run": {
+            "serviceId": "render-ai-api",
+            "region": "us-central1"
+          }
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ],
+      "headers": [
+        {
+          "source": "**/*.@(js|css)",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        }
+      ]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

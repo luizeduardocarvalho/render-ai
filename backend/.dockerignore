@@ -1,0 +1,27 @@
+# Keep the build context lean, but do NOT exclude config/ or prompts/ - the
+# server loads config/config.yaml and prompts/render.tmpl at runtime (see
+# cmd/server/main.go's repoRoot()).
+
+.git
+.gitignore
+
+# Local secrets / env overrides - never bake these into the image.
+.env
+.env.local
+.env.example
+
+# Editor / OS cruft.
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# Local build output and dev tooling not needed inside the image.
+/server
+shell.nix
+
+# Docs not needed at runtime.
+*.md
+
+# Just in case any JS tooling ever ends up under backend/.
+node_modules

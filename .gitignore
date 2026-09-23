@@ -1,0 +1,9 @@
+# OS / editor
+.DS_Store
+
+# Firebase local cache
+.firebase/
+
+# Env files with real secrets (per-package .env.example stays tracked)
+.env
+.env.local

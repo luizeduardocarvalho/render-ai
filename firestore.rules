@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// Firestore security rules for the render-ai landing page contact form.
+//
+// The public landing page is allowed to CREATE contact messages only, and
+// only when they are well-formed. Nobody (client-side) may read, update, or
+// delete them - review submissions from the Firebase console or an admin
+// backend using the Admin SDK, which bypasses these rules.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /contactMessages/{docId} {
+      allow create: if isValidContactMessage();
+      allow read, update, delete: if false;
+    }
+
+    // Everything else is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidContactMessage() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['email', 'message', 'createdAt'])
+        && d.email is string
+        && d.email.size() >= 3
+        && d.email.size() <= 254
+        && d.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+        && d.message is string
+        && d.message.size() >= 1
+        && d.message.size() <= 5000
+        && d.createdAt == request.time;
+    }
+  }
+}

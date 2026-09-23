@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "render-ai-studio"
+  },
+  "targets": {
+    "render-ai-studio": {
+      "hosting": {
+        "landing": [
+          "render-ai-studio"
+        ],
+        "app": [
+          "render-ai-studio-app"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

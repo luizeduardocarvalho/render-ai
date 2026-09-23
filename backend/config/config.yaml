@@ -1,0 +1,40 @@
+# Local PoC configuration. Edit freely; loaded at startup.
+
+server:
+  port: 8080
+  # Generous timeout for synchronous renders (seconds).
+  renderTimeoutSec: 180
+
+vertex:
+  # Set via env instead if you prefer: GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION.
+  # Image models run ONLY on the global endpoint.
+  project: "labflux-project" # GCP project with Vertex AI enabled (env GOOGLE_CLOUD_PROJECT overrides)
+  location: "global"          # required for the Gemini 3 image models (do NOT use us-central1 here)
+  textLocation: "us-central1" # text model endpoint; text models are NOT served from "global"
+
+models:
+  # Resolved model ids sent to Vertex AI.
+  proImage: "gemini-3-pro-image"       # Nano Banana Pro (1K/2K/4K) - global endpoint
+  flashImage: "gemini-3.1-flash-image" # Nano Banana 2   (1K only)  - global endpoint
+  text: "gemini-2.5-flash"             # inventory + preservation inventory check (runs on textLocation)
+
+# Fill in current prices. Used only to estimate cost for the metrics panel.
+# Image prices are per generated image at the given resolution.
+pricing:
+  image:
+    pro:
+      "1K": 0.134
+      "2K": 0.134
+      "4K": 0.24
+    flash:
+      "1K": 0.039
+  # Text model token pricing, USD per 1M tokens. Fill with current values.
+  text:
+    inputPerMTok: 0.10
+    outputPerMTok: 0.40
+
+preservation:
+  # Edge IoU below this is flagged in the UI.
+  edgeScoreFlagThreshold: 0.55
+  # Dilation (px) applied before computing edge overlap, to tolerate sub-pixel drift.
+  edgeDilationPx: 2

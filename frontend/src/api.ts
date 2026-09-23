@@ -1,0 +1,231 @@
+import type {
+  Asset,
+  ApiErrorBody,
+  Mask,
+  Project,
+  Render,
+  RenderRequest,
+  StyleSettings,
+  View,
+} from "./types";
+import { getClerkToken } from "./lib/clerkToken";
+
+// Same-origin in production (Firebase Hosting rewrites /api/** to the Cloud
+// Run backend, so no base URL is needed and no CORS is involved), local
+// backend in dev. Override with VITE_API_URL if needed (e.g. staging).
+export const API_BASE =
+  import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? "" : "http://localhost:8080");
+
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+/**
+ * Builds the direct <img> src for a stored image blob.
+ * Used for: asset reference photos, view screenshots and render results.
+ */
+export function imageUrl(imageId: string): string {
+  return `${API_BASE}/api/images/${imageId}`;
+}
+
+/**
+ * The contract's Mask type carries no separate `bitmapImageId` field (unlike
+ * Asset.referenceImageId / View.screenshotImageId), so the mask's own id is
+ * the blob id for its bitmap PNG. Cache-bust with `v` after every re-upload
+ * so the editor picks up the freshest painted bitmap.
+ */
+export function maskBitmapUrl(maskId: string, cacheBust?: number): string {
+  const base = `${API_BASE}/api/images/${maskId}`;
+  return cacheBust ? `${base}?v=${cacheBust}` : base;
+}
+
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs = 30_000,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const token = await getClerkToken();
+    const headers = new Headers(init?.headers);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      let message = `Request failed (${res.status})`;
+      try {
+        const body = (await res.json()) as ApiErrorBody;
+        if (body?.error) message = body.error;
+      } catch {
+        // ignore body parse failures, keep default message
+      }
+      throw new ApiError(res.status, message);
+    }
+    if (res.status === 204) return undefined as T;
+    return (await res.json()) as T;
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError(0, "Request timed out. Please try again.");
+    }
+    throw new ApiError(0, err instanceof Error ? err.message : "Network error");
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function json(body: unknown): RequestInit {
+  return {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
+}
+
+// ---- Projects ----
+
+export function createProject(name: string): Promise<Project> {
+  return request<Project>("/api/projects", json({ name }));
+}
+
+export function getProject(pid: string): Promise<Project> {
+  return request<Project>(`/api/projects/${pid}`);
+}
+
+export function updateStyle(pid: string, style: StyleSettings): Promise<Project> {
+  return request<Project>(`/api/projects/${pid}/style`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(style),
+  });
+}
+
+export function setAnchor(pid: string, renderId: string | null): Promise<Project> {
+  return request<Project>(`/api/projects/${pid}/anchor`, json({ renderId }));
+}
+
+// ---- Assets ----
+
+export function createAsset(
+  pid: string,
+  data: { name: string; description: string; color: string },
+): Promise<Asset> {
+  return request<Asset>(`/api/projects/${pid}/assets`, json(data));
+}
+
+export function updateAsset(
+  pid: string,
+  aid: string,
+  data: { name: string; description: string; color: string },
+): Promise<Asset> {
+  return request<Asset>(`/api/projects/${pid}/assets/${aid}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteAsset(pid: string, aid: string): Promise<void> {
+  return request<void>(`/api/projects/${pid}/assets/${aid}`, { method: "DELETE" });
+}
+
+export function uploadAssetReference(pid: string, aid: string, file: File): Promise<Asset> {
+  const form = new FormData();
+  form.append("file", file);
+  return request<Asset>(`/api/projects/${pid}/assets/${aid}/reference`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+// ---- Views ----
+
+export function createView(pid: string, name: string, file: File): Promise<View> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("name", name);
+  return request<View>(`/api/projects/${pid}/views`, { method: "POST", body: form });
+}
+
+export function getView(pid: string, vid: string): Promise<View> {
+  return request<View>(`/api/projects/${pid}/views/${vid}`);
+}
+
+export function deleteView(pid: string, vid: string): Promise<void> {
+  return request<void>(`/api/projects/${pid}/views/${vid}`, { method: "DELETE" });
+}
+
+export function updateInventory(pid: string, vid: string, inventory: string): Promise<View> {
+  return request<View>(`/api/projects/${pid}/views/${vid}/inventory`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ inventory }),
+  });
+}
+
+export function generateInventory(pid: string, vid: string): Promise<{ inventory: string }> {
+  return request<{ inventory: string }>(
+    `/api/projects/${pid}/views/${vid}/inventory/generate`,
+    { method: "POST" },
+    60_000,
+  );
+}
+
+// ---- Masks ----
+
+export function createMask(pid: string, vid: string, assetId?: string): Promise<Mask> {
+  return request<Mask>(`/api/projects/${pid}/views/${vid}/masks`, json(assetId ? { assetId } : {}));
+}
+
+export function updateMask(
+  pid: string,
+  vid: string,
+  mid: string,
+  data: { assetId?: string | null; hidden?: boolean },
+): Promise<Mask> {
+  return request<Mask>(`/api/projects/${pid}/views/${vid}/masks/${mid}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function uploadMaskBitmap(
+  pid: string,
+  vid: string,
+  mid: string,
+  blob: Blob,
+): Promise<Mask> {
+  const form = new FormData();
+  form.append("file", blob, "mask.png");
+  return request<Mask>(`/api/projects/${pid}/views/${vid}/masks/${mid}/bitmap`, {
+    method: "PUT",
+    body: form,
+  });
+}
+
+export function deleteMask(pid: string, vid: string, mid: string): Promise<void> {
+  return request<void>(`/api/projects/${pid}/views/${vid}/masks/${mid}`, { method: "DELETE" });
+}
+
+// ---- Render ----
+
+export function renderView(pid: string, vid: string, req: RenderRequest): Promise<Render[]> {
+  // Rendering is slow (10-60s per variation, server timeout ~180s for the
+  // whole request); give it a generous client timeout too. The response is
+  // always an array, one Render per requested (successful) variation.
+  return request<Render[]>(
+    `/api/projects/${pid}/views/${vid}/render`,
+    json(req),
+    180_000,
+  );
+}

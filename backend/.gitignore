@@ -1,0 +1,6 @@
+# Local environment (holds the Clerk secret key and any GCP overrides).
+.env
+.env.local
+
+# Go build output
+/server
