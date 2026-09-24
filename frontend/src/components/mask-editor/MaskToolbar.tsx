@@ -13,7 +13,11 @@ interface MaskToolbarProps {
   onAddMask: () => void;
   addingMask: boolean;
   toolsDisabled: boolean;
-  savingCount: number;
+  /** Masks being saved right now; the edit-region editor saves nothing and omits it. */
+  savingCount?: number;
+  /** Label of the add button; defaults to "Add mask". */
+  addLabel?: string;
+  addDisabled?: boolean;
 }
 
 export function MaskToolbar({
@@ -28,7 +32,9 @@ export function MaskToolbar({
   onAddMask,
   addingMask,
   toolsDisabled,
-  savingCount,
+  savingCount = 0,
+  addLabel,
+  addDisabled = false,
 }: MaskToolbarProps) {
   const { t } = useTranslation();
   return (
@@ -91,8 +97,13 @@ export function MaskToolbar({
         </span>
       )}
 
-      <button type="button" className="btn btn-primary btn-sm" onClick={onAddMask} disabled={addingMask}>
-        {addingMask ? <span className="spinner" /> : "+"} {t("maskToolbar.addMask")}
+      <button
+        type="button"
+        className="btn btn-primary btn-sm"
+        onClick={onAddMask}
+        disabled={addingMask || addDisabled}
+      >
+        {addingMask ? <span className="spinner" /> : "+"} {addLabel ?? t("maskToolbar.addMask")}
       </button>
     </div>
   );

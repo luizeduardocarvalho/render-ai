@@ -41,3 +41,24 @@ func TestRenderPromptInteriorLights(t *testing.T) {
 		})
 	}
 }
+
+// Every region's number, overlay color and instruction must reach the edit
+// prompt, and the keep-everything-else-identical rule must stay in it.
+func TestEditPromptListsEveryRegion(t *testing.T) {
+	prompt, err := EditPrompt("../../prompts/edit.tmpl", EditTemplateData{Regions: []EditRegionPrompt{
+		{Number: 1, Color: "red", Instruction: "a brass floor lamp"},
+		{Number: 2, Color: "blue", Instruction: "paint the wall sage green"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"red area (region 1): a brass floor lamp",
+		"blue area (region 2): paint the wall sage green",
+		"EVERYTHING ELSE STAYS IDENTICAL",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("edit prompt missing %q", want)
+		}
+	}
+}

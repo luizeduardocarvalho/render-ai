@@ -3,6 +3,7 @@ import type {
   Asset,
   ApiErrorBody,
   CreditsResponse,
+  EditRegionRequest,
   Mask,
   Me,
   PricingResponse,
@@ -531,6 +532,9 @@ function getRenderJob(pid: string, jid: string): Promise<RenderJob> {
 const POLL_INTERVAL_MS = 3_000;
 const POLL_TIMEOUT_MS = 15 * 60_000;
 const MAX_CONSECUTIVE_POLL_FAILURES = 3;
+// The edit request carries the painted regions as base64 PNGs, which takes
+// longer to send than a render's small body.
+const EDIT_START_TIMEOUT_MS = 60_000;
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -556,19 +560,17 @@ export interface RenderViewOptions {
 }
 
 /**
- * Starts a render job and polls it to completion, resolving to the finished
+ * Polls a job that was just started to completion, resolving to the finished
  * variations' Render[] (same shape callers got back when the endpoint was
  * synchronous). Polls every ~3s, tolerating a handful of consecutive
  * transient failures (network errors or 5xx) before giving up; a 4xx from a
  * poll is treated as fatal right away. Gives up after ~15 minutes overall.
  */
-export async function renderView(
+async function pollJob(
   pid: string,
-  vid: string,
-  req: RenderRequest,
+  job: RenderJob,
   opts?: RenderViewOptions,
 ): Promise<Render[]> {
-  const job = await startRender(pid, vid, req);
   opts?.onProgress?.(job);
   if (job.status === "done") return job.renders;
   if (job.status === "failed") throw new ApiError(502, job.error ?? "Render failed.");
@@ -596,6 +598,36 @@ export async function renderView(
     if (polled.status === "done") return polled.renders;
     if (polled.status === "failed") throw new ApiError(502, polled.error ?? "Render failed.");
   }
+}
+
+/** Starts a render job and polls it to completion - see pollJob. */
+export async function renderView(
+  pid: string,
+  vid: string,
+  req: RenderRequest,
+  opts?: RenderViewOptions,
+): Promise<Render[]> {
+  return pollJob(pid, await startRender(pid, vid, req), opts);
+}
+
+/**
+ * Edits an existing render: the regions (painted areas with an instruction
+ * each) are changed and everything else is kept. Runs as a job like a render
+ * and resolves to the one new Render, linked to its source.
+ */
+export async function editRender(
+  pid: string,
+  vid: string,
+  rid: string,
+  regions: EditRegionRequest[],
+  opts?: RenderViewOptions,
+): Promise<Render[]> {
+  const job = await request<RenderJob>(
+    `/api/projects/${pid}/views/${vid}/renders/${rid}/edit`,
+    json({ regions }),
+    EDIT_START_TIMEOUT_MS,
+  );
+  return pollJob(pid, job, opts);
 }
 
 // ---- Pricing ----

@@ -215,18 +215,54 @@
       "cost": "Cost"
     },
     "anchorBadge": "Anchor",
-    "notAvailable": "n/a"
+    "notAvailable": "n/a",
+    "editNote": "Edit: {{changes}}"
   },
   "resultView": {
     "title": "Result",
     "clearAnchor": "Clear anchor",
     "setAsAnchor": "Set as style anchor",
     "anchorBadge": "Style anchor",
+    "edit": "Edit",
     "downloadPng": "Download PNG",
     "loadingImage": "Loading image...",
     "errors": {
       "anchor": "Failed to update style anchor",
       "download": "Failed to download image"
+    }
+  },
+  "editRegions": {
+    "title": "Edit render",
+    "subtitle": "Paint the areas to change and describe each change. Everything else stays exactly as it is.",
+    "addRegion": "Add region",
+    "loadingImage": "Loading render...",
+    "loadError": "Could not load the render image.",
+    "paintHint": "Paint a little beyond the object's edge so the new content has room to blend in.",
+    "regionLabel": "Region {{index}}",
+    "ready": "Ready",
+    "hint": {
+      "paint": "Paint the area",
+      "describe": "Describe the change"
+    },
+    "placeholder": "What should this area become? For example: a brass floor lamp with a warm bulb",
+    "instructionLabel": "What region {{index}} should become",
+    "deleteRegion": "Delete region",
+    "empty": {
+      "title": "No regions yet",
+      "body": "Add a region, then paint the area it covers."
+    },
+    "applyButton_one": "Apply edit ({{credits}} credit)",
+    "applyButton_other": "Apply edit ({{credits}} credits)",
+    "applyButtonNoPrice": "Apply edit",
+    "queued": "Starting edit...",
+    "applying": "Editing... this can take up to a minute",
+    "wait": "The edit is a new render. Your original stays as it is.",
+    "notReady": "Every region needs a painted area and a description.",
+    "lowBalance": "Not enough credits ({{available}} available, {{required}} required). Ask an admin to top up your balance.",
+    "errors": {
+      "emptyRegion": "Region {{index}} has nothing painted.",
+      "insufficientCredits": "Edit failed: insufficient credits. Ask an admin to top up your balance.",
+      "failed": "Edit failed. Please try again."
     }
   },
   "metricsPanel": {

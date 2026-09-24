@@ -4,7 +4,10 @@
 // Firestore + GCS one for the deployed service.
 package store
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // ScenePreset is the project's scene type.
 type ScenePreset string
@@ -149,6 +152,13 @@ type Render struct {
 	Metrics       RenderMetrics       `json:"metrics"`
 	Preservation  *PreservationReport `json:"preservation,omitempty"`
 	IsStyleAnchor bool                `json:"isStyleAnchor"`
+	// SourceRenderID is set when this Render is an Edit: the Render (in the
+	// same view) it was derived from. Empty for a Render made from the
+	// screenshot.
+	SourceRenderID string `json:"sourceRenderId,omitempty"`
+	// EditInstructions are the per-region instructions the Edit was asked
+	// for, in region order. Empty unless SourceRenderID is set.
+	EditInstructions []string `json:"editInstructions,omitempty"`
 }
 
 // View is one camera angle: a screenshot plus its masks and render history.
@@ -279,6 +289,7 @@ func (r *Render) clone() *Render {
 		p := *r.Preservation
 		clone.Preservation = &p
 	}
+	clone.EditInstructions = slices.Clone(r.EditInstructions)
 	return &clone
 }
 
@@ -300,6 +311,25 @@ type RenderJobRequest struct {
 	Resolution        Resolution  `json:"resolution"`
 	PreservationCheck bool        `json:"preservationCheck"`
 	Variations        int         `json:"variations"`
+	// Edit is set when the job edits an existing Render instead of rendering
+	// the view's screenshot; Model and Resolution are then the source
+	// Render's own and Variations is 1.
+	Edit *RenderJobEdit `json:"edit,omitempty"`
+}
+
+// RenderJobEdit is the Edit-specific half of a RenderJobRequest.
+type RenderJobEdit struct {
+	SourceRenderID string       `json:"sourceRenderId"`
+	Regions        []EditRegion `json:"regions"`
+}
+
+// EditRegion is one area to change on the source Render, with what to change
+// it into. BitmapImageID is a blob holding the area as a white-on-black PNG
+// (any size, same aspect ratio as the source); it only lives as long as the
+// job does.
+type EditRegion struct {
+	Instruction   string `json:"instruction"`
+	BitmapImageID string `json:"bitmapImageId"`
 }
 
 // RenderJobVariation tracks one Cloud Task's progress: one independent
@@ -346,6 +376,11 @@ type RenderJob struct {
 // mutate it after the store's lock has been released.
 func (j *RenderJob) clone() *RenderJob {
 	out := *j
+	if j.Request.Edit != nil {
+		edit := *j.Request.Edit
+		edit.Regions = slices.Clone(edit.Regions)
+		out.Request.Edit = &edit
+	}
 	out.Variations = make([]RenderJobVariation, len(j.Variations))
 	for i, v := range j.Variations {
 		out.Variations[i] = v.clone()

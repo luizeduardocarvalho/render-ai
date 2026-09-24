@@ -29,7 +29,13 @@ export function ViewWorkspace({ view }: { view: View }) {
         view={view}
         onRendered={(renders) => setSelectedRenderId(renders[0]?.id ?? null)}
       />
-      {selectedRender && <ResultView view={view} render={selectedRender} />}
+      {selectedRender && (
+        <ResultView
+          view={view}
+          render={selectedRender}
+          onEdited={(edit) => setSelectedRenderId(edit.id)}
+        />
+      )}
       <RenderHistory
         view={view}
         selectedRenderId={selectedRenderId}

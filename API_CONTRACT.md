@@ -62,6 +62,8 @@ interface Render {
   metrics: RenderMetrics;
   preservation?: PreservationReport; // present iff preservation check was on
   isStyleAnchor: boolean;
+  sourceRenderId?: string; // set iff this render is an Edit: the render (same view) it was made from
+  editInstructions?: string[]; // set iff Edit: what each edited region was asked to become, in region order
 }
 
 interface RenderMetrics {
@@ -372,6 +374,47 @@ see `backend/DEPLOY.md`) does the actual Vertex AI call for each.
   worker died mid-render - a killed instance, a crash) is reported as
   `"failed"` with `error: "render worker did not finish"` once enough time
   has passed - this is computed each time the job is read, not written back.
+
+### Edit
+
+An **Edit** changes marked areas of an existing render and keeps everything
+else. It is a new `Render` appended to the same view, linked to the render it
+came from through `sourceRenderId`; the source is never touched, and an edit
+can itself be edited. See `CONTEXT.md` for the vocabulary.
+
+- `POST   /api/projects/{pid}/views/{vid}/renders/{rid}/edit`
+  ```json
+  { "regions": [ { "instruction": "a brass floor lamp", "bitmap": "<base64 PNG>" } ] }
+  ```
+  Each region is one area to change plus what to change it into. `bitmap` is a
+  base64 (standard alphabet, no `data:` prefix) white-on-black PNG of the
+  painted area. It may be drawn at a reduced size but must keep the render's
+  aspect ratio (within 1%); the server scales it to the render's size.
+  Limits: 1-8 regions, each `instruction` non-blank and at most 500
+  characters, each bitmap a PNG with at least one painted pixel, request body
+  at most 32 MiB. Any of these failing is a `400`; an unknown project, view or
+  render (the render must belong to `{vid}`) is a `404`; a missing renderer is
+  a `500`, as for renders.
+  -> **`202 Accepted`** with a `RenderJob` exactly like the render endpoint's,
+  polled through `GET .../render-jobs/{jid}` until terminal. The job has one
+  variation and its `request` carries the source's own `model` and
+  `resolution` plus an `edit` block (`sourceRenderId` and the regions'
+  instructions). On `"done"`, `renders[0]` is the new Render.
+  **Price and charging** are a render's: one variation at the source's
+  model+resolution (`unitsPerVariation`), debited up front, `402` on too
+  little balance, refunded exactly once if the variation fails - the whole
+  "Credits" section applies unchanged.
+  **How it works.** The model gets the source render and a copy of it with the
+  regions filled in distinct colors, plus a prompt listing each color's
+  instruction (`backend/prompts/edit.tmpl`); no style settings, asset photos or
+  preservation check are sent. The answer is scaled to the source's size and
+  blended over the source through the union of the regions, grown by
+  ~0.5% of the shorter side and blurred with a sigma of ~0.5% of it
+  (`geometry.EditAlpha`), so the edit fades in at its edge and **every pixel
+  more than ~2% of the shorter side away from a region is the source's own,
+  byte for byte**. The region bitmaps are stored only
+  while the job runs and deleted when it ends. The resulting `Render` has
+  `regionCount` = the number of regions and no `preservation`.
 
 ### Pricing
 - `GET /api/pricing` -> `PricingResponse`. Requires only a signed-in user (like
