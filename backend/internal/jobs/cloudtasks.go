@@ -17,13 +17,13 @@ const maxDispatchDeadline = 30 * time.Minute
 
 // CloudTasks is the Queue used with the "cloudtasks" jobs.queue config: each
 // Enqueue creates one Cloud Tasks HTTP task that calls the worker route
-// directly on this same Cloud Run service (bypassing Firebase Hosting's 60s
-// cutoff), carrying a Google-minted OIDC
+// directly on the render-ai-worker Cloud Run service (bypassing Firebase
+// Hosting's 60s cutoff), carrying a Google-minted OIDC
 // token the worker route verifies (see internal/api.Server.verifyWorkerRequest).
 type CloudTasks struct {
 	client           *cloudtasks.Client
 	queuePath        string // projects/P/locations/L/queues/Q
-	workerURL        string // e.g. https://render-ai-api-xxx.a.run.app (no path)
+	workerURL        string // e.g. https://render-ai-worker-xxx.a.run.app (no path)
 	invokerSA        string
 	audience         string
 	dispatchDeadline time.Duration

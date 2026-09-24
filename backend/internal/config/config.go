@@ -28,8 +28,8 @@ type Config struct {
 //
 // Queue is "inline" (default - runs the worker func in a goroutine,
 // in-process; used with memory storage and local dev) or "cloudtasks"
-// (creates one Cloud Tasks HTTP task per variation, calling this same
-// service's own run.app URL directly so Firebase Hosting's 60s cutoff never
+// (creates one Cloud Tasks HTTP task per variation, calling the worker
+// service's run.app URL directly so Firebase Hosting's 60s cutoff never
 // applies). The remaining fields are only
 // meaningful (and required) in "cloudtasks" mode.
 type JobsConfig struct {

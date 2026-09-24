@@ -3,7 +3,8 @@ name: Deploy
 # Manual deploy to production: Actions -> Deploy -> Run workflow.
 #
 # Backend: builds backend/Dockerfile, pushes it to Artifact Registry and rolls
-# it out to the render-ai-api Cloud Run service. Only the image changes - env
+# it out to the render-ai-worker and render-ai-api Cloud Run services (same
+# image; the worker only runs render tasks). Only the image changes - env
 # vars, secret, service account and scaling stay as Terraform set them.
 # Frontend: builds frontend/ and runs `firebase deploy --only hosting,firestore`
 # (both Hosting sites plus firestore.rules).
@@ -69,14 +70,16 @@ jobs:
           REGION: ${{ vars.GCP_REGION }}
         run: |
           set -euo pipefail
-          gcloud run deploy render-ai-api \
-            --image "$IMAGE" \
-            --project "$PROJECT" \
-            --region "$REGION" \
-            --quiet
-          gcloud run services describe render-ai-api \
-            --project "$PROJECT" --region "$REGION" \
-            --format='value(status.url,status.latestReadyRevisionName)'
+          for service in render-ai-worker render-ai-api; do
+            gcloud run deploy "$service" \
+              --image "$IMAGE" \
+              --project "$PROJECT" \
+              --region "$REGION" \
+              --quiet
+            gcloud run services describe "$service" \
+              --project "$PROJECT" --region "$REGION" \
+              --format='value(status.url,status.latestReadyRevisionName)'
+          done
 
   frontend:
     # Runs after the backend when both are deployed (the new frontend calls

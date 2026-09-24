@@ -17,10 +17,11 @@ can be recreated in new GCP projects by changing variables:
   - `tasks.tf`: the `render-jobs` Cloud Tasks queue (one task per render
     variation, `max_attempts = 1` because renders are billed) and the
     dedicated `render-tasks-invoker` service account Cloud Tasks uses to call
-    the service's `/internal/render-tasks` worker route. `cloudrun.tf` wires
-    the queue and invoker into the Cloud Run service via the `RENDER_QUEUE`,
-    `RENDER_TASKS_QUEUE`, `RENDER_WORKER_URL` and `RENDER_TASKS_INVOKER_SA`
-    env vars.
+    the non-public `render-ai-worker` service's `/internal/render-tasks`
+    route. `cloudrun.tf` defines that worker (same image as `render-ai-api`,
+    one render per instance) and wires the queue and invoker into both
+    services via the `RENDER_QUEUE`, `RENDER_TASKS_QUEUE`,
+    `RENDER_WORKER_URL` and `RENDER_TASKS_INVOKER_SA` env vars.
   - `backup.tf`, `export.tf`: the Coldline backup bucket in the backup
     project, the daily Storage Transfer copy that never deletes, and the
     weekly Firestore export.

@@ -38,6 +38,11 @@ output "cloud_run_url" {
   description = "Public URL of the render-ai-api Cloud Run service."
 }
 
+output "render_worker_url" {
+  value       = google_cloud_run_v2_service.render_worker.uri
+  description = "URL of the non-public render-ai-worker Cloud Run service Cloud Tasks delivers render tasks to."
+}
+
 output "deployer_service_account_email" {
   value       = google_service_account.deployer.email
   description = "Service account the deploy workflow impersonates. Set as GCP_DEPLOYER_SA in the GitHub production environment."

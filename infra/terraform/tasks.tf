@@ -1,12 +1,10 @@
 # Async render queue: render-ai-api enqueues one Cloud Task per render
-# variation, and Cloud Tasks POSTs it back to the same service's
+# variation, and Cloud Tasks POSTs it to the render-ai-worker service's
 # /internal/render-tasks route with an OIDC token minted as the dedicated
 # invoker service account below (see cloudrun.tf for the env vars that wire
 # the backend up to this).
 
-# The service's own `uri` can't be referenced from its own template (that's a
-# dependency cycle), so cloudrun.tf derives the worker URL from the project
-# number instead.
+# cloudrun.tf derives the worker URL from the project number.
 data "google_project" "app" {
   project_id = var.app_project_id
 }
@@ -33,7 +31,7 @@ resource "google_cloud_tasks_queue" "render" {
 resource "google_service_account" "render_tasks_invoker" {
   project      = var.app_project_id
   account_id   = "render-tasks-invoker"
-  display_name = "Cloud Tasks invoker for render-ai-api worker route"
+  display_name = "Cloud Tasks invoker for render-ai-worker"
 
   depends_on = [google_project_service.app]
 }
@@ -57,13 +55,11 @@ resource "google_service_account_iam_member" "render_api_invoker_sa_user" {
   member             = google_service_account.render_api.member
 }
 
-# Lets the invoker SA call the Cloud Run service. Harmless while the service
-# is publicly invokable (see public_invoker in cloudrun.tf); required if it
-# ever stops being public.
+# The only principal allowed to call the (non-public) worker service.
 resource "google_cloud_run_v2_service_iam_member" "render_tasks_invoker" {
-  project  = google_cloud_run_v2_service.render_api.project
-  location = google_cloud_run_v2_service.render_api.location
-  name     = google_cloud_run_v2_service.render_api.name
+  project  = google_cloud_run_v2_service.render_worker.project
+  location = google_cloud_run_v2_service.render_worker.location
+  name     = google_cloud_run_v2_service.render_worker.name
 
   role   = "roles/run.invoker"
   member = google_service_account.render_tasks_invoker.member
