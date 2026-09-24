@@ -50,6 +50,13 @@ type Repository interface {
 	GetProject(pid string) (*Project, error)
 	UpdateStyle(pid string, style StyleSettings) (*Project, error)
 	SetAnchor(pid string, renderID *string) (*Project, error)
+	// DeleteProject soft-deletes a project: its DeletedAt is set, but nothing
+	// else is removed - views, renders and blobs stay, so the project can be
+	// restored. Every other Repository method must then treat it as gone
+	// (ListProjects excludes it, ProjectOwner/GetProject/etc return
+	// ErrNotFound). Returns ErrNotFound if the project doesn't exist or is
+	// already deleted.
+	DeleteProject(pid string) error
 
 	// Assets.
 	CreateAsset(pid, name, description, color string) (*Asset, error)

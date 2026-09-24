@@ -94,6 +94,7 @@ func (s *Server) Router() http.Handler {
 	}
 
 	mux.HandleFunc("GET /api/projects/{pid}", owned(s.getProject))
+	mux.HandleFunc("DELETE /api/projects/{pid}", owned(s.deleteProject))
 	mux.HandleFunc("PUT /api/projects/{pid}/style", owned(s.updateStyle))
 	mux.HandleFunc("POST /api/projects/{pid}/anchor", owned(s.setAnchor))
 

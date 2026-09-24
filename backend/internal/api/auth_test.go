@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -70,6 +71,48 @@ func TestRequireOwnerMissingProjectAs404(t *testing.T) {
 	called, status := call(s, "does-not-exist", "user-a")
 	if called || status != http.StatusNotFound {
 		t.Fatalf("missing project: called=%v status=%d", called, status)
+	}
+}
+
+// TestDeleteProjectEndpoint exercises DELETE /api/projects/{pid} through the
+// same requireOwner + handler composition Router() wires it with: the owner
+// gets 204 and the project then reads back as gone (soft delete), while a
+// non-owner is refused with 404 and the project is left untouched.
+func TestDeleteProjectEndpoint(t *testing.T) {
+	s, st := newTestServer()
+	p := st.CreateProject("user-a", "P")
+
+	deleteAs := func(userID string) int {
+		h := s.requireOwner(s.deleteProject)
+		r := httptest.NewRequest(http.MethodDelete, "/api/projects/"+p.ID, nil)
+		r.SetPathValue("pid", p.ID)
+		r = r.WithContext(context.WithValue(r.Context(), userIDCtxKey, userID))
+		rec := httptest.NewRecorder()
+		if err := h(rec, r); err != nil {
+			status, _ := statusAndMessage(err)
+			return status
+		}
+		return rec.Code
+	}
+
+	if status := deleteAs("user-b"); status != http.StatusNotFound {
+		t.Fatalf("non-owner delete: want 404, got %d", status)
+	}
+	if _, err := st.GetProject(p.ID); err != nil {
+		t.Fatalf("project should still exist after a non-owner's delete attempt: %v", err)
+	}
+
+	if status := deleteAs("user-a"); status != http.StatusNoContent {
+		t.Fatalf("owner delete: want 204, got %d", status)
+	}
+
+	if _, err := st.GetProject(p.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetProject after delete: want ErrNotFound, got %v", err)
+	}
+
+	// Deleting again (already gone) is a 404, not a second success.
+	if status := deleteAs("user-a"); status != http.StatusNotFound {
+		t.Fatalf("delete of already-deleted project: want 404, got %d", status)
 	}
 }
 

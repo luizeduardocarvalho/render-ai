@@ -106,6 +106,9 @@ interface Project {
   name: string;
   createdAt: string;       // ISO
   updatedAt: string;       // ISO
+  deletedAt?: string;      // ISO; present only on a soft-deleted project - see DELETE below.
+                           // A caller never actually observes this: every route treats a
+                           // deleted project as 404, so it is omitted from all live responses.
   style: StyleSettings;
   assets: Asset[];
   views: View[];
@@ -153,8 +156,20 @@ signature); to refresh, request a new one.
 - `GET    /api/projects` -> `ProjectSummary[]` (the caller's own projects, most-recently-updated first)
 - `POST   /api/projects` `{ name }` -> `Project` (owner set to the caller)
 - `GET    /api/projects/{pid}` -> `Project`
+- `DELETE /api/projects/{pid}` -> `204` (**soft delete** - see below)
 - `PUT    /api/projects/{pid}/style` `StyleSettings` -> `Project`
 - `POST   /api/projects/{pid}/anchor` `{ renderId | null }` -> `Project`  (set/clear style anchor)
+
+**Deleting a project is a soft delete.** It sets `deletedAt` on the project
+doc; nothing else is touched - views, renders and their blobs are left in
+place, so the project is recoverable (by support, directly in the store) for
+30 days. From that point on every route treats the project as gone: it drops
+out of `GET /api/projects`, and `GET/PUT/POST/DELETE` on `{pid}` (and anything
+nested under it) all return 404, exactly like a project that never existed or
+belongs to someone else. Deleting an already-deleted or missing project also
+returns 404. A scheduled purge job to hard-delete projects 30+ days past
+`deletedAt` (doc + views/renders + blobs) is not implemented yet - see
+`PERSISTENCE_HANDOFF.md`.
 
 ### Assets
 - `POST   /api/projects/{pid}/assets` `{ name, description, color }` -> `Asset`

@@ -142,6 +142,11 @@ type StyleSettings struct {
 // route is authorized against it (see the API layer). OrgID is reserved for a
 // future org-scoping model - it is always nil today, but present so projects
 // can gain an org dimension without a data migration.
+//
+// DeletedAt marks a soft-deleted project: everything else about it (views,
+// masks, renders, blobs) is left in place so it can be restored, but every
+// Repository method treats it as not found (see each implementation's
+// project-loading helper). Nil means the project is live.
 type Project struct {
 	ID                  string        `json:"id"`
 	OwnerID             string        `json:"ownerId"`
@@ -149,6 +154,7 @@ type Project struct {
 	Name                string        `json:"name"`
 	CreatedAt           time.Time     `json:"createdAt"`
 	UpdatedAt           time.Time     `json:"updatedAt"`
+	DeletedAt           *time.Time    `json:"deletedAt,omitempty"`
 	Style               StyleSettings `json:"style"`
 	Assets              []*Asset      `json:"assets"`
 	Views               []*View       `json:"views"`
@@ -183,6 +189,7 @@ func (p *Project) clone() *Project {
 		Name:                p.Name,
 		CreatedAt:           p.CreatedAt,
 		UpdatedAt:           p.UpdatedAt,
+		DeletedAt:           clonePtr(p.DeletedAt),
 		Style:               p.Style,
 		StyleAnchorRenderID: clonePtr(p.StyleAnchorRenderID),
 		Assets:              make([]*Asset, len(p.Assets)),

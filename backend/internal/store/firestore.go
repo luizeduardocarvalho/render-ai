@@ -63,6 +63,7 @@ type projectDoc struct {
 	Name                string        `firestore:"name"`
 	CreatedAt           time.Time     `firestore:"createdAt"`
 	UpdatedAt           time.Time     `firestore:"updatedAt"`
+	DeletedAt           *time.Time    `firestore:"deletedAt,omitempty"`
 	Style               StyleSettings `firestore:"style"`
 	Assets              []*Asset      `firestore:"assets"`
 	StyleAnchorRenderID *string       `firestore:"styleAnchorRenderId"`
@@ -94,6 +95,7 @@ func (pd *projectDoc) toProject(id string) *Project {
 		Name:                pd.Name,
 		CreatedAt:           pd.CreatedAt,
 		UpdatedAt:           pd.UpdatedAt,
+		DeletedAt:           clonePtr(pd.DeletedAt),
 		Style:               pd.Style,
 		Assets:              assets,
 		Views:               []*View{},
@@ -121,6 +123,22 @@ func (vd *viewDoc) toView(id string) *View {
 
 func isNotFound(err error) bool { return status.Code(err) == codes.NotFound }
 
+// projectDocFromSnap decodes a project document snapshot, treating a
+// soft-deleted project (DeletedAt set) as not found. Every method below that
+// loads the project's core doc goes through this single helper - whether
+// inside a transaction or not - so a deleted project is consistently
+// unreachable, even by a direct call that bypasses the API's ownership gate.
+func projectDocFromSnap(snap *firestore.DocumentSnapshot) (projectDoc, error) {
+	var pd projectDoc
+	if err := snap.DataTo(&pd); err != nil {
+		return pd, err
+	}
+	if pd.DeletedAt != nil {
+		return pd, ErrNotFound
+	}
+	return pd, nil
+}
+
 // --- Projects ----------------------------------------------------------------
 
 func (f *FirestoreStore) CreateProject(ownerID, name string) *Project {
@@ -144,6 +162,11 @@ func (f *FirestoreStore) CreateProject(ownerID, name string) *Project {
 	return pd.toProject(ref.ID)
 }
 
+// ListProjects queries by ownerId only (no orderBy - results are sorted in Go
+// by sortSummariesNewestFirst, so this needs no composite index) and filters
+// out soft-deleted projects here rather than adding a "deletedAt == null"
+// clause to the query, which would need its own composite index alongside
+// ownerId; skipping them in Go keeps this a single simple-index query.
 func (f *FirestoreStore) ListProjects(ownerID string) ([]ProjectSummary, error) {
 	ctx := context.Background()
 	snaps, err := f.projects().Where("ownerId", "==", ownerID).Documents(ctx).GetAll()
@@ -155,6 +178,9 @@ func (f *FirestoreStore) ListProjects(ownerID string) ([]ProjectSummary, error) 
 		var pd projectDoc
 		if err := snap.DataTo(&pd); err != nil {
 			return nil, err
+		}
+		if pd.DeletedAt != nil {
+			continue
 		}
 		out = append(out, ProjectSummary{
 			ID:               snap.Ref.ID,
@@ -179,8 +205,8 @@ func (f *FirestoreStore) ProjectOwner(pid string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var pd projectDoc
-	if err := snap.DataTo(&pd); err != nil {
+	pd, err := projectDocFromSnap(snap)
+	if err != nil {
 		return "", err
 	}
 	return pd.OwnerID, nil
@@ -202,8 +228,8 @@ func (f *FirestoreStore) getProjectFull(ctx context.Context, pid string) (*Proje
 	if err != nil {
 		return nil, err
 	}
-	var pd projectDoc
-	if err := psnap.DataTo(&pd); err != nil {
+	pd, err := projectDocFromSnap(psnap)
+	if err != nil {
 		return nil, err
 	}
 	p := pd.toProject(pid)
@@ -262,8 +288,8 @@ func (f *FirestoreStore) mutateProject(ctx context.Context, pid string, fn func(
 		if err != nil {
 			return err
 		}
-		var pd projectDoc
-		if err := snap.DataTo(&pd); err != nil {
+		pd, err := projectDocFromSnap(snap)
+		if err != nil {
 			return err
 		}
 		if err := fn(&pd); err != nil {
@@ -271,6 +297,24 @@ func (f *FirestoreStore) mutateProject(ctx context.Context, pid string, fn func(
 		}
 		pd.UpdatedAt = time.Now().UTC()
 		return tx.Set(ref, &pd)
+	})
+}
+
+// DeleteProject soft-deletes a project by setting deletedAt on its core doc.
+// Nothing else is touched - views, renders and their blobs are left in place
+// so the project can be restored - but projectDocFromSnap then makes every
+// other method treat it as gone. Returns ErrNotFound if the project doesn't
+// exist or is already deleted.
+//
+// TODO: a scheduled purge job should hard-delete projects whose deletedAt is
+// more than 30 days old - the project doc, its views/renders subcollections,
+// and their blobs from the BlobStore. Not implemented here; see
+// PERSISTENCE_HANDOFF.md.
+func (f *FirestoreStore) DeleteProject(pid string) error {
+	return f.mutateProject(context.Background(), pid, func(pd *projectDoc) error {
+		now := time.Now().UTC()
+		pd.DeletedAt = &now
+		return nil
 	})
 }
 
@@ -453,8 +497,8 @@ func (f *FirestoreStore) CreateView(pid, name, screenshotImageID string, width, 
 		if err != nil {
 			return err
 		}
-		var pd projectDoc
-		if err := psnap.DataTo(&pd); err != nil {
+		pd, err := projectDocFromSnap(psnap)
+		if err != nil {
 			return err
 		}
 		if err := tx.Set(vref, &vd); err != nil {
@@ -483,8 +527,8 @@ func (f *FirestoreStore) GetView(pid, vid string) (*View, error) {
 	if err != nil {
 		return nil, err
 	}
-	var pd projectDoc
-	if err := psnap.DataTo(&pd); err != nil {
+	pd, err := projectDocFromSnap(psnap)
+	if err != nil {
 		return nil, err
 	}
 
@@ -535,8 +579,8 @@ func (f *FirestoreStore) DeleteView(pid, vid string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		var pd projectDoc
-		if err := psnap.DataTo(&pd); err != nil {
+		pd, err := projectDocFromSnap(psnap)
+		if err != nil {
 			return err
 		}
 		vsnap, err := tx.Get(vref)
@@ -746,8 +790,8 @@ func (f *FirestoreStore) AddRender(pid, vid string, r *Render) (*Render, error) 
 		if err != nil {
 			return err
 		}
-		var pd projectDoc
-		if err := psnap.DataTo(&pd); err != nil {
+		pd, err := projectDocFromSnap(psnap)
+		if err != nil {
 			return err
 		}
 		if _, err := tx.Get(vref); err != nil {

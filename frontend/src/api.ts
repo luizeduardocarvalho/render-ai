@@ -166,6 +166,12 @@ export function setAnchor(pid: string, renderId: string | null): Promise<Project
   return request<Project>(`/api/projects/${pid}/anchor`, json({ renderId }));
 }
 
+// Soft delete: the project (and its views/renders/blobs) is recoverable by
+// support for 30 days, not purged immediately - see PERSISTENCE_HANDOFF.md.
+export function deleteProject(pid: string): Promise<void> {
+  return request<void>(`/api/projects/${pid}`, { method: "DELETE" });
+}
+
 // ---- Assets ----
 
 export function createAsset(
