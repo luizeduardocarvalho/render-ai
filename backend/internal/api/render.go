@@ -225,6 +225,9 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 		}
 		resultImageID, err := s.blobs.PutBlob(result.ImageData, mimeType)
 		if err != nil {
+			lostCost, _ := renderpkg.ImageCallCost(imgPricing, string(resolution), result.PromptTokens, result.TextOutputTokens, result.ThoughtsTokens)
+			log.Printf("render: failed attempt view=%s variation=%d/%d model=%s resolution=%s stage=store costUsd=%.4f error=%v",
+				vid, i+1, variations, modelID, resolution, lostCost, err)
 			// A model call was already paid for and returned a usable image -
 			// losing it here (unstored) is exactly the failure worth treating
 			// like a failed variation, not silently dropping it: if nothing has
