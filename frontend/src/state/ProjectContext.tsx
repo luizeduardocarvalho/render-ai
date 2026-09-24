@@ -145,11 +145,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       await api.deleteProject(id);
       setProjects((prev) => (prev ? prev.filter((p) => p.id !== id) : prev));
-      setProject((prev) => {
-        if (prev?.id !== id) return prev;
+      if (project?.id === id) {
+        setProject(null);
         setSelectedViewId(null);
-        return null;
-      });
+      }
       let lastId: string | null = null;
       try {
         lastId = localStorage.getItem(LAST_PROJECT_KEY);
@@ -164,7 +163,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [],
+    [project?.id],
   );
 
   const createProjectFn = useCallback(

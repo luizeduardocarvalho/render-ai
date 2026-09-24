@@ -51,7 +51,10 @@ func TestMemoryStoreDeleteProjectMissing(t *testing.T) {
 func TestMemoryStoreSoftDeleteKeepsViewsAndBlobs(t *testing.T) {
 	s := NewMemory()
 	p := s.CreateProject("user-a", "P")
-	imgID := s.PutBlob([]byte("fake-png"), "image/png")
+	imgID, err := s.PutBlob([]byte("fake-png"), "image/png")
+	if err != nil {
+		t.Fatalf("PutBlob: %v", err)
+	}
 	if _, err := s.CreateView(p.ID, "front", imgID, 100, 100); err != nil {
 		t.Fatalf("CreateView: %v", err)
 	}
