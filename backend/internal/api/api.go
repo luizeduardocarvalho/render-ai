@@ -137,6 +137,7 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("DELETE /api/projects/{pid}/views/{vid}/masks/{mid}", owned(s.deleteMask))
 
 	mux.HandleFunc("POST /api/projects/{pid}/views/{vid}/render", owned(s.startRender))
+	mux.HandleFunc("POST /api/projects/{pid}/views/{vid}/renders/{rid}/edit", owned(s.startEdit))
 	mux.HandleFunc("GET /api/projects/{pid}/render-jobs/{jid}", owned(s.getRenderJob))
 
 	// Mint a signed URL for an image blob. Project-scoped so the ownership gate

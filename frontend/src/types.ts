@@ -68,6 +68,10 @@ export interface Render {
   metrics: RenderMetrics;
   preservation?: PreservationReport;
   isStyleAnchor: boolean;
+  // Set when this render is an Edit: the render (in the same view) it was
+  // made from, and what each edited region was asked to become.
+  sourceRenderId?: string;
+  editInstructions?: string[];
 }
 
 export interface View {
@@ -139,6 +143,14 @@ export interface RenderRequest {
   resolution: Resolution;
   preservationCheck: boolean;
   variations?: number; // 1-4, defaults to 1 server-side
+}
+
+// One region of an edit request: what to change it into, and the painted area
+// as a base64 (no data: prefix) white-on-black PNG. The bitmap may be drawn at
+// a reduced size but must keep the render's aspect ratio.
+export interface EditRegionRequest {
+  instruction: string;
+  bitmap: string;
 }
 
 // Async render job: POST .../render returns one of these (202) instead of

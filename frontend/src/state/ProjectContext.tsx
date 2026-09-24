@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import * as api from "../api";
 import type {
   Asset,
+  EditRegionRequest,
   Mask,
   Me,
   Project,
@@ -97,6 +98,12 @@ interface ProjectContextValue {
   renderView: (
     vid: string,
     req: RenderRequest,
+    opts?: { onProgress?: (job: RenderJob) => void; signal?: AbortSignal },
+  ) => Promise<Render[]>;
+  editRender: (
+    vid: string,
+    rid: string,
+    regions: EditRegionRequest[],
     opts?: { onProgress?: (job: RenderJob) => void; signal?: AbortSignal },
   ) => Promise<Render[]>;
 }
@@ -475,6 +482,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [requireProject],
   );
 
+  const editRenderFn = useCallback(
+    async (
+      vid: string,
+      rid: string,
+      regions: EditRegionRequest[],
+      opts?: { onProgress?: (job: RenderJob) => void; signal?: AbortSignal },
+    ) => {
+      const p = requireProject();
+      const renders = await api.editRender(p.id, vid, rid, regions, opts);
+      setProject((prev) =>
+        prev
+          ? replaceView(prev, vid, (v) => ({ ...v, renders: [...v.renders, ...renders] }))
+          : prev,
+      );
+      return renders;
+    },
+    [requireProject],
+  );
+
   const selectedView = useMemo(
     () => project?.views.find((v) => v.id === selectedViewId) ?? null,
     [project, selectedViewId],
@@ -520,6 +546,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     uploadMaskBitmap: uploadMaskBitmapFn,
     deleteMask: deleteMaskFn,
     renderView: renderViewFn,
+    editRender: editRenderFn,
   };
 
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;

@@ -1,0 +1,78 @@
+/* The edit-region editor reuses the mask editor's toolbar, canvas viewport and
+   two-column body (MaskEditor.css); this only adds what is specific to it. */
+
+.edit-region-editor .mask-editor-list-col {
+  width: 320px;
+}
+
+.edit-region-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.edit-region-row:hover {
+  background: var(--gray-100);
+}
+
+.edit-region-row.mask-row-selected {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+}
+
+.edit-region-row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.edit-region-row-head .mask-swatch {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.edit-region-row-head .btn {
+  margin-left: auto;
+}
+
+.edit-region-hint,
+.edit-region-ok {
+  font-size: 11.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-region-hint {
+  color: var(--warning);
+}
+
+.edit-region-ok {
+  color: var(--success);
+}
+
+.edit-region-textarea {
+  min-height: 72px;
+  resize: vertical;
+  font-size: 12.5px;
+}
+
+.edit-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 900px) {
+  .edit-region-editor .mask-editor-list-col {
+    width: 100%;
+  }
+}

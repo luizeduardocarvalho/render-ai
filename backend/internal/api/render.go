@@ -126,6 +126,24 @@ func (s *Server) startRender(w http.ResponseWriter, r *http.Request) error {
 		return badRequest("view %s has no screenshot", vid)
 	}
 
+	resp, _, err := s.launchRenderJob(r.Context(), project, pid, vid, jobReq)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusAccepted, resp)
+	return nil
+}
+
+// launchRenderJob is the part of starting a job that a render and an edit
+// share: debit the owner, persist the job, enqueue one task per variation.
+// The price is the source's model+resolution price per variation, so an edit
+// costs what a render of the same model and resolution costs.
+//
+// queued reports whether a task was handed to the queue: once it was, a worker
+// may read whatever the job refers to at any moment, so a caller that made
+// anything for the job (an edit's region bitmaps) must only clean it up when
+// queued is false.
+func (s *Server) launchRenderJob(ctx context.Context, project *store.Project, pid, vid string, jobReq store.RenderJobRequest) (resp *renderJobResponse, queued bool, err error) {
 	// Debit the project owner's balance atomically before the job even
 	// exists, so two concurrent renders can never both pass a check against
 	// a balance that's about to go negative - see API_CONTRACT.md's credits
@@ -145,9 +163,9 @@ func (s *Server) startRender(w http.ResponseWriter, r *http.Request) error {
 			JobID:     &jobIDCopy,
 		}); err != nil {
 			if errors.Is(err, store.ErrInsufficientCredits) {
-				return insufficientCreditsErr()
+				return nil, false, insufficientCreditsErr()
 			}
-			return internalErr("charging credits: %v", err)
+			return nil, false, internalErr("charging credits: %v", err)
 		}
 	}
 
@@ -170,27 +188,24 @@ func (s *Server) startRender(w http.ResponseWriter, r *http.Request) error {
 		// The debit above already happened and nothing was queued: refund it
 		// all back.
 		s.refundUnits(project.OwnerID, pid, jobID, unitsPerVar*int64(jobReq.Variations), "job creation failed")
-		return mapStoreErr(err, "project %s not found", pid)
+		return nil, false, mapStoreErr(err, "project %s not found", pid)
 	}
 
 	for i := range created.Variations {
 		task := jobs.Task{ProjectID: pid, JobID: created.ID, Variation: i}
-		if err := s.queue.Enqueue(r.Context(), task); err != nil {
+		if err := s.queue.Enqueue(ctx, task); err != nil {
 			// Per the contract: mark the job failed (this variation and any
 			// after it that never got a task) and report 502 - never leave a
 			// variation stuck "queued" with nothing that will ever run it.
 			// failRemainingVariations also refunds their charge, exactly once.
 			s.failRemainingVariations(pid, created.ID, i, fmt.Sprintf("queueing render: %v", err))
-			return badGateway("queueing render: %v", err)
+			return nil, queued, badGateway("queueing render: %v", err)
 		}
+		queued = true
 	}
 
-	resp, err := s.buildRenderJobResponse(pid, created)
-	if err != nil {
-		return err
-	}
-	writeJSON(w, http.StatusAccepted, resp)
-	return nil
+	resp, err = s.buildRenderJobResponse(pid, created)
+	return resp, queued, err
 }
 
 // failRemainingVariations marks every variation from idx onward that is
@@ -441,6 +456,9 @@ type renderAssembly struct {
 	hasAnchor       bool
 	modelID         string
 	req             renderpkg.RenderRequest
+	// edit is set instead of the screenshot-derived fields above when the job
+	// edits an existing Render (see edit.go).
+	edit *editAssembly
 	// assemblyMs is the setup cost (project/view lookup, screenshot decode,
 	// region/edge maps, prompt build) attributed to this variation's TotalMs,
 	// mirroring the old handler's assemblyMs semantics.
@@ -619,7 +637,15 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	variationStart := time.Now()
 	variations := job.Request.Variations
 
-	assembly, err := s.assembleRenderRequest(pid, job.ViewID, job.Request)
+	var assembly *renderAssembly
+	if job.Request.Edit != nil {
+		// The region bitmaps only exist for this job; whichever way the
+		// variation ends they are no longer needed.
+		defer s.deleteEditBlobs(job.Request.Edit)
+		assembly, err = s.assembleEditRequest(pid, job)
+	} else {
+		assembly, err = s.assembleRenderRequest(pid, job.ViewID, job.Request)
+	}
 	if err != nil {
 		log.Printf("render worker: assembling project=%s job=%s view=%s variation=%d/%d: %v",
 			pid, jid, job.ViewID, idx+1, variations, err)
@@ -660,6 +686,17 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 		return
 	}
 
+	if assembly.edit != nil {
+		// Keep the source's own pixels everywhere outside the edit regions.
+		composited, err := assembly.edit.composite(result.ImageData)
+		if err != nil {
+			log.Printf("render worker: compositing edit project=%s job=%s view=%s: %v", pid, jid, job.ViewID, err)
+			s.failVariation(pid, jid, idx, fmt.Sprintf("compositing edit: %v", err))
+			return
+		}
+		result.ImageData, result.MIMEType = composited, "image/png"
+	}
+
 	mimeType := result.MIMEType
 	if mimeType == "" {
 		mimeType = "image/png"
@@ -694,6 +731,10 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 		AnchorUsed:    assembly.hasAnchor,
 		RegionCount:   assembly.qualifyingCount,
 		ResultImageID: resultImageID,
+	}
+	if assembly.edit != nil {
+		rec.SourceRenderID = assembly.edit.sourceRenderID
+		rec.EditInstructions = assembly.edit.instructions
 	}
 
 	if job.Request.PreservationCheck {

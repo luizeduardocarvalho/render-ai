@@ -4,6 +4,7 @@ import { ApiError, fetchSignedImageUrl } from "../../api";
 import { useSignedImageUrl } from "../../hooks/useSignedImageUrl";
 import { useProject } from "../../state/ProjectContext";
 import type { Render, View } from "../../types";
+import { EditRegionEditor } from "../edit/EditRegionEditor";
 import { BeforeAfterSlider } from "./BeforeAfterSlider";
 import { MetricsPanel } from "./MetricsPanel";
 import "./ResultView.css";
@@ -11,16 +12,32 @@ import "./ResultView.css";
 interface ResultViewProps {
   view: View;
   render: Render;
+  /** Called with a finished edit so the parent can show it. */
+  onEdited: (edit: Render) => void;
 }
 
-export function ResultView({ view, render }: ResultViewProps) {
+export function ResultView({ view, render, onEdited }: ResultViewProps) {
   const { t, i18n } = useTranslation();
   const { project, setAnchor } = useProject();
   const [settingAnchor, setSettingAnchor] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
-  const beforeUrl = useSignedImageUrl(view.screenshotImageId);
+  // Leave edit mode when another render gets selected (adjust state during
+  // render rather than in an effect, so the old editor never flashes).
+  const [lastRenderId, setLastRenderId] = useState(render.id);
+  if (lastRenderId !== render.id) {
+    setLastRenderId(render.id);
+    setEditing(false);
+  }
+
+  // An edit is compared with the render it was made from, which is what
+  // changed; any other render with the screenshot it was made from.
+  const sourceRender = render.sourceRenderId
+    ? view.renders.find((r) => r.id === render.sourceRenderId)
+    : undefined;
+  const beforeUrl = useSignedImageUrl(sourceRender?.resultImageId ?? view.screenshotImageId);
   const afterUrl = useSignedImageUrl(render.resultImageId);
 
   const isAnchor = project?.styleAnchorRenderId === render.id;
@@ -61,6 +78,20 @@ export function ResultView({ view, render }: ResultViewProps) {
     }
   }
 
+  if (editing) {
+    return (
+      <EditRegionEditor
+        view={view}
+        render={render}
+        onCancel={() => setEditing(false)}
+        onDone={(edit) => {
+          setEditing(false);
+          onEdited(edit);
+        }}
+      />
+    );
+  }
+
   return (
     <section className="panel">
       <div className="panel-header">
@@ -70,6 +101,9 @@ export function ResultView({ view, render }: ResultViewProps) {
         </div>
         <div className="result-header-actions">
           {isAnchor && <span className="badge badge-accent">{t("resultView.anchorBadge")}</span>}
+          <button type="button" className="btn btn-sm" onClick={() => setEditing(true)}>
+            {t("resultView.edit")}
+          </button>
           <button type="button" className="btn btn-sm" onClick={handleSetAnchor} disabled={settingAnchor}>
             {settingAnchor ? <span className="spinner" /> : null}
             {isAnchor ? t("resultView.clearAnchor") : t("resultView.setAsAnchor")}

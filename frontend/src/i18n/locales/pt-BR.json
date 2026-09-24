@@ -215,18 +215,54 @@
       "cost": "Custo"
     },
     "anchorBadge": "Âncora",
-    "notAvailable": "n/d"
+    "notAvailable": "n/d",
+    "editNote": "Edição: {{changes}}"
   },
   "resultView": {
     "title": "Resultado",
     "clearAnchor": "Remover âncora",
     "setAsAnchor": "Definir como âncora de estilo",
     "anchorBadge": "Âncora de estilo",
+    "edit": "Editar",
     "downloadPng": "Baixar PNG",
     "loadingImage": "Carregando imagem...",
     "errors": {
       "anchor": "Não foi possível atualizar a âncora de estilo",
       "download": "Não foi possível baixar a imagem"
+    }
+  },
+  "editRegions": {
+    "title": "Editar render",
+    "subtitle": "Pinte as áreas a alterar e descreva cada mudança. Todo o resto permanece exatamente como está.",
+    "addRegion": "Adicionar região",
+    "loadingImage": "Carregando render...",
+    "loadError": "Não foi possível carregar a imagem do render.",
+    "paintHint": "Pinte um pouco além da borda do objeto para que o novo conteúdo tenha espaço para se misturar.",
+    "regionLabel": "Região {{index}}",
+    "ready": "Pronta",
+    "hint": {
+      "paint": "Pinte a área",
+      "describe": "Descreva a mudança"
+    },
+    "placeholder": "No que esta área deve se transformar? Por exemplo: um abajur de piso dourado com lâmpada quente",
+    "instructionLabel": "No que a região {{index}} deve se transformar",
+    "deleteRegion": "Excluir região",
+    "empty": {
+      "title": "Nenhuma região ainda",
+      "body": "Adicione uma região e pinte a área que ela cobre."
+    },
+    "applyButton_one": "Aplicar edição ({{credits}} crédito)",
+    "applyButton_other": "Aplicar edição ({{credits}} créditos)",
+    "applyButtonNoPrice": "Aplicar edição",
+    "queued": "Iniciando edição...",
+    "applying": "Editando... isso pode levar até um minuto",
+    "wait": "A edição é um novo render. O original continua como está.",
+    "notReady": "Cada região precisa de uma área pintada e de uma descrição.",
+    "lowBalance": "Créditos insuficientes ({{available}} disponíveis, {{required}} necessários). Peça a um administrador para recarregar seu saldo.",
+    "errors": {
+      "emptyRegion": "A região {{index}} não tem nada pintado.",
+      "insufficientCredits": "Falha na edição: créditos insuficientes. Peça a um administrador para recarregar seu saldo.",
+      "failed": "A edição falhou. Tente novamente."
     }
   },
   "metricsPanel": {

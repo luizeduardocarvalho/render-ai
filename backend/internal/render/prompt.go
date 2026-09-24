@@ -54,11 +54,15 @@ func (d *TemplateData) InteriorLights(setting string) {
 // RenderPrompt loads the template fresh from templatePath on every call (so
 // it can be tweaked without a rebuild) and executes it with data.
 func RenderPrompt(templatePath string, data TemplateData) (string, error) {
+	return executeTemplateFile(templatePath, "render", data)
+}
+
+func executeTemplateFile(templatePath, name string, data any) (string, error) {
 	raw, err := os.ReadFile(templatePath)
 	if err != nil {
 		return "", fmt.Errorf("reading prompt template %s: %w", templatePath, err)
 	}
-	tmpl, err := template.New("render").Parse(string(raw))
+	tmpl, err := template.New(name).Parse(string(raw))
 	if err != nil {
 		return "", fmt.Errorf("parsing prompt template %s: %w", templatePath, err)
 	}
@@ -67,4 +71,23 @@ func RenderPrompt(templatePath string, data TemplateData) (string, error) {
 		return "", fmt.Errorf("executing prompt template %s: %w", templatePath, err)
 	}
 	return buf.String(), nil
+}
+
+// EditRegionPrompt is one region of an Edit as the prompt lists it: which
+// color it is painted in on the overlay image and what to change it into.
+type EditRegionPrompt struct {
+	Number      int
+	Color       string
+	Instruction string
+}
+
+// EditTemplateData is the exact set of fields prompts/edit.tmpl expects.
+type EditTemplateData struct {
+	Regions []EditRegionPrompt
+}
+
+// EditPrompt renders the Edit prompt from templatePath, loading it fresh on
+// every call like RenderPrompt does.
+func EditPrompt(templatePath string, data EditTemplateData) (string, error) {
+	return executeTemplateFile(templatePath, "edit", data)
 }
