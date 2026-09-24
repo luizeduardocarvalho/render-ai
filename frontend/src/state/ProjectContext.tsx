@@ -15,6 +15,7 @@ import type {
   Project,
   ProjectSummary,
   Render,
+  RenderJob,
   RenderRequest,
   StyleSettings,
   View,
@@ -64,7 +65,11 @@ interface ProjectContextValue {
   uploadMaskBitmap: (vid: string, mid: string, blob: Blob) => Promise<Mask>;
   deleteMask: (vid: string, mid: string) => Promise<void>;
 
-  renderView: (vid: string, req: RenderRequest) => Promise<Render[]>;
+  renderView: (
+    vid: string,
+    req: RenderRequest,
+    opts?: { onProgress?: (job: RenderJob) => void; signal?: AbortSignal },
+  ) => Promise<Render[]>;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -354,9 +359,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   );
 
   const renderViewFn = useCallback(
-    async (vid: string, req: RenderRequest) => {
+    async (
+      vid: string,
+      req: RenderRequest,
+      opts?: { onProgress?: (job: RenderJob) => void; signal?: AbortSignal },
+    ) => {
       const p = requireProject();
-      const renders = await api.renderView(p.id, vid, req);
+      const renders = await api.renderView(p.id, vid, req, opts);
       setProject((prev) =>
         prev
           ? replaceView(prev, vid, (v) => ({ ...v, renders: [...v.renders, ...renders] }))

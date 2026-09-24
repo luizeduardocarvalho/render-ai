@@ -147,6 +147,30 @@ export interface RenderRequest {
   variations?: number; // 1-4, defaults to 1 server-side
 }
 
+// Async render job: POST .../render returns one of these (202) instead of
+// Render[] directly, and the client polls GET .../render-jobs/{jid} until it
+// reaches a terminal status. See api.ts's renderView, which hides the
+// polling behind the old Render[]-returning signature.
+export type RenderJobStatus = "queued" | "running" | "done" | "failed";
+
+export interface RenderJobVariation {
+  status: RenderJobStatus;
+  renderId?: string;
+  error?: string;
+}
+
+export interface RenderJob {
+  id: string;
+  viewId: string;
+  status: RenderJobStatus;
+  createdAt: string;
+  updatedAt: string;
+  request: RenderRequest;
+  variations: RenderJobVariation[];
+  renders: Render[]; // full Render objects for variations that are done, in order
+  error?: string; // set when status === "failed": first variation error
+}
+
 // Labels/hints for these constants live in the translation files (see
 // src/i18n/locales/*.json under style.lightingPresets / style.interiorLights)
 // rather than as literal strings here - `value` is the token the API expects

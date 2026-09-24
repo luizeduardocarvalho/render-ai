@@ -182,6 +182,7 @@
     "renderButton_one": "Gerar renderização",
     "renderButton_other": "Gerar renderização ({{count}} variações)",
     "rendering": "Renderizando... isso pode levar até um minuto",
+    "renderingProgress": "Renderizando... {{done}} de {{count}} concluídas",
     "costPreview_one": "≈ {{cost}}",
     "costPreview_other": "≈ {{cost}} para {{count}} variações",
     "error": "Falha na renderização. Tente novamente."
