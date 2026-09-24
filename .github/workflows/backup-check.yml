@@ -1,0 +1,123 @@
+name: Backup check
+
+# Verifies the three render-ai backup mechanisms (infra/terraform/backup.tf,
+# firestore.tf, export.tf) actually ran recently. Fails loudly if any of them
+# is stale or missing, instead of silently rotting.
+#
+# Required repo variables (Settings > Secrets and variables > Actions >
+# Variables) - see infra/terraform/README.md for how to get each value from
+# `terraform output`:
+#   GCP_WIF_PROVIDER        - Workload Identity Federation provider resource name
+#   GCP_BACKUP_CHECKER_SA   - read-only service account email to impersonate
+#   GCP_APP_PROJECT         - app project id (Firestore + Cloud Scheduler live here)
+#   GCP_BACKUP_PROJECT      - backup project id (Storage Transfer job lives here)
+#   GCP_TRANSFER_JOB        - Storage Transfer job name (transferJobs/...)
+#   GCP_BACKUP_BUCKET       - backup bucket name (each Firestore export lands in its own gs://<this>/<timestamp>/ folder)
+#   GCP_FIRESTORE_LOCATION  - optional, defaults to nam5
+
+on:
+  # The daily schedule is off until the backups exist: after `terraform apply`
+  # and setting the repo variables (infra/terraform/README.md), run this once
+  # by hand, then uncomment the schedule. Until then it would fail every day.
+  # schedule:
+  #   - cron: "0 9 * * *" # daily, 09:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_BACKUP_CHECKER_SA }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Check backups ran recently
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP_PROJECT="${{ vars.GCP_APP_PROJECT }}"
+          BACKUP_PROJECT="${{ vars.GCP_BACKUP_PROJECT }}"
+          TRANSFER_JOB="${{ vars.GCP_TRANSFER_JOB }}"
+          BACKUP_BUCKET="${{ vars.GCP_BACKUP_BUCKET }}"
+          FIRESTORE_LOCATION="${{ vars.GCP_FIRESTORE_LOCATION }}"
+          FIRESTORE_LOCATION="${FIRESTORE_LOCATION:-nam5}"
+
+          # Freshness windows: the underlying jobs run daily (blob transfer)
+          # or weekly (Firestore backups, Firestore export). 26h gives a
+          # daily job a couple of hours of slack over a strict 24h; 8 days
+          # gives the weekly export the same slack over 7 days.
+          NOW_EPOCH=$(date -u +%s)
+          MAX_AGE_DAILY_SEC=$((26 * 3600))
+          MAX_AGE_WEEKLY_SEC=$((8 * 24 * 3600))
+
+          fail() {
+            echo "::error::$1"
+            exit 1
+          }
+
+          age_ok() {
+            # age_ok <iso8601-timestamp> <max-age-seconds>
+            local ts="$1" max="$2" ts_epoch age
+            ts_epoch=$(date -u -d "$ts" +%s) || return 1
+            age=$((NOW_EPOCH - ts_epoch))
+            [ "$age" -le "$max" ]
+          }
+
+          echo "== 1. Daily blob backup (Storage Transfer job) =="
+          LATEST_OP=$(gcloud transfer operations list \
+            --project="$BACKUP_PROJECT" \
+            --job-names="$TRANSFER_JOB" \
+            --format=json | jq -c '
+              sort_by(.metadata.endTime // "") | last // empty')
+
+          [ -n "$LATEST_OP" ] || fail "No Storage Transfer operations found for job $TRANSFER_JOB in $BACKUP_PROJECT."
+
+          OP_STATUS=$(echo "$LATEST_OP" | jq -r '.metadata.status // "UNKNOWN"')
+          OP_END=$(echo "$LATEST_OP" | jq -r '.metadata.endTime // empty')
+
+          [ "$OP_STATUS" = "SUCCESS" ] || fail "Latest blob backup transfer operation status is '$OP_STATUS', not SUCCESS (endTime=$OP_END)."
+          [ -n "$OP_END" ] || fail "Latest blob backup transfer operation has no endTime."
+          age_ok "$OP_END" "$MAX_AGE_DAILY_SEC" || fail "Latest successful blob backup transfer finished at $OP_END, which is older than 26h."
+          echo "OK: blob backup transfer succeeded at $OP_END."
+
+          echo "== 2. Firestore backup schedule =="
+          LATEST_BACKUP=$(gcloud firestore backups list \
+            --project="$APP_PROJECT" \
+            --location="$FIRESTORE_LOCATION" \
+            --format=json | jq -c '
+              sort_by(.snapshotTime // "") | last // empty')
+
+          [ -n "$LATEST_BACKUP" ] || fail "No Firestore backups found in $APP_PROJECT/$FIRESTORE_LOCATION."
+
+          BACKUP_STATE=$(echo "$LATEST_BACKUP" | jq -r '.state // "UNKNOWN"')
+          BACKUP_TIME=$(echo "$LATEST_BACKUP" | jq -r '.snapshotTime // empty')
+
+          [ "$BACKUP_STATE" = "READY" ] || fail "Newest Firestore backup state is '$BACKUP_STATE', not READY (snapshotTime=$BACKUP_TIME)."
+          [ -n "$BACKUP_TIME" ] || fail "Newest Firestore backup has no snapshotTime."
+          age_ok "$BACKUP_TIME" "$MAX_AGE_DAILY_SEC" || fail "Newest Firestore backup snapshot is from $BACKUP_TIME, which is older than 26h."
+          echo "OK: newest Firestore backup is READY, from $BACKUP_TIME."
+
+          echo "== 3. Weekly Firestore export =="
+          # Each export is a timestamped folder at the bucket root holding a
+          # <timestamp>.overall_export_metadata file. The "20*" prefix skips
+          # the blobs/ copy so this doesn't walk every backed-up image.
+          LATEST_EXPORT_TIME=$(gcloud storage objects list \
+            "gs://${BACKUP_BUCKET}/20*/*.overall_export_metadata" \
+            --format=json | jq -r '
+              map(.creation_time // .timeCreated // .updated // empty) | sort | last // empty' || true)
+
+          [ -n "$LATEST_EXPORT_TIME" ] || fail "No Firestore export found in gs://${BACKUP_BUCKET}/ - has the weekly export ever run?"
+          age_ok "$LATEST_EXPORT_TIME" "$MAX_AGE_WEEKLY_SEC" || fail "Newest Firestore export in gs://${BACKUP_BUCKET}/ is from $LATEST_EXPORT_TIME, which is older than 8 days."
+          echo "OK: newest Firestore export object is from $LATEST_EXPORT_TIME."
+
+          echo "All backup checks passed."

@@ -19,8 +19,11 @@ func (s *Server) createView(w http.ResponseWriter, r *http.Request) error {
 		return badRequest("invalid screenshot image: %v", decErr)
 	}
 
-	imageID := s.store.PutBlob(data, contentTypeForFormat(format))
-	v, err := s.store.CreateView(pid, name, imageID, cfg.Width, cfg.Height)
+	imageID, err := s.blobs.PutBlob(data, contentTypeForFormat(format))
+	if err != nil {
+		return badGateway("storing screenshot: %v", err)
+	}
+	v, err := s.repo.CreateView(pid, name, imageID, cfg.Width, cfg.Height)
 	if err != nil {
 		return mapStoreErr(err, "project %s not found", pid)
 	}
@@ -30,7 +33,7 @@ func (s *Server) createView(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Server) getView(w http.ResponseWriter, r *http.Request) error {
 	pid, vid := r.PathValue("pid"), r.PathValue("vid")
-	v, err := s.store.GetView(pid, vid)
+	v, err := s.repo.GetView(pid, vid)
 	if err != nil {
 		return mapStoreErr(err, "view %s not found", vid)
 	}
@@ -40,8 +43,14 @@ func (s *Server) getView(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Server) deleteView(w http.ResponseWriter, r *http.Request) error {
 	pid, vid := r.PathValue("pid"), r.PathValue("vid")
-	if err := s.store.DeleteView(pid, vid); err != nil {
+	blobIDs, err := s.repo.DeleteView(pid, vid)
+	if err != nil {
 		return mapStoreErr(err, "view %s not found", vid)
+	}
+	// Best-effort blob cleanup: the metadata is already gone, so a failed blob
+	// delete only leaves an orphan, never a dangling reference.
+	for _, id := range blobIDs {
+		s.blobs.DeleteBlob(id)
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
@@ -57,7 +66,7 @@ func (s *Server) putInventory(w http.ResponseWriter, r *http.Request) error {
 	if err := readJSON(r, &req); err != nil {
 		return err
 	}
-	v, err := s.store.SetInventory(pid, vid, req.Inventory)
+	v, err := s.repo.SetInventory(pid, vid, req.Inventory)
 	if err != nil {
 		return mapStoreErr(err, "view %s not found", vid)
 	}
@@ -68,7 +77,7 @@ func (s *Server) putInventory(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) generateInventory(w http.ResponseWriter, r *http.Request) error {
 	pid, vid := r.PathValue("pid"), r.PathValue("vid")
 
-	v, err := s.store.GetView(pid, vid)
+	v, err := s.repo.GetView(pid, vid)
 	if err != nil {
 		return mapStoreErr(err, "view %s not found", vid)
 	}
@@ -78,7 +87,7 @@ func (s *Server) generateInventory(w http.ResponseWriter, r *http.Request) error
 	if s.textModel == nil {
 		return internalErr("text model is not configured (missing Vertex AI credentials)")
 	}
-	blob, ok := s.store.GetBlob(v.ScreenshotImageID)
+	blob, ok := s.blobs.GetBlob(v.ScreenshotImageID)
 	if !ok {
 		return internalErr("screenshot blob missing for view %s", vid)
 	}
@@ -87,7 +96,7 @@ func (s *Server) generateInventory(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return badGateway("generating inventory: %v", err)
 	}
-	if _, err := s.store.SetInventory(pid, vid, text); err != nil {
+	if _, err := s.repo.SetInventory(pid, vid, text); err != nil {
 		return mapStoreErr(err, "view %s not found", vid)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"inventory": text})

@@ -1,34 +1,32 @@
 package store
 
 import (
-	"errors"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
 
-// ErrNotFound is returned when a project, view, mask, asset or render ID
-// does not exist.
-var ErrNotFound = errors.New("not found")
-
-// Blob is a stored image (screenshot, reference photo, mask bitmap, or
-// render result) with its content type.
-type Blob struct {
-	Data        []byte
-	ContentType string
-}
-
-// Store is the whole in-memory database: projects plus their image blobs,
-// guarded by a single mutex. It is safe for concurrent use.
-type Store struct {
+// MemoryStore is the in-process implementation of Repository and BlobStore:
+// projects plus their image blobs, guarded by a single mutex. It is safe for
+// concurrent use and loses everything on restart - the zero-config store used
+// for local dev when Firestore/GCS are not configured. The deployed backend
+// uses FirestoreStore + GCSStore instead.
+type MemoryStore struct {
 	mu       sync.Mutex
 	projects map[string]*Project
 	blobs    map[string]Blob
 }
 
-// New creates an empty Store.
-func New() *Store {
-	return &Store{
+// Compile-time checks that MemoryStore satisfies both storage interfaces.
+var (
+	_ Repository = (*MemoryStore)(nil)
+	_ BlobStore  = (*MemoryStore)(nil)
+)
+
+// NewMemory creates an empty in-memory store.
+func NewMemory() *MemoryStore {
+	return &MemoryStore{
 		projects: make(map[string]*Project),
 		blobs:    make(map[string]Blob),
 	}
@@ -38,80 +36,158 @@ func newID() string { return uuid.NewString() }
 
 // --- Blobs -----------------------------------------------------------------
 
-// PutBlob stores data under a new random ID and returns it.
-func (s *Store) PutBlob(data []byte, contentType string) string {
+// PutBlob stores data under a new random ID and returns it. It never fails -
+// the map write cannot error - but returns an error to satisfy BlobStore
+// alongside GCSStore, whose writes can.
+func (s *MemoryStore) PutBlob(data []byte, contentType string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	id := newID()
 	s.blobs[id] = Blob{Data: data, ContentType: contentType}
-	return id
+	return id, nil
 }
 
 // PutBlobAt stores data under a caller-chosen ID, overwriting any existing
-// blob there. Used for mask bitmaps, whose image ID is the mask's own ID.
-func (s *Store) PutBlobAt(id string, data []byte, contentType string) {
+// blob there. Used for mask bitmaps, whose image ID is the mask's own ID. It
+// never fails; see PutBlob.
+func (s *MemoryStore) PutBlobAt(id string, data []byte, contentType string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.blobs[id] = Blob{Data: data, ContentType: contentType}
+	return nil
 }
 
 // GetBlob fetches a stored blob by ID.
-func (s *Store) GetBlob(id string) (Blob, bool) {
+func (s *MemoryStore) GetBlob(id string) (Blob, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	b, ok := s.blobs[id]
 	return b, ok
 }
 
-func (s *Store) deleteBlob(id string) {
+// DeleteBlob removes a blob by ID. Missing blobs are a no-op.
+func (s *MemoryStore) DeleteBlob(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.blobs, id)
+}
+
+// SignedURL returns the same-origin path the frontend fetches the blob from.
+// There is nothing to sign for the in-memory store - the ttl is ignored.
+func (s *MemoryStore) SignedURL(id string, _ time.Duration) (string, error) {
+	return "/api/images/" + id, nil
 }
 
 // --- Projects ----------------------------------------------------------------
 
-// CreateProject creates a new project with default style settings.
-func (s *Store) CreateProject(name string) *Project {
+// CreateProject creates a new project owned by ownerID, with default style
+// settings.
+func (s *MemoryStore) CreateProject(ownerID, name string) *Project {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := time.Now().UTC()
 	p := &Project{
-		ID:     newID(),
-		Name:   name,
-		Style:  defaultStyle(),
-		Assets: []*Asset{},
-		Views:  []*View{},
+		ID:        newID(),
+		OwnerID:   ownerID,
+		Name:      name,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Style:     defaultStyle(),
+		Assets:    []*Asset{},
+		Views:     []*View{},
 	}
 	s.projects[p.ID] = p
 	return p.clone()
 }
 
-// GetProject returns a deep copy of the project.
-func (s *Store) GetProject(pid string) (*Project, error) {
+// ListProjects returns lightweight summaries of every project owned by
+// ownerID, newest first. Soft-deleted projects are excluded.
+func (s *MemoryStore) ListProjects(ownerID string) ([]ProjectSummary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.projects[pid]
-	if !ok {
-		return nil, ErrNotFound
+	out := make([]ProjectSummary, 0)
+	for _, p := range s.projects {
+		if p.OwnerID != ownerID || p.DeletedAt != nil {
+			continue
+		}
+		out = append(out, summarize(p))
 	}
-	return p.clone(), nil
+	sortSummariesNewestFirst(out)
+	return out, nil
 }
 
-// withProject runs fn against the live project under the store lock, then
-// returns a deep copy of the (possibly mutated) project.
-func (s *Store) withProject(pid string, fn func(p *Project) error) (*Project, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// liveProject looks up a project by id, treating a soft-deleted project the
+// same as a missing one (ErrNotFound). Every method below that loads a
+// project by id goes through this single helper, so deletion is enforced
+// consistently. Callers must hold s.mu.
+func (s *MemoryStore) liveProject(pid string) (*Project, error) {
 	p, ok := s.projects[pid]
-	if !ok {
+	if !ok || p.DeletedAt != nil {
 		return nil, ErrNotFound
 	}
-	if err := fn(p); err != nil {
+	return p, nil
+}
+
+// ProjectOwner returns the owner id of a project, or ErrNotFound.
+func (s *MemoryStore) ProjectOwner(pid string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, err := s.liveProject(pid)
+	if err != nil {
+		return "", err
+	}
+	return p.OwnerID, nil
+}
+
+// GetProject returns a deep copy of the project.
+func (s *MemoryStore) GetProject(pid string) (*Project, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, err := s.liveProject(pid)
+	if err != nil {
 		return nil, err
 	}
 	return p.clone(), nil
 }
 
+// withProject runs fn against the live project under the store lock, bumps its
+// UpdatedAt, then returns a deep copy of the (possibly mutated) project.
+func (s *MemoryStore) withProject(pid string, fn func(p *Project) error) (*Project, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, err := s.liveProject(pid)
+	if err != nil {
+		return nil, err
+	}
+	if err := fn(p); err != nil {
+		return nil, err
+	}
+	p.UpdatedAt = time.Now().UTC()
+	return p.clone(), nil
+}
+
+// DeleteProject soft-deletes a project: it (and its views/renders/blobs) is
+// left in place, but liveProject makes every other method treat it as gone.
+// Returns ErrNotFound if the project doesn't exist or is already deleted.
+//
+// TODO: a scheduled purge job should hard-delete projects whose DeletedAt is
+// more than 30 days old - removing the project, its views/renders and their
+// blobs from the BlobStore. Not implemented here; see PERSISTENCE_HANDOFF.md.
+func (s *MemoryStore) DeleteProject(pid string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, err := s.liveProject(pid)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	p.DeletedAt = &now
+	p.UpdatedAt = now
+	return nil
+}
+
 // UpdateStyle replaces the project's style settings.
-func (s *Store) UpdateStyle(pid string, style StyleSettings) (*Project, error) {
+func (s *MemoryStore) UpdateStyle(pid string, style StyleSettings) (*Project, error) {
 	return s.withProject(pid, func(p *Project) error {
 		p.Style = style
 		return nil
@@ -120,7 +196,7 @@ func (s *Store) UpdateStyle(pid string, style StyleSettings) (*Project, error) {
 
 // SetAnchor sets or clears the project's style-anchor render. renderID may be
 // nil to clear it. It also keeps each render's IsStyleAnchor flag in sync.
-func (s *Store) SetAnchor(pid string, renderID *string) (*Project, error) {
+func (s *MemoryStore) SetAnchor(pid string, renderID *string) (*Project, error) {
 	return s.withProject(pid, func(p *Project) error {
 		if renderID != nil {
 			found := false
@@ -148,7 +224,7 @@ func (s *Store) SetAnchor(pid string, renderID *string) (*Project, error) {
 // --- Assets ------------------------------------------------------------------
 
 // CreateAsset adds a new library asset to the project.
-func (s *Store) CreateAsset(pid, name, description, color string) (*Asset, error) {
+func (s *MemoryStore) CreateAsset(pid, name, description, color string) (*Asset, error) {
 	var created *Asset
 	_, err := s.withProject(pid, func(p *Project) error {
 		a := &Asset{ID: newID(), Name: name, Description: description, Color: color}
@@ -164,7 +240,7 @@ func (s *Store) CreateAsset(pid, name, description, color string) (*Asset, error
 }
 
 // UpdateAsset updates an existing asset's name, description and color.
-func (s *Store) UpdateAsset(pid, aid, name, description, color string) (*Asset, error) {
+func (s *MemoryStore) UpdateAsset(pid, aid, name, description, color string) (*Asset, error) {
 	var updated *Asset
 	_, err := s.withProject(pid, func(p *Project) error {
 		for _, a := range p.Assets {
@@ -187,7 +263,7 @@ func (s *Store) UpdateAsset(pid, aid, name, description, color string) (*Asset, 
 
 // DeleteAsset removes an asset from the project, and un-assigns it from any
 // masks that referenced it (across all views).
-func (s *Store) DeleteAsset(pid, aid string) error {
+func (s *MemoryStore) DeleteAsset(pid, aid string) error {
 	_, err := s.withProject(pid, func(p *Project) error {
 		idx := -1
 		for i, a := range p.Assets {
@@ -213,7 +289,7 @@ func (s *Store) DeleteAsset(pid, aid string) error {
 }
 
 // SetAssetReference attaches a reference photo blob to an asset.
-func (s *Store) SetAssetReference(pid, aid, imageID string) (*Asset, error) {
+func (s *MemoryStore) SetAssetReference(pid, aid, imageID string) (*Asset, error) {
 	var updated *Asset
 	_, err := s.withProject(pid, func(p *Project) error {
 		for _, a := range p.Assets {
@@ -236,7 +312,7 @@ func (s *Store) SetAssetReference(pid, aid, imageID string) (*Asset, error) {
 // --- Views -------------------------------------------------------------------
 
 // CreateView adds a new view (screenshot) to the project.
-func (s *Store) CreateView(pid, name, screenshotImageID string, width, height int) (*View, error) {
+func (s *MemoryStore) CreateView(pid, name, screenshotImageID string, width, height int) (*View, error) {
 	var created *View
 	_, err := s.withProject(pid, func(p *Project) error {
 		v := &View{
@@ -269,7 +345,7 @@ func findView(p *Project, vid string) *View {
 }
 
 // GetView returns a deep copy of one view.
-func (s *Store) GetView(pid, vid string) (*View, error) {
+func (s *MemoryStore) GetView(pid, vid string) (*View, error) {
 	var found *View
 	_, err := s.withProject(pid, func(p *Project) error {
 		v := findView(p, vid)
@@ -285,14 +361,15 @@ func (s *Store) GetView(pid, vid string) (*View, error) {
 	return found, nil
 }
 
-// DeleteView removes a view and its blobs (screenshot, mask bitmaps) from
-// the project.
-func (s *Store) DeleteView(pid, vid string) error {
+// DeleteView removes a view from the project and returns the blob IDs it
+// orphaned (screenshot, mask bitmaps, render results) so the caller can delete
+// them from the BlobStore.
+func (s *MemoryStore) DeleteView(pid, vid string) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.projects[pid]
-	if !ok {
-		return ErrNotFound
+	p, err := s.liveProject(pid)
+	if err != nil {
+		return nil, err
 	}
 	idx := -1
 	for i, v := range p.Views {
@@ -302,22 +379,17 @@ func (s *Store) DeleteView(pid, vid string) error {
 		}
 	}
 	if idx == -1 {
-		return ErrNotFound
+		return nil, ErrNotFound
 	}
 	v := p.Views[idx]
-	s.deleteBlob(v.ScreenshotImageID)
-	for _, m := range v.Masks {
-		s.deleteBlob(m.ID)
-	}
-	for _, r := range v.Renders {
-		s.deleteBlob(r.ResultImageID)
-	}
+	blobIDs := viewBlobIDs(v)
 	p.Views = append(p.Views[:idx], p.Views[idx+1:]...)
-	return nil
+	p.UpdatedAt = time.Now().UTC()
+	return blobIDs, nil
 }
 
 // SetInventory overwrites a view's cached object inventory text.
-func (s *Store) SetInventory(pid, vid, inventory string) (*View, error) {
+func (s *MemoryStore) SetInventory(pid, vid, inventory string) (*View, error) {
 	var updated *View
 	_, err := s.withProject(pid, func(p *Project) error {
 		v := findView(p, vid)
@@ -337,7 +409,7 @@ func (s *Store) SetInventory(pid, vid, inventory string) (*View, error) {
 // --- Masks ---------------------------------------------------------------
 
 // CreateMask adds a new (empty) mask to a view.
-func (s *Store) CreateMask(pid, vid string, assetID *string) (*Mask, error) {
+func (s *MemoryStore) CreateMask(pid, vid string, assetID *string) (*Mask, error) {
 	var created *Mask
 	_, err := s.withProject(pid, func(p *Project) error {
 		v := findView(p, vid)
@@ -368,7 +440,7 @@ func findMask(v *View, mid string) *Mask {
 
 // UpdateMask applies partial updates to a mask. Nil pointers leave the
 // corresponding field unchanged.
-func (s *Store) UpdateMask(pid, vid, mid string, assetID *string, assetIDSet bool, hidden *bool) (*Mask, error) {
+func (s *MemoryStore) UpdateMask(pid, vid, mid string, assetID *string, assetIDSet bool, hidden *bool) (*Mask, error) {
 	var updated *Mask
 	_, err := s.withProject(pid, func(p *Project) error {
 		v := findView(p, vid)
@@ -398,7 +470,7 @@ func (s *Store) UpdateMask(pid, vid, mid string, assetID *string, assetIDSet boo
 
 // SetMaskBitmap marks a mask as having a bitmap. The caller is responsible
 // for storing the actual PNG blob (under the mask's own ID, via PutBlobAt).
-func (s *Store) SetMaskBitmap(pid, vid, mid string) (*Mask, error) {
+func (s *MemoryStore) SetMaskBitmap(pid, vid, mid string) (*Mask, error) {
 	var updated *Mask
 	_, err := s.withProject(pid, func(p *Project) error {
 		v := findView(p, vid)
@@ -421,37 +493,34 @@ func (s *Store) SetMaskBitmap(pid, vid, mid string) (*Mask, error) {
 	return updated, nil
 }
 
-// DeleteMask removes a mask (and its bitmap blob, if any) from a view.
-func (s *Store) DeleteMask(pid, vid, mid string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	p, ok := s.projects[pid]
-	if !ok {
-		return ErrNotFound
-	}
-	v := findView(p, vid)
-	if v == nil {
-		return ErrNotFound
-	}
-	idx := -1
-	for i, m := range v.Masks {
-		if m.ID == mid {
-			idx = i
-			break
+// DeleteMask removes a mask from a view. The mask's bitmap blob (stored under
+// the mask's own ID) is the caller's to delete.
+func (s *MemoryStore) DeleteMask(pid, vid, mid string) error {
+	_, err := s.withProject(pid, func(p *Project) error {
+		v := findView(p, vid)
+		if v == nil {
+			return ErrNotFound
 		}
-	}
-	if idx == -1 {
-		return ErrNotFound
-	}
-	s.deleteBlob(mid)
-	v.Masks = append(v.Masks[:idx], v.Masks[idx+1:]...)
-	return nil
+		idx := -1
+		for i, m := range v.Masks {
+			if m.ID == mid {
+				idx = i
+				break
+			}
+		}
+		if idx == -1 {
+			return ErrNotFound
+		}
+		v.Masks = append(v.Masks[:idx], v.Masks[idx+1:]...)
+		return nil
+	})
+	return err
 }
 
 // --- Renders ---------------------------------------------------------------
 
 // AddRender appends a completed render to a view's history.
-func (s *Store) AddRender(pid, vid string, r *Render) (*Render, error) {
+func (s *MemoryStore) AddRender(pid, vid string, r *Render) (*Render, error) {
 	var created *Render
 	_, err := s.withProject(pid, func(p *Project) error {
 		v := findView(p, vid)
@@ -469,12 +538,12 @@ func (s *Store) AddRender(pid, vid string, r *Render) (*Render, error) {
 }
 
 // FindRender looks up a render by ID across every view in the project.
-func (s *Store) FindRender(pid, renderID string) (*Render, error) {
+func (s *MemoryStore) FindRender(pid, renderID string) (*Render, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.projects[pid]
-	if !ok {
-		return nil, ErrNotFound
+	p, err := s.liveProject(pid)
+	if err != nil {
+		return nil, err
 	}
 	for _, v := range p.Views {
 		for _, r := range v.Renders {

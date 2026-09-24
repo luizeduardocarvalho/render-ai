@@ -15,7 +15,7 @@ func (s *Server) createMask(w http.ResponseWriter, r *http.Request) error {
 	if err := readJSON(r, &req); err != nil {
 		return err
 	}
-	m, err := s.store.CreateMask(pid, vid, req.AssetID)
+	m, err := s.repo.CreateMask(pid, vid, req.AssetID)
 	if err != nil {
 		return mapStoreErr(err, "view %s not found", vid)
 	}
@@ -51,7 +51,7 @@ func (s *Server) updateMask(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	m, err := s.store.UpdateMask(pid, vid, mid, assetID, assetIDSet, hidden)
+	m, err := s.repo.UpdateMask(pid, vid, mid, assetID, assetIDSet, hidden)
 	if err != nil {
 		return mapStoreErr(err, "mask %s not found", mid)
 	}
@@ -62,7 +62,7 @@ func (s *Server) updateMask(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) uploadMaskBitmap(w http.ResponseWriter, r *http.Request) error {
 	pid, vid, mid := r.PathValue("pid"), r.PathValue("vid"), r.PathValue("mid")
 
-	v, err := s.store.GetView(pid, vid)
+	v, err := s.repo.GetView(pid, vid)
 	if err != nil {
 		return mapStoreErr(err, "view %s not found", vid)
 	}
@@ -83,8 +83,10 @@ func (s *Server) uploadMaskBitmap(w http.ResponseWriter, r *http.Request) error 
 	// The mask's bitmap blob is stored under the mask's own ID, so
 	// GET /api/images/{maskId} fetches it - Mask has no separate image-id
 	// field in the contract.
-	s.store.PutBlobAt(mid, data, "image/png")
-	m, err := s.store.SetMaskBitmap(pid, vid, mid)
+	if err := s.blobs.PutBlobAt(mid, data, "image/png"); err != nil {
+		return badGateway("storing mask bitmap: %v", err)
+	}
+	m, err := s.repo.SetMaskBitmap(pid, vid, mid)
 	if err != nil {
 		return mapStoreErr(err, "mask %s not found", mid)
 	}
@@ -94,9 +96,12 @@ func (s *Server) uploadMaskBitmap(w http.ResponseWriter, r *http.Request) error 
 
 func (s *Server) deleteMask(w http.ResponseWriter, r *http.Request) error {
 	pid, vid, mid := r.PathValue("pid"), r.PathValue("vid"), r.PathValue("mid")
-	if err := s.store.DeleteMask(pid, vid, mid); err != nil {
+	if err := s.repo.DeleteMask(pid, vid, mid); err != nil {
 		return mapStoreErr(err, "mask %s not found", mid)
 	}
+	// The mask bitmap blob is stored under the mask's own ID; clean it up
+	// best-effort now that the mask metadata is gone.
+	s.blobs.DeleteBlob(mid)
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }

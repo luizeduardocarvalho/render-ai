@@ -31,7 +31,8 @@ per object or object group, including an approximate count and rough position (f
 comment on camera, lighting, or materials.`
 
 // GenerateInventory asks the text model for a concise object inventory of
-// the screenshot (counts and rough positions).
+// the screenshot (counts and rough positions). outputTokens includes any
+// thinking tokens the model billed, alongside its text output.
 func (t *TextModel) GenerateInventory(ctx context.Context, screenshotPNG []byte) (text string, promptTokens, outputTokens int32, err error) {
 	parts := []*genai.Part{
 		genai.NewPartFromBytes(screenshotPNG, "image/png"),
@@ -51,7 +52,7 @@ func (t *TextModel) GenerateInventory(ctx context.Context, screenshotPNG []byte)
 
 	if resp.UsageMetadata != nil {
 		promptTokens = resp.UsageMetadata.PromptTokenCount
-		outputTokens = resp.UsageMetadata.CandidatesTokenCount
+		outputTokens = resp.UsageMetadata.CandidatesTokenCount + resp.UsageMetadata.ThoughtsTokenCount
 	}
 	return text, promptTokens, outputTokens, nil
 }
@@ -84,8 +85,10 @@ matching exactly this shape:
 // render result, against the cached inventory, and returns the parsed JSON
 // verdict. If the model's response is not valid JSON, the raw text is kept
 // in Raw and an error is returned so the caller can log it, but the caller
-// may still choose to surface the raw text to the user.
-func (t *TextModel) CheckPreservation(ctx context.Context, screenshotPNG, resultPNG []byte, inventoryText string) (diff PreservationDiff, promptTokens, outputTokens int32, err error) {
+// may still choose to surface the raw text to the user. thoughtsTokens is
+// broken out separately from outputTokens (text output) so callers can
+// report them individually; both are billed at the same output rate.
+func (t *TextModel) CheckPreservation(ctx context.Context, screenshotPNG, resultPNG []byte, inventoryText string) (diff PreservationDiff, promptTokens, outputTokens, thoughtsTokens int32, err error) {
 	prompt := fmt.Sprintf(preservationPromptTemplate, inventoryText)
 
 	parts := []*genai.Part{
@@ -97,12 +100,13 @@ func (t *TextModel) CheckPreservation(ctx context.Context, screenshotPNG, result
 
 	resp, err := t.client.Models.GenerateContent(ctx, t.modelID, contents, &genai.GenerateContentConfig{})
 	if err != nil {
-		return PreservationDiff{}, 0, 0, fmt.Errorf("checking preservation: %w", err)
+		return PreservationDiff{}, 0, 0, 0, fmt.Errorf("checking preservation: %w", err)
 	}
 
 	if resp.UsageMetadata != nil {
 		promptTokens = resp.UsageMetadata.PromptTokenCount
 		outputTokens = resp.UsageMetadata.CandidatesTokenCount
+		thoughtsTokens = resp.UsageMetadata.ThoughtsTokenCount
 	}
 
 	raw := strings.TrimSpace(resp.Text())
@@ -110,9 +114,9 @@ func (t *TextModel) CheckPreservation(ctx context.Context, screenshotPNG, result
 	if parseErr != nil {
 		// Degrade gracefully: surface the raw text so the UI still shows
 		// something, but report the parse error to the caller for logging.
-		return PreservationDiff{Raw: raw}, promptTokens, outputTokens, fmt.Errorf("parsing preservation JSON: %w", parseErr)
+		return PreservationDiff{Raw: raw}, promptTokens, outputTokens, thoughtsTokens, fmt.Errorf("parsing preservation JSON: %w", parseErr)
 	}
-	return diff, promptTokens, outputTokens, nil
+	return diff, promptTokens, outputTokens, thoughtsTokens, nil
 }
 
 func parsePreservationJSON(text string) (PreservationDiff, error) {

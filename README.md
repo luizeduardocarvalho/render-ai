@@ -4,8 +4,12 @@ Local proof of concept: turn SketchUp screenshots into photorealistic architectu
 photographs, placing specific real products into user-masked regions, using Google's
 Gemini 3 image models (Nano Banana Pro / Nano Banana 2) through **Vertex AI**.
 
-Everything runs on your machine and lives **in memory** for the session - no cloud storage,
-no database. Restarting the backend loses all projects. That is by design for this PoC.
+Projects are **persisted per user**: the deployed backend stores structured data in
+Firestore and image blobs (screenshots, masks, renders) in a Google Cloud Storage
+bucket, scoped to the signed-in user, who picks a project from a list. Set
+`STORAGE=firestore` + `BLOB_BUCKET=...` (see `backend/DEPLOY.md`). Local dev
+defaults to `STORAGE=memory` - an in-process store that is lost on restart, so no
+cloud setup is needed to run locally.
 
 - `frontend/` - React + TypeScript + Vite, Konva mask editor.
 - `backend/`  - Go, official Google Gen AI Go SDK (`google.golang.org/genai`), Vertex AI backend, ADC.

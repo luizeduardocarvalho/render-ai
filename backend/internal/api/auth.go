@@ -10,6 +10,11 @@ import (
 	"github.com/clerk/clerk-sdk-go/v2/jwt"
 )
 
+// handlerFunc is the error-returning handler shape used throughout this
+// package; s.handle adapts it to an http.HandlerFunc, and the requireAuth /
+// requireAdmin / requireOwner middlewares wrap it.
+type handlerFunc = func(w http.ResponseWriter, r *http.Request) error
+
 // ctxKey is a private type for context keys defined in this package, so they
 // can't collide with keys set by other packages.
 type ctxKey int
@@ -85,6 +90,36 @@ func (s *Server) requireAuth(fn func(w http.ResponseWriter, r *http.Request) err
 
 		ctx := context.WithValue(r.Context(), userIDCtxKey, userID)
 		return fn(w, r.WithContext(ctx))
+	}
+}
+
+// requireOwner gates a project-scoped handler on the verified caller owning
+// the project named by the {pid} path value. It must be composed inside
+// requireAdmin, which puts the verified user id in the request context.
+//
+// A non-owner (or a missing project) gets a 404, never a 403 - so a user
+// cannot probe which project ids exist by owner. When CLERK_SECRET_KEY is
+// unset (auth disabled for local dev), the check is skipped: there is no
+// verified user and every project is implicitly owned by "".
+func (s *Server) requireOwner(fn handlerFunc) handlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		if s.cfg.Auth.ClerkSecretKey == "" {
+			return fn(w, r)
+		}
+		pid := r.PathValue("pid")
+		userID, ok := userIDFromContext(r.Context())
+		if !ok {
+			// requireAdmin should have populated this; treat its absence as deny.
+			return notFoundErr("project %s not found", pid)
+		}
+		ownerID, err := s.repo.ProjectOwner(pid)
+		if err != nil {
+			return mapStoreErr(err, "project %s not found", pid)
+		}
+		if ownerID != userID {
+			return notFoundErr("project %s not found", pid)
+		}
+		return fn(w, r)
 	}
 }
 

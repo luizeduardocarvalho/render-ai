@@ -14,7 +14,12 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
-    // Everything else is denied.
+    // App data (projects and their views/renders subcollections) is written and
+    // read ONLY by the Go backend via the Firebase Admin SDK, which bypasses
+    // these rules entirely. No client ever touches Firestore directly - the
+    // frontend goes through the authenticated, ownership-gated HTTP API. So the
+    // catch-all below denies all client access to projects/** on purpose; it is
+    // the intended posture, not an omission.
     match /{document=**} {
       allow read, write: if false;
     }

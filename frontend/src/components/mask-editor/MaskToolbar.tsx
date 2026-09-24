@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { Tool } from "./MaskEditor";
 
 interface MaskToolbarProps {
@@ -29,31 +30,32 @@ export function MaskToolbar({
   toolsDisabled,
   savingCount,
 }: MaskToolbarProps) {
+  const { t } = useTranslation();
   return (
     <div className="mask-toolbar">
-      <div className="mask-toolbar-group" role="group" aria-label="Paint tool">
+      <div className="mask-toolbar-group" role="group" aria-label={t("maskToolbar.brush")}>
         <button
           type="button"
           className={`tool-btn ${tool === "brush" ? "tool-btn-active" : ""}`}
           onClick={() => onToolChange("brush")}
           disabled={toolsDisabled}
-          title="Brush"
+          title={t("maskToolbar.brush")}
         >
-          <BrushIcon /> Brush
+          <BrushIcon /> {t("maskToolbar.brush")}
         </button>
         <button
           type="button"
           className={`tool-btn ${tool === "eraser" ? "tool-btn-active" : ""}`}
           onClick={() => onToolChange("eraser")}
           disabled={toolsDisabled}
-          title="Eraser"
+          title={t("maskToolbar.eraser")}
         >
-          <EraserIcon /> Eraser
+          <EraserIcon /> {t("maskToolbar.eraser")}
         </button>
       </div>
 
       <div className="mask-toolbar-group mask-toolbar-slider">
-        <span className="mask-toolbar-label">Size</span>
+        <span className="mask-toolbar-label">{t("maskToolbar.size")}</span>
         <input
           type="range"
           min={minBrush}
@@ -66,7 +68,7 @@ export function MaskToolbar({
       </div>
 
       <div className="mask-toolbar-group mask-toolbar-slider">
-        <span className="mask-toolbar-label">Zoom</span>
+        <span className="mask-toolbar-label">{t("maskToolbar.zoom")}</span>
         <input
           type="range"
           min={50}
@@ -77,7 +79,7 @@ export function MaskToolbar({
         />
         <span className="mask-toolbar-value">{zoomPct}%</span>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => onZoomChange(100)}>
-          Fit
+          {t("maskToolbar.fit")}
         </button>
       </div>
 
@@ -85,12 +87,12 @@ export function MaskToolbar({
 
       {savingCount > 0 && (
         <span className="mask-toolbar-saving">
-          <span className="spinner" /> Saving {savingCount} mask{savingCount > 1 ? "s" : ""}
+          <span className="spinner" /> {t("maskToolbar.saving", { count: savingCount })}
         </span>
       )}
 
       <button type="button" className="btn btn-primary btn-sm" onClick={onAddMask} disabled={addingMask}>
-        {addingMask ? <span className="spinner" /> : "+"} Add mask
+        {addingMask ? <span className="spinner" /> : "+"} {t("maskToolbar.addMask")}
       </button>
     </div>
   );

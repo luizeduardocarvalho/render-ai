@@ -17,7 +17,7 @@ func (s *Server) createAsset(w http.ResponseWriter, r *http.Request) error {
 	if req.Name == "" {
 		return badRequest("name is required")
 	}
-	a, err := s.store.CreateAsset(pid, req.Name, req.Description, req.Color)
+	a, err := s.repo.CreateAsset(pid, req.Name, req.Description, req.Color)
 	if err != nil {
 		return mapStoreErr(err, "project %s not found", pid)
 	}
@@ -31,7 +31,7 @@ func (s *Server) updateAsset(w http.ResponseWriter, r *http.Request) error {
 	if err := readJSON(r, &req); err != nil {
 		return err
 	}
-	a, err := s.store.UpdateAsset(pid, aid, req.Name, req.Description, req.Color)
+	a, err := s.repo.UpdateAsset(pid, aid, req.Name, req.Description, req.Color)
 	if err != nil {
 		return mapStoreErr(err, "asset %s not found", aid)
 	}
@@ -41,7 +41,7 @@ func (s *Server) updateAsset(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Server) deleteAsset(w http.ResponseWriter, r *http.Request) error {
 	pid, aid := r.PathValue("pid"), r.PathValue("aid")
-	if err := s.store.DeleteAsset(pid, aid); err != nil {
+	if err := s.repo.DeleteAsset(pid, aid); err != nil {
 		return mapStoreErr(err, "asset %s not found", aid)
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -60,8 +60,11 @@ func (s *Server) uploadAssetReference(w http.ResponseWriter, r *http.Request) er
 		return badRequest("invalid reference image: %v", decErr)
 	}
 
-	imageID := s.store.PutBlob(data, contentTypeForFormat(format))
-	a, err := s.store.SetAssetReference(pid, aid, imageID)
+	imageID, err := s.blobs.PutBlob(data, contentTypeForFormat(format))
+	if err != nil {
+		return badGateway("storing reference image: %v", err)
+	}
+	a, err := s.repo.SetAssetReference(pid, aid, imageID)
 	if err != nil {
 		return mapStoreErr(err, "asset %s not found", aid)
 	}

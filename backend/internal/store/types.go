@@ -1,6 +1,7 @@
-// Package store implements the in-memory, mutex-protected data model for
-// render-ai. Everything here is lost on server restart - that is by design
-// for this proof of concept.
+// Package store defines the render-ai data model and its persistence
+// interfaces (Repository for structured data, BlobStore for image bytes). It
+// ships two backends: an in-memory one for local dev (lost on restart) and a
+// Firestore + GCS one for the deployed service.
 package store
 
 import "time"
@@ -10,6 +11,10 @@ type ScenePreset string
 
 // LightingPreset is a canned lighting mood for the render prompt.
 type LightingPreset string
+
+// InteriorLights says whether the scene's artificial lights are switched on
+// and, if so, at which color temperature.
+type InteriorLights string
 
 // ModelChoice selects which Gemini image model a render uses.
 type ModelChoice string
@@ -29,6 +34,11 @@ const (
 	LightingGoldenHour            LightingPreset = "golden_hour"
 	LightingEveningInteriorLights LightingPreset = "evening_interior_lights"
 	LightingNightExterior         LightingPreset = "night_exterior"
+
+	InteriorLightsOff   InteriorLights = "off"
+	InteriorLights3000K InteriorLights = "3000k"
+	InteriorLights4000K InteriorLights = "4000k"
+	InteriorLights6000K InteriorLights = "6000k"
 
 	ModelPro   ModelChoice = "pro"
 	ModelFlash ModelChoice = "flash"
@@ -59,6 +69,15 @@ type Mask struct {
 }
 
 // RenderMetrics captures cost/latency/token accounting for one render.
+//
+// PromptTokens/OutputTokens/ThoughtsTokens are summed across every model call
+// this render made: the image generation call, plus the text-model
+// preservation check if it ran. OutputTokens is TEXT output only - it never
+// includes the image call's own generated-image tokens, which are priced
+// per-image (see internal/render/pricing.go) rather than per-token, to avoid
+// double-counting them at the text/thinking output rate. ThoughtsTokens is
+// the thinking-token portion, broken out for visibility; it's already
+// included in whatever EstimatedCostUsd charges at the output rate.
 type RenderMetrics struct {
 	Model            string     `json:"model"`
 	Resolution       Resolution `json:"resolution"`
@@ -68,6 +87,7 @@ type RenderMetrics struct {
 	TotalMs          int64      `json:"totalMs"`
 	PromptTokens     *int32     `json:"promptTokens,omitempty"`
 	OutputTokens     *int32     `json:"outputTokens,omitempty"`
+	ThoughtsTokens   *int32     `json:"thoughtsTokens,omitempty"`
 	EstimatedCostUsd *float64   `json:"estimatedCostUsd,omitempty"`
 }
 
@@ -116,27 +136,56 @@ type View struct {
 
 // StyleSettings are the project-wide render style controls.
 type StyleSettings struct {
-	Scene             ScenePreset    `json:"scene"`
-	Lighting          LightingPreset `json:"lighting"`
-	LightDirection    string         `json:"lightDirection"`
+	Scene          ScenePreset    `json:"scene"`
+	Lighting       LightingPreset `json:"lighting"`
+	LightDirection string         `json:"lightDirection"`
+	// InteriorLights is empty on projects created before the field existed;
+	// the prompt then says nothing about artificial lights.
+	InteriorLights    InteriorLights `json:"interiorLights"`
 	MaterialNotes     string         `json:"materialNotes"`
 	ExtraInstructions string         `json:"extraInstructions"`
 }
 
 // Project is the top-level container for everything the frontend works with.
+//
+// OwnerID is the Clerk user id of the project's owner; every project-scoped
+// route is authorized against it (see the API layer). OrgID is reserved for a
+// future org-scoping model - it is always nil today, but present so projects
+// can gain an org dimension without a data migration.
+//
+// DeletedAt marks a soft-deleted project: everything else about it (views,
+// masks, renders, blobs) is left in place so it can be restored, but every
+// Repository method treats it as not found (see each implementation's
+// project-loading helper). Nil means the project is live.
 type Project struct {
 	ID                  string        `json:"id"`
+	OwnerID             string        `json:"ownerId"`
+	OrgID               *string       `json:"orgId"`
 	Name                string        `json:"name"`
+	CreatedAt           time.Time     `json:"createdAt"`
+	UpdatedAt           time.Time     `json:"updatedAt"`
+	DeletedAt           *time.Time    `json:"deletedAt,omitempty"`
 	Style               StyleSettings `json:"style"`
 	Assets              []*Asset      `json:"assets"`
 	Views               []*View       `json:"views"`
 	StyleAnchorRenderID *string       `json:"styleAnchorRenderId"`
 }
 
+// Valid reports whether l is one of the known values. Empty is valid: it
+// means the setting was never chosen.
+func (l InteriorLights) Valid() bool {
+	switch l {
+	case "", InteriorLightsOff, InteriorLights3000K, InteriorLights4000K, InteriorLights6000K:
+		return true
+	}
+	return false
+}
+
 func defaultStyle() StyleSettings {
 	return StyleSettings{
-		Scene:    SceneInterior,
-		Lighting: LightingMorningSun,
+		Scene:          SceneInterior,
+		Lighting:       LightingMorningSun,
+		InteriorLights: InteriorLightsOff,
 	}
 }
 
@@ -145,7 +194,12 @@ func defaultStyle() StyleSettings {
 func (p *Project) clone() *Project {
 	out := &Project{
 		ID:                  p.ID,
+		OwnerID:             p.OwnerID,
+		OrgID:               clonePtr(p.OrgID),
 		Name:                p.Name,
+		CreatedAt:           p.CreatedAt,
+		UpdatedAt:           p.UpdatedAt,
+		DeletedAt:           clonePtr(p.DeletedAt),
 		Style:               p.Style,
 		StyleAnchorRenderID: clonePtr(p.StyleAnchorRenderID),
 		Assets:              make([]*Asset, len(p.Assets)),
@@ -189,6 +243,7 @@ func (r *Render) clone() *Render {
 	clone.Metrics = r.Metrics
 	clone.Metrics.PromptTokens = clonePtr(r.Metrics.PromptTokens)
 	clone.Metrics.OutputTokens = clonePtr(r.Metrics.OutputTokens)
+	clone.Metrics.ThoughtsTokens = clonePtr(r.Metrics.ThoughtsTokens)
 	clone.Metrics.EstimatedCostUsd = clonePtr(r.Metrics.EstimatedCostUsd)
 	if r.Preservation != nil {
 		p := *r.Preservation

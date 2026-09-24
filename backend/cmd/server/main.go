@@ -47,7 +47,10 @@ func run() error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	st := store.New()
+	repo, blobs, err := buildStorage(context.Background(), cfg)
+	if err != nil {
+		return fmt.Errorf("initializing storage: %w", err)
+	}
 	promptPath := filepath.Join(root, "prompts", "render.tmpl")
 
 	var renderer render.Renderer
@@ -87,7 +90,7 @@ func run() error {
 			cfg.Vertex.Project, cfg.Vertex.Location, cfg.Vertex.TextLocation, cfg.Models.ProImage, cfg.Models.Text)
 	}
 
-	srv := api.NewServer(st, renderer, textModel, cfg, promptPath)
+	srv := api.NewServer(repo, blobs, renderer, textModel, cfg, promptPath)
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	timeout := time.Duration(cfg.Server.RenderTimeoutSec+30) * time.Second
@@ -105,6 +108,46 @@ func run() error {
 		return fmt.Errorf("http server: %w", err)
 	}
 	return nil
+}
+
+// buildStorage constructs the structured-data repository and blob store from
+// config. The "memory" backend (default) returns a single in-process store
+// acting as both - zero external dependencies, lost on restart, for local dev.
+// The "firestore" backend wires Cloud Firestore for metadata and a GCS bucket
+// for image blobs.
+func buildStorage(ctx context.Context, cfg *config.Config) (store.Repository, store.BlobStore, error) {
+	switch cfg.Storage.Backend {
+	case "memory":
+		ms := store.NewMemory()
+		log.Println("server: storage backend=memory (in-process; projects are lost on restart)")
+		return ms, ms, nil
+	case "firestore":
+		if cfg.Storage.BlobBucket == "" {
+			return nil, nil, fmt.Errorf("firestore storage requires a blob bucket (BLOB_BUCKET / storage.blobBucket)")
+		}
+		// Storage.Project is separate from the (possibly cross-project) Vertex
+		// project; empty means auto-detect the ambient Cloud Run project.
+		repo, err := store.NewFirestore(ctx, cfg.Storage.Project, cfg.Storage.FirestoreDatabase)
+		if err != nil {
+			return nil, nil, fmt.Errorf("firestore repository: %w", err)
+		}
+		blobs, err := store.NewGCS(ctx, cfg.Storage.BlobBucket, cfg.Storage.SignerServiceAccount)
+		if err != nil {
+			return nil, nil, fmt.Errorf("gcs blob store: %w", err)
+		}
+		log.Printf("server: storage backend=firestore project=%s database=%s bucket=%s",
+			orDefault(cfg.Storage.Project, "(detected)"), orDefault(cfg.Storage.FirestoreDatabase, "(default)"), cfg.Storage.BlobBucket)
+		return repo, blobs, nil
+	default:
+		return nil, nil, fmt.Errorf("unknown storage backend %q (want \"memory\" or \"firestore\")", cfg.Storage.Backend)
+	}
+}
+
+func orDefault(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
 }
 
 // repoRoot returns the backend module directory, so config/prompts load

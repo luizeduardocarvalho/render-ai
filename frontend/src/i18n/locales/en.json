@@ -1,0 +1,301 @@
+{
+  "app": {
+    "brand": "render-ai",
+    "switchProject": "Switch project",
+    "noViewSelected": {
+      "title": "No view selected",
+      "body": "Upload a SketchUp screenshot to create your first view."
+    }
+  },
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "saved": "Saved",
+    "create": "Create",
+    "delete": "Delete",
+    "edit": "Edit",
+    "retry": "Retry",
+    "dismiss": "Dismiss",
+    "unassigned": "Unassigned",
+    "none": "None",
+    "yes": "Yes",
+    "no": "No",
+    "notAvailable": "n/a"
+  },
+  "languageSwitcher": {
+    "pt": "PT",
+    "en": "EN",
+    "label": "Language"
+  },
+  "auth": {
+    "clerkMissing": "Clerk is not configured - set VITE_CLERK_PUBLISHABLE_KEY",
+    "notAuthorized": {
+      "heading": "Access not approved yet",
+      "body": "This account isn't authorized for render-ai yet. Ask the team to grant you access, then sign in again.",
+      "signedInAs": "Signed in as"
+    }
+  },
+  "picker": {
+    "heading": "Your projects",
+    "subtitle": "Pick up where you left off, or start something new.",
+    "newProject": "+ New project",
+    "nameLabel": "Project name",
+    "namePlaceholder": "e.g. Lakeside renovation",
+    "cancel": "Cancel",
+    "createProject": "Create project",
+    "loading": "Loading projects...",
+    "retry": "Retry",
+    "thumbEmpty": "No views yet",
+    "deleteTitle": "Delete project",
+    "delete": {
+      "confirm": "Delete project \"{{name}}\"? Support can recover it for 30 days, then it's gone for good."
+    },
+    "card": {
+      "views_one": "{{count}} view",
+      "views_other": "{{count}} views",
+      "renders_one": "{{count}} render",
+      "renders_other": "{{count}} renders",
+      "updated": "Updated {{time}}"
+    },
+    "time": {
+      "justNow": "just now",
+      "minutesAgo_one": "{{count}}m ago",
+      "minutesAgo_other": "{{count}}m ago",
+      "hoursAgo_one": "{{count}}h ago",
+      "hoursAgo_other": "{{count}}h ago",
+      "daysAgo_one": "{{count}}d ago",
+      "daysAgo_other": "{{count}}d ago"
+    },
+    "errors": {
+      "createFailed": "Failed to create project",
+      "openFailed": "Failed to open project",
+      "deleteFailed": "Failed to delete project",
+      "loadFailed": "Failed to load projects"
+    }
+  },
+  "style": {
+    "title": "Style",
+    "subtitle": "Applied to every render in this project",
+    "saved": "Saved",
+    "scene": {
+      "label": "Scene",
+      "interior": "Interior",
+      "exterior": "Exterior"
+    },
+    "lighting": {
+      "label": "Lighting preset"
+    },
+    "lightingPresets": {
+      "morning_sun": "Morning sun",
+      "overcast": "Overcast",
+      "golden_hour": "Golden hour",
+      "evening_interior_lights": "Evening interior lights",
+      "night_exterior": "Night exterior"
+    },
+    "lightDirection": {
+      "label": "Light direction",
+      "placeholder": "e.g. low sun from the west"
+    },
+    "interiorLights": {
+      "label": "Artificial lights",
+      "notSet": "Not set - the model decides whether lights are on",
+      "options": {
+        "off": { "label": "Off", "hint": "All artificial lights switched off" },
+        "3000k": { "label": "3000K", "hint": "Lights on, warm white" },
+        "4000k": { "label": "4000K", "hint": "Lights on, neutral white" },
+        "6000k": { "label": "6000K", "hint": "Lights on, cool daylight white" }
+      }
+    },
+    "materialNotes": {
+      "label": "Material notes",
+      "placeholder": "e.g. white oak flooring, matte black fixtures"
+    },
+    "extraInstructions": {
+      "label": "Extra instructions",
+      "placeholder": "Anything else the model should know"
+    },
+    "save": "Save style",
+    "error": "Failed to save style"
+  },
+  "assetLibrary": {
+    "title": "Asset library",
+    "subtitle": "Reused across views",
+    "addAsset": "+ Add asset",
+    "namePlaceholder": "Name, e.g. Sofa",
+    "descriptionPlaceholder": "Description, e.g. dark green velvet three-seat sofa",
+    "colorLabel": "Color",
+    "cancel": "Cancel",
+    "create": "Create",
+    "empty": {
+      "title": "No assets yet",
+      "body": "Add furniture or fixtures to place them in your views."
+    },
+    "error": "Failed to create asset"
+  },
+  "assetCard": {
+    "namePlaceholder": "Name",
+    "descriptionPlaceholder": "Description, e.g. dark green velvet three-seat sofa",
+    "colorLabel": "Color",
+    "cancel": "Cancel",
+    "save": "Save",
+    "noDescription": "No description",
+    "noPhoto": "No photo",
+    "replacePhoto": "Replace photo",
+    "addPhoto": "Add photo",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirm": "Delete asset \"{{name}}\"? Masks assigned to it will become unassigned.",
+    "errors": {
+      "update": "Failed to update asset",
+      "delete": "Failed to delete asset",
+      "upload": "Failed to upload reference photo"
+    }
+  },
+  "inventory": {
+    "title": "Object inventory",
+    "subtitle": "Used to check what the render preserves",
+    "generate": "Generate from screenshot",
+    "placeholder": "No inventory yet. Generate one from the screenshot, or write it yourself.",
+    "save": "Save inventory",
+    "saved": "Saved",
+    "errors": {
+      "generate": "Failed to generate inventory",
+      "save": "Failed to save inventory"
+    }
+  },
+  "renderControls": {
+    "title": "Render",
+    "subtitle_one": "{{count}} region will be sent to the model",
+    "subtitle_other": "{{count}} regions will be sent to the model",
+    "model": {
+      "label": "Model",
+      "pro": "Pro",
+      "flash": "Flash"
+    },
+    "resolution": {
+      "label": "Resolution",
+      "flashOnly": "Flash only supports 1K resolution.",
+      "flashOnlyTitle": "Flash only supports 1K"
+    },
+    "preservationCheck": "Preservation check (compares unmasked regions against the original)",
+    "variations": "Generate 2 variations (independent samples, both kept for comparison)",
+    "renderButton_one": "Generate render",
+    "renderButton_other": "Generate render ({{count}} variations)",
+    "rendering": "Rendering... this can take up to a minute",
+    "costPreview_one": "≈ {{cost}}",
+    "costPreview_other": "≈ {{cost}} for {{count}} variations",
+    "error": "Render failed. Please try again."
+  },
+  "renderHistory": {
+    "title": "Render history",
+    "subtitle_one": "{{count}} render for this view",
+    "subtitle_other": "{{count}} renders for this view",
+    "empty": {
+      "title": "No renders yet",
+      "body": "Generate a render above to see it here."
+    },
+    "columns": {
+      "created": "Created",
+      "model": "Model",
+      "resolution": "Res",
+      "regions": "Regions",
+      "anchor": "Anchor",
+      "imageCall": "Image call",
+      "total": "Total",
+      "cost": "Cost"
+    },
+    "anchorBadge": "Anchor",
+    "notAvailable": "n/a"
+  },
+  "resultView": {
+    "title": "Result",
+    "clearAnchor": "Clear anchor",
+    "setAsAnchor": "Set as style anchor",
+    "anchorBadge": "Style anchor",
+    "downloadPng": "Download PNG",
+    "loadingImage": "Loading image...",
+    "errors": {
+      "anchor": "Failed to update style anchor",
+      "download": "Failed to download image"
+    }
+  },
+  "metricsPanel": {
+    "model": "Model",
+    "resolution": "Resolution",
+    "regions": "Regions",
+    "anchorUsed": "Anchor used",
+    "seed": "Seed",
+    "seedValue": "n/a (not supported)",
+    "imageCallLatency": "Image call latency",
+    "totalLatency": "Total latency",
+    "promptTokens": "Prompt tokens",
+    "outputTokens": "Output tokens",
+    "estimatedCost": "Estimated cost",
+    "notAvailable": "n/a",
+    "preservationCheck": "Preservation check",
+    "edgeScore": "Edge score {{score}}",
+    "belowThreshold": " - below threshold",
+    "removed": "Removed",
+    "added": "Added",
+    "moved": "Moved",
+    "none": "None",
+    "rawNotes": "Raw model notes"
+  },
+  "beforeAfterSlider": {
+    "before": "Before",
+    "after": "After",
+    "comparisonPosition": "Comparison position"
+  },
+  "viewsBar": {
+    "addView": "+ Add view",
+    "namePlaceholder": "View name",
+    "cancel": "Cancel",
+    "upload": "Upload",
+    "deleteTitle": "Delete view",
+    "deleteConfirm": "Delete view \"{{name}}\"? All its masks and renders will be lost.",
+    "meta_one": "{{width}}x{{height}} - {{count}} render",
+    "meta_other": "{{width}}x{{height}} - {{count}} renders",
+    "error": "Failed to upload view",
+    "deleteError": "Failed to delete view"
+  },
+  "maskEditor": {
+    "title": "Mask editor",
+    "subtitle": "{{width}} x {{height}}px original resolution",
+    "loadingScreenshot": "Loading screenshot...",
+    "loadError": "Could not load the screenshot image.",
+    "selectHint": "Select a mask on the right to start painting.",
+    "addHint": "Add a mask to start painting a region.",
+    "errors": {
+      "bitmapLoad": "Failed to load a mask bitmap from the server.",
+      "saveMask": "Failed to save mask",
+      "addMask": "Failed to add mask",
+      "updateMask": "Failed to update mask",
+      "assignAsset": "Failed to assign asset",
+      "deleteMask": "Failed to delete mask"
+    },
+    "deleteConfirm": "Delete this mask? This cannot be undone."
+  },
+  "maskToolbar": {
+    "brush": "Brush",
+    "eraser": "Eraser",
+    "size": "Size",
+    "zoom": "Zoom",
+    "fit": "Fit",
+    "saving_one": "Saving {{count}} mask",
+    "saving_other": "Saving {{count}} masks",
+    "addMask": "Add mask"
+  },
+  "masksList": {
+    "empty": {
+      "title": "No masks yet",
+      "body": "Add a mask, then paint the region it covers."
+    },
+    "maskLabel": "Mask {{index}}",
+    "unassigned": "Unassigned",
+    "saving": " - saving...",
+    "saveFailed": " - save failed",
+    "show": "Show",
+    "hide": "Hide",
+    "deleteMask": "Delete mask"
+  }
+}

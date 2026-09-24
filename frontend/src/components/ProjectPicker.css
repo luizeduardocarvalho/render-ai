@@ -1,0 +1,172 @@
+.picker-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.picker-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.picker-main {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.picker-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.picker-heading {
+  font-size: 22px;
+  margin-bottom: var(--space-1);
+}
+
+.picker-create-card {
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 460px;
+}
+
+.picker-create-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.picker-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  color: var(--text-muted);
+}
+
+.picker-status-error {
+  color: var(--text);
+}
+
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.picker-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.picker-card:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.08));
+  transform: translateY(-1px);
+}
+
+.picker-card:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.picker-card-thumb {
+  display: block;
+  aspect-ratio: 16 / 10;
+  background: var(--gray-100);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.picker-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.picker-card-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.picker-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+}
+
+.picker-card-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.picker-card-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.picker-card-time {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.picker-card-spinner {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+}
+
+.picker-card-delete {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 16px;
+  line-height: 1;
+  z-index: 1;
+}
+
+.picker-card-delete:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}
