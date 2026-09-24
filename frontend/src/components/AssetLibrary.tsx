@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ApiError } from "../api";
 import { useProject } from "../state/ProjectContext";
 import { AssetCard } from "./AssetCard";
@@ -22,6 +23,7 @@ function nextSuggestedColor(used: string[]): string {
 }
 
 export function AssetLibrary() {
+  const { t } = useTranslation();
   const { project, createAsset } = useProject();
   const assets = project?.assets ?? [];
 
@@ -48,7 +50,7 @@ export function AssetLibrary() {
       setDescription("");
       setAdding(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create asset");
+      setError(err instanceof ApiError ? err.message : t("assetLibrary.error"));
     } finally {
       setSubmitting(false);
     }
@@ -58,12 +60,12 @@ export function AssetLibrary() {
     <section className="panel">
       <div className="panel-header">
         <div>
-          <div className="panel-title">Asset library</div>
-          <div className="panel-subtitle">Reused across views</div>
+          <div className="panel-title">{t("assetLibrary.title")}</div>
+          <div className="panel-subtitle">{t("assetLibrary.subtitle")}</div>
         </div>
         {!adding && (
           <button type="button" className="btn btn-primary btn-sm" onClick={openForm}>
-            + Add asset
+            {t("assetLibrary.addAsset")}
           </button>
         )}
       </div>
@@ -73,7 +75,7 @@ export function AssetLibrary() {
             <div className="field">
               <input
                 className="input"
-                placeholder="Name, e.g. Sofa"
+                placeholder={t("assetLibrary.namePlaceholder")}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoFocus
@@ -83,14 +85,14 @@ export function AssetLibrary() {
               <textarea
                 className="textarea"
                 rows={2}
-                placeholder="Description, e.g. dark green velvet three-seat sofa"
+                placeholder={t("assetLibrary.descriptionPlaceholder")}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
             </div>
             <div className="field asset-color-field">
               <label className="field-label" htmlFor="new-asset-color">
-                Color
+                {t("assetLibrary.colorLabel")}
               </label>
               <input
                 id="new-asset-color"
@@ -104,11 +106,11 @@ export function AssetLibrary() {
             {error && <div className="error-banner">{error}</div>}
             <div className="asset-card-actions">
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>
-                Cancel
+                {t("assetLibrary.cancel")}
               </button>
               <button type="submit" className="btn btn-primary btn-sm" disabled={submitting || !name.trim()}>
                 {submitting ? <span className="spinner" /> : null}
-                Create
+                {t("assetLibrary.create")}
               </button>
             </div>
           </form>
@@ -116,8 +118,8 @@ export function AssetLibrary() {
 
         {assets.length === 0 && !adding && (
           <div className="empty-state">
-            <strong>No assets yet</strong>
-            <span>Add furniture or fixtures to place them in your views.</span>
+            <strong>{t("assetLibrary.empty.title")}</strong>
+            <span>{t("assetLibrary.empty.body")}</span>
           </div>
         )}
 

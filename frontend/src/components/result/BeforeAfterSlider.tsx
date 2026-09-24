@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface BeforeAfterSliderProps {
   beforeSrc: string;
@@ -14,9 +15,12 @@ export function BeforeAfterSlider({
   afterSrc,
   width,
   height,
-  beforeLabel = "Before",
-  afterLabel = "After",
+  beforeLabel,
+  afterLabel,
 }: BeforeAfterSliderProps) {
+  const { t } = useTranslation();
+  const resolvedBeforeLabel = beforeLabel ?? t("beforeAfterSlider.before");
+  const resolvedAfterLabel = afterLabel ?? t("beforeAfterSlider.after");
   const [pos, setPos] = useState(50);
   const frameRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -62,17 +66,17 @@ export function BeforeAfterSlider({
       onPointerCancel={handlePointerUp}
     >
       <div className="compare-layer compare-after">
-        <img src={afterSrc} alt={afterLabel} draggable={false} />
+        <img src={afterSrc} alt={resolvedAfterLabel} draggable={false} />
       </div>
       <div className="compare-layer compare-before" style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}>
-        <img src={beforeSrc} alt={beforeLabel} draggable={false} />
+        <img src={beforeSrc} alt={resolvedBeforeLabel} draggable={false} />
       </div>
 
       <span className="compare-tag compare-tag-before" style={{ opacity: pos > 8 ? 1 : 0 }}>
-        {beforeLabel}
+        {resolvedBeforeLabel}
       </span>
       <span className="compare-tag compare-tag-after" style={{ opacity: pos < 92 ? 1 : 0 }}>
-        {afterLabel}
+        {resolvedAfterLabel}
       </span>
 
       <div className="compare-divider" style={{ left: `${pos}%` }}>
@@ -80,7 +84,7 @@ export function BeforeAfterSlider({
           className="compare-handle"
           role="slider"
           tabIndex={0}
-          aria-label="Comparison position"
+          aria-label={t("beforeAfterSlider.comparisonPosition")}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(pos)}

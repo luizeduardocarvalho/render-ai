@@ -46,6 +46,12 @@
   color: var(--border-strong);
 }
 
+.app-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .app-layout {
   flex: 1;
   display: grid;
@@ -240,6 +246,11 @@
 .segmented-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.lang-switcher .segmented-btn {
+  height: 28px;
+  padding: 0 var(--space-3);
 }
 
 /* ---------------------------------------------------------------------- */

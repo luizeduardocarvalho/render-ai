@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ApiError } from "../api";
 import { useSignedImageUrl } from "../hooks/useSignedImageUrl";
 import { useProject } from "../state/ProjectContext";
@@ -9,6 +10,7 @@ interface AssetCardProps {
 }
 
 export function AssetCard({ asset }: AssetCardProps) {
+  const { t } = useTranslation();
   const { updateAsset, deleteAsset, uploadAssetReference } = useProject();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(asset.name);
@@ -29,14 +31,14 @@ export function AssetCard({ asset }: AssetCardProps) {
       await updateAsset(asset.id, { name: name.trim(), description, color });
       setEditing(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to update asset");
+      setError(err instanceof ApiError ? err.message : t("assetCard.errors.update"));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete() {
-    if (!window.confirm(`Delete asset "${asset.name}"? Masks assigned to it will become unassigned.`)) {
+    if (!window.confirm(t("assetCard.deleteConfirm", { name: asset.name }))) {
       return;
     }
     setDeleting(true);
@@ -44,7 +46,7 @@ export function AssetCard({ asset }: AssetCardProps) {
     try {
       await deleteAsset(asset.id);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to delete asset");
+      setError(err instanceof ApiError ? err.message : t("assetCard.errors.delete"));
       setDeleting(false);
     }
   }
@@ -57,7 +59,7 @@ export function AssetCard({ asset }: AssetCardProps) {
     try {
       await uploadAssetReference(asset.id, file);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to upload reference photo");
+      setError(err instanceof ApiError ? err.message : t("assetCard.errors.upload"));
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -68,7 +70,12 @@ export function AssetCard({ asset }: AssetCardProps) {
     return (
       <li className="asset-card asset-card-editing">
         <div className="field">
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t("assetCard.namePlaceholder")}
+          />
         </div>
         <div className="field">
           <textarea
@@ -76,12 +83,12 @@ export function AssetCard({ asset }: AssetCardProps) {
             rows={2}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Description, e.g. dark green velvet three-seat sofa"
+            placeholder={t("assetCard.descriptionPlaceholder")}
           />
         </div>
         <div className="field asset-color-field">
           <label className="field-label" htmlFor={`color-${asset.id}`}>
-            Color
+            {t("assetCard.colorLabel")}
           </label>
           <input
             id={`color-${asset.id}`}
@@ -95,11 +102,11 @@ export function AssetCard({ asset }: AssetCardProps) {
         {error && <div className="error-banner">{error}</div>}
         <div className="asset-card-actions">
           <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)} disabled={saving}>
-            Cancel
+            {t("assetCard.cancel")}
           </button>
           <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving || !name.trim()}>
             {saving ? <span className="spinner" /> : null}
-            Save
+            {t("assetCard.save")}
           </button>
         </div>
       </li>
@@ -112,13 +119,13 @@ export function AssetCard({ asset }: AssetCardProps) {
         {asset.hasReferenceImage && referenceUrl ? (
           <img src={referenceUrl} alt={asset.name} />
         ) : (
-          <span className="asset-card-thumb-empty">No photo</span>
+          <span className="asset-card-thumb-empty">{t("assetCard.noPhoto")}</span>
         )}
         <span className="mask-swatch asset-card-swatch" style={{ backgroundColor: asset.color }} />
       </div>
       <div className="asset-card-body">
         <div className="asset-card-name">{asset.name}</div>
-        <div className="asset-card-desc">{asset.description || "No description"}</div>
+        <div className="asset-card-desc">{asset.description || t("assetCard.noDescription")}</div>
         {error && <div className="error-banner asset-card-error">{error}</div>}
         <div className="asset-card-actions">
           <button
@@ -128,7 +135,7 @@ export function AssetCard({ asset }: AssetCardProps) {
             disabled={uploading}
           >
             {uploading ? <span className="spinner" /> : null}
-            {asset.hasReferenceImage ? "Replace photo" : "Add photo"}
+            {asset.hasReferenceImage ? t("assetCard.replacePhoto") : t("assetCard.addPhoto")}
           </button>
           <input
             ref={fileInputRef}
@@ -138,10 +145,10 @@ export function AssetCard({ asset }: AssetCardProps) {
             onChange={handleFileChange}
           />
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>
-            Edit
+            {t("assetCard.edit")}
           </button>
           <button type="button" className="btn btn-danger btn-sm" onClick={handleDelete} disabled={deleting}>
-            {deleting ? <span className="spinner" /> : "Delete"}
+            {deleting ? <span className="spinner" /> : t("assetCard.delete")}
           </button>
         </div>
       </div>

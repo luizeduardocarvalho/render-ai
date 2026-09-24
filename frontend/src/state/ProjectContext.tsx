@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 import * as api from "../api";
 import type {
   Asset,
@@ -76,6 +77,7 @@ function replaceView(project: Project, vid: string, updater: (v: View) => View):
 }
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   const [project, setProject] = useState<Project | null>(null);
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
 
@@ -94,11 +96,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     try {
       setProjects(await api.listProjects());
     } catch (err) {
-      setProjectsError(err instanceof Error ? err.message : "Failed to load projects");
+      setProjectsError(err instanceof Error ? err.message : t("picker.errors.loadFailed"));
     } finally {
       setProjectsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // Load the project list once on mount.
   useEffect(() => {

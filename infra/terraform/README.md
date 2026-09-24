@@ -91,7 +91,9 @@ under Terraform without recreating anything:
 7. Set the GitHub Actions repo variables the backup-check workflow needs
    (from `terraform output`) - see
    [`../../.github/workflows/backup-check.yml`](../../.github/workflows/backup-check.yml)
-   and its section below.
+   and its section below. Run the workflow once by hand (Actions -> Backup
+   check -> Run workflow); when it passes, uncomment its `schedule:` block so
+   it runs daily.
 
 ## Recreating in a new GCP project
 

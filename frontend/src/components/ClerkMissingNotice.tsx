@@ -1,7 +1,10 @@
+import { useTranslation } from "react-i18next";
+
 export function ClerkMissingNotice() {
+  const { t } = useTranslation();
   return (
     <div className="clerk-missing-screen">
-      <p>Clerk is not configured - set VITE_CLERK_PUBLISHABLE_KEY</p>
+      <p>{t("auth.clerkMissing")}</p>
     </div>
   );
 }

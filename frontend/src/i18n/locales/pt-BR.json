@@ -1,0 +1,301 @@
+{
+  "app": {
+    "brand": "render-ai",
+    "switchProject": "Trocar projeto",
+    "noViewSelected": {
+      "title": "Nenhuma vista selecionada",
+      "body": "Envie uma captura de tela do SketchUp para criar sua primeira vista."
+    }
+  },
+  "common": {
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "saved": "Salvo",
+    "create": "Criar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "retry": "Tentar novamente",
+    "dismiss": "Dispensar",
+    "unassigned": "Não atribuído",
+    "none": "Nenhum",
+    "yes": "Sim",
+    "no": "Não",
+    "notAvailable": "n/d"
+  },
+  "languageSwitcher": {
+    "pt": "PT",
+    "en": "EN",
+    "label": "Idioma"
+  },
+  "auth": {
+    "clerkMissing": "O Clerk não está configurado - defina VITE_CLERK_PUBLISHABLE_KEY",
+    "notAuthorized": {
+      "heading": "Acesso ainda não aprovado",
+      "body": "Esta conta ainda não está autorizada a usar o render-ai. Peça à equipe para liberar seu acesso e entre novamente.",
+      "signedInAs": "Conectado como"
+    }
+  },
+  "picker": {
+    "heading": "Seus projetos",
+    "subtitle": "Continue de onde parou ou comece algo novo.",
+    "newProject": "+ Novo projeto",
+    "nameLabel": "Nome do projeto",
+    "namePlaceholder": "ex.: Reforma à beira do lago",
+    "cancel": "Cancelar",
+    "createProject": "Criar projeto",
+    "loading": "Carregando projetos...",
+    "retry": "Tentar novamente",
+    "thumbEmpty": "Ainda sem vistas",
+    "deleteTitle": "Excluir projeto",
+    "delete": {
+      "confirm": "Excluir o projeto \"{{name}}\"? O suporte pode recuperá-lo por 30 dias, depois disso ele será perdido definitivamente."
+    },
+    "card": {
+      "views_one": "{{count}} vista",
+      "views_other": "{{count}} vistas",
+      "renders_one": "{{count}} renderização",
+      "renders_other": "{{count}} renderizações",
+      "updated": "Atualizado {{time}}"
+    },
+    "time": {
+      "justNow": "agora mesmo",
+      "minutesAgo_one": "há {{count}}min",
+      "minutesAgo_other": "há {{count}}min",
+      "hoursAgo_one": "há {{count}}h",
+      "hoursAgo_other": "há {{count}}h",
+      "daysAgo_one": "há {{count}}d",
+      "daysAgo_other": "há {{count}}d"
+    },
+    "errors": {
+      "createFailed": "Não foi possível criar o projeto",
+      "openFailed": "Não foi possível abrir o projeto",
+      "deleteFailed": "Não foi possível excluir o projeto",
+      "loadFailed": "Não foi possível carregar os projetos"
+    }
+  },
+  "style": {
+    "title": "Estilo",
+    "subtitle": "Aplicado a todas as renderizações deste projeto",
+    "saved": "Salvo",
+    "scene": {
+      "label": "Cena",
+      "interior": "Interna",
+      "exterior": "Externa"
+    },
+    "lighting": {
+      "label": "Predefinição de iluminação"
+    },
+    "lightingPresets": {
+      "morning_sun": "Sol da manhã",
+      "overcast": "Nublado",
+      "golden_hour": "Hora dourada",
+      "evening_interior_lights": "Luzes internas noturnas",
+      "night_exterior": "Externa noturna"
+    },
+    "lightDirection": {
+      "label": "Direção da luz",
+      "placeholder": "ex.: sol baixo vindo do oeste"
+    },
+    "interiorLights": {
+      "label": "Luzes artificiais",
+      "notSet": "Não definido - o modelo decide se as luzes ficam acesas",
+      "options": {
+        "off": { "label": "Desligadas", "hint": "Todas as luzes artificiais desligadas" },
+        "3000k": { "label": "3000K", "hint": "Luzes acesas, branco quente" },
+        "4000k": { "label": "4000K", "hint": "Luzes acesas, branco neutro" },
+        "6000k": { "label": "6000K", "hint": "Luzes acesas, branco frio (luz do dia)" }
+      }
+    },
+    "materialNotes": {
+      "label": "Notas de materiais",
+      "placeholder": "ex.: piso de carvalho branco, metais pretos foscos"
+    },
+    "extraInstructions": {
+      "label": "Instruções extras",
+      "placeholder": "Qualquer outra coisa que o modelo deva saber"
+    },
+    "save": "Salvar estilo",
+    "error": "Não foi possível salvar o estilo"
+  },
+  "assetLibrary": {
+    "title": "Biblioteca de itens",
+    "subtitle": "Reutilizados entre vistas",
+    "addAsset": "+ Adicionar item",
+    "namePlaceholder": "Nome, ex.: Sofá",
+    "descriptionPlaceholder": "Descrição, ex.: sofá de veludo verde-escuro de três lugares",
+    "colorLabel": "Cor",
+    "cancel": "Cancelar",
+    "create": "Criar",
+    "empty": {
+      "title": "Ainda sem itens",
+      "body": "Adicione móveis ou objetos fixos para posicioná-los em suas vistas."
+    },
+    "error": "Não foi possível criar o item"
+  },
+  "assetCard": {
+    "namePlaceholder": "Nome",
+    "descriptionPlaceholder": "Descrição, ex.: sofá de veludo verde-escuro de três lugares",
+    "colorLabel": "Cor",
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "noDescription": "Sem descrição",
+    "noPhoto": "Sem foto",
+    "replacePhoto": "Substituir foto",
+    "addPhoto": "Adicionar foto",
+    "edit": "Editar",
+    "delete": "Excluir",
+    "deleteConfirm": "Excluir o item \"{{name}}\"? As máscaras atribuídas a ele ficarão sem atribuição.",
+    "errors": {
+      "update": "Não foi possível atualizar o item",
+      "delete": "Não foi possível excluir o item",
+      "upload": "Não foi possível enviar a foto de referência"
+    }
+  },
+  "inventory": {
+    "title": "Inventário de objetos",
+    "subtitle": "Usado para verificar o que a renderização preserva",
+    "generate": "Gerar a partir da captura de tela",
+    "placeholder": "Ainda sem inventário. Gere um a partir da captura de tela ou escreva o seu.",
+    "save": "Salvar inventário",
+    "saved": "Salvo",
+    "errors": {
+      "generate": "Não foi possível gerar o inventário",
+      "save": "Não foi possível salvar o inventário"
+    }
+  },
+  "renderControls": {
+    "title": "Renderizar",
+    "subtitle_one": "{{count}} região será enviada ao modelo",
+    "subtitle_other": "{{count}} regiões serão enviadas ao modelo",
+    "model": {
+      "label": "Modelo",
+      "pro": "Pro",
+      "flash": "Flash"
+    },
+    "resolution": {
+      "label": "Resolução",
+      "flashOnly": "O Flash só é compatível com resolução 1K.",
+      "flashOnlyTitle": "O Flash só é compatível com 1K"
+    },
+    "preservationCheck": "Verificação de preservação (compara as regiões não mascaradas com a original)",
+    "variations": "Gerar 2 variações (amostras independentes, ambas mantidas para comparação)",
+    "renderButton_one": "Gerar renderização",
+    "renderButton_other": "Gerar renderização ({{count}} variações)",
+    "rendering": "Renderizando... isso pode levar até um minuto",
+    "costPreview_one": "≈ {{cost}}",
+    "costPreview_other": "≈ {{cost}} para {{count}} variações",
+    "error": "Falha na renderização. Tente novamente."
+  },
+  "renderHistory": {
+    "title": "Histórico de renderizações",
+    "subtitle_one": "{{count}} renderização nesta vista",
+    "subtitle_other": "{{count}} renderizações nesta vista",
+    "empty": {
+      "title": "Ainda sem renderizações",
+      "body": "Gere uma renderização acima para vê-la aqui."
+    },
+    "columns": {
+      "created": "Criada em",
+      "model": "Modelo",
+      "resolution": "Res.",
+      "regions": "Regiões",
+      "anchor": "Âncora",
+      "imageCall": "Chamada de imagem",
+      "total": "Total",
+      "cost": "Custo"
+    },
+    "anchorBadge": "Âncora",
+    "notAvailable": "n/d"
+  },
+  "resultView": {
+    "title": "Resultado",
+    "clearAnchor": "Remover âncora",
+    "setAsAnchor": "Definir como âncora de estilo",
+    "anchorBadge": "Âncora de estilo",
+    "downloadPng": "Baixar PNG",
+    "loadingImage": "Carregando imagem...",
+    "errors": {
+      "anchor": "Não foi possível atualizar a âncora de estilo",
+      "download": "Não foi possível baixar a imagem"
+    }
+  },
+  "metricsPanel": {
+    "model": "Modelo",
+    "resolution": "Resolução",
+    "regions": "Regiões",
+    "anchorUsed": "Âncora usada",
+    "seed": "Semente",
+    "seedValue": "n/d (não suportado)",
+    "imageCallLatency": "Latência da chamada de imagem",
+    "totalLatency": "Latência total",
+    "promptTokens": "Tokens de entrada",
+    "outputTokens": "Tokens de saída",
+    "estimatedCost": "Custo estimado",
+    "notAvailable": "n/d",
+    "preservationCheck": "Verificação de preservação",
+    "edgeScore": "Pontuação de bordas {{score}}",
+    "belowThreshold": " - abaixo do limite",
+    "removed": "Removidos",
+    "added": "Adicionados",
+    "moved": "Movidos",
+    "none": "Nenhum",
+    "rawNotes": "Notas brutas do modelo"
+  },
+  "beforeAfterSlider": {
+    "before": "Antes",
+    "after": "Depois",
+    "comparisonPosition": "Posição de comparação"
+  },
+  "viewsBar": {
+    "addView": "+ Adicionar vista",
+    "namePlaceholder": "Nome da vista",
+    "cancel": "Cancelar",
+    "upload": "Enviar",
+    "deleteTitle": "Excluir vista",
+    "deleteConfirm": "Excluir a vista \"{{name}}\"? Todas as máscaras e renderizações dela serão perdidas.",
+    "meta_one": "{{width}}x{{height}} - {{count}} renderização",
+    "meta_other": "{{width}}x{{height}} - {{count}} renderizações",
+    "error": "Não foi possível enviar a vista",
+    "deleteError": "Não foi possível excluir a vista"
+  },
+  "maskEditor": {
+    "title": "Editor de máscaras",
+    "subtitle": "{{width}} x {{height}}px de resolução original",
+    "loadingScreenshot": "Carregando captura de tela...",
+    "loadError": "Não foi possível carregar a imagem da captura de tela.",
+    "selectHint": "Selecione uma máscara à direita para começar a pintar.",
+    "addHint": "Adicione uma máscara para começar a pintar uma região.",
+    "errors": {
+      "bitmapLoad": "Não foi possível carregar o bitmap de uma máscara do servidor.",
+      "saveMask": "Não foi possível salvar a máscara",
+      "addMask": "Não foi possível adicionar a máscara",
+      "updateMask": "Não foi possível atualizar a máscara",
+      "assignAsset": "Não foi possível atribuir o item",
+      "deleteMask": "Não foi possível excluir a máscara"
+    },
+    "deleteConfirm": "Excluir esta máscara? Essa ação não pode ser desfeita."
+  },
+  "maskToolbar": {
+    "brush": "Pincel",
+    "eraser": "Borracha",
+    "size": "Tamanho",
+    "zoom": "Zoom",
+    "fit": "Ajustar",
+    "saving_one": "Salvando {{count}} máscara",
+    "saving_other": "Salvando {{count}} máscaras",
+    "addMask": "Adicionar máscara"
+  },
+  "masksList": {
+    "empty": {
+      "title": "Ainda sem máscaras",
+      "body": "Adicione uma máscara e depois pinte a região que ela cobre."
+    },
+    "maskLabel": "Máscara {{index}}",
+    "unassigned": "Não atribuído",
+    "saving": " - salvando...",
+    "saveFailed": " - falha ao salvar",
+    "show": "Mostrar",
+    "hide": "Ocultar",
+    "deleteMask": "Excluir máscara"
+  }
+}

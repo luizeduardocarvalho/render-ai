@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { Asset, Mask } from "../../types";
 import { getMaskColor } from "./maskCanvas";
 
@@ -24,11 +25,12 @@ export function MasksList({
   onAssignAsset,
   saveStatus,
 }: MasksListProps) {
+  const { t } = useTranslation();
   if (masks.length === 0) {
     return (
       <div className="empty-state masks-empty">
-        <strong>No masks yet</strong>
-        <span>Add a mask, then paint the region it covers.</span>
+        <strong>{t("masksList.empty.title")}</strong>
+        <span>{t("masksList.empty.body")}</span>
       </div>
     );
   }
@@ -62,11 +64,11 @@ export function MasksList({
                 style={{ backgroundColor: color, opacity: mask.hidden ? 0.35 : 1 }}
               />
               <span className="mask-row-text">
-                <span className="mask-row-title">Mask {i + 1}</span>
+                <span className="mask-row-title">{t("masksList.maskLabel", { index: i + 1 })}</span>
                 <span className="mask-row-subtitle">
-                  {asset ? asset.name : "Unassigned"}
-                  {status === "saving" && " - saving..."}
-                  {status === "error" && " - save failed"}
+                  {asset ? asset.name : t("masksList.unassigned")}
+                  {status === "saving" && t("masksList.saving")}
+                  {status === "error" && t("masksList.saveFailed")}
                 </span>
               </span>
 
@@ -76,7 +78,7 @@ export function MasksList({
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => onAssignAsset(mask, e.target.value || null)}
               >
-                <option value="">Unassigned</option>
+                <option value="">{t("masksList.unassigned")}</option>
                 {assets.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
@@ -88,7 +90,7 @@ export function MasksList({
                 <button
                   type="button"
                   className="btn btn-ghost btn-icon btn-sm"
-                  title={mask.hidden ? "Show" : "Hide"}
+                  title={mask.hidden ? t("masksList.show") : t("masksList.hide")}
                   onClick={(e) => {
                     e.stopPropagation();
                     onToggleHidden(mask);
@@ -99,7 +101,7 @@ export function MasksList({
                 <button
                   type="button"
                   className="btn btn-danger btn-icon btn-sm"
-                  title="Delete mask"
+                  title={t("masksList.deleteMask")}
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete(mask);

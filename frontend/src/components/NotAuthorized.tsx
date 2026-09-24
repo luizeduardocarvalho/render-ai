@@ -1,4 +1,5 @@
 import { UserButton, useUser } from "@clerk/clerk-react";
+import { useTranslation } from "react-i18next";
 import { AuthLayout } from "./AuthLayout";
 
 /**
@@ -7,20 +8,18 @@ import { AuthLayout } from "./AuthLayout";
  * real app, with a way to see which account they're signed in as and sign out.
  */
 export function NotAuthorized() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const email = user?.primaryEmailAddress?.emailAddress;
 
   return (
     <AuthLayout>
       <div className="panel not-authorized-card">
-        <h1 className="not-authorized-heading">Access not approved yet</h1>
-        <p className="field-hint">
-          This account isn't authorized for render-ai yet. Ask the team to grant you access,
-          then sign in again.
-        </p>
+        <h1 className="not-authorized-heading">{t("auth.notAuthorized.heading")}</h1>
+        <p className="field-hint">{t("auth.notAuthorized.body")}</p>
         {email && (
           <p className="not-authorized-email">
-            Signed in as <strong>{email}</strong>
+            {t("auth.notAuthorized.signedInAs")} <strong>{email}</strong>
           </p>
         )}
         <div className="not-authorized-actions">
