@@ -95,7 +95,9 @@ func (s *Server) requireAuth(fn func(w http.ResponseWriter, r *http.Request) err
 
 // requireOwner gates a project-scoped handler on the verified caller owning
 // the project named by the {pid} path value. It must be composed inside
-// requireAdmin, which puts the verified user id in the request context.
+// requireAuth, which puts the verified user id in the request context - any
+// signed-in user may reach it, not just admins (see Router's doc comment:
+// only /api/admin/* stays admin-gated).
 //
 // A non-owner (or a missing project) gets a 404, never a 403 - so a user
 // cannot probe which project ids exist by owner. When CLERK_SECRET_KEY is

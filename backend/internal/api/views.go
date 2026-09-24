@@ -102,6 +102,24 @@ func (s *Server) putInventory(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) generateInventory(w http.ResponseWriter, r *http.Request) error {
 	pid, vid := r.PathValue("pid"), r.PathValue("vid")
 
+	// Not charged (it's a cheap text-model call), but still gated on having
+	// some balance left - see API_CONTRACT.md's credits section. Skipped
+	// entirely when auth is disabled, like every credit check in this
+	// package.
+	if s.cfg.Auth.ClerkSecretKey != "" {
+		ownerID, err := s.repo.ProjectOwner(pid)
+		if err != nil {
+			return mapStoreErr(err, "project %s not found", pid)
+		}
+		units, err := s.repo.GetCredits(ownerID)
+		if err != nil {
+			return internalErr("checking credits: %v", err)
+		}
+		if units <= 0 {
+			return insufficientCreditsErr()
+		}
+	}
+
 	v, err := s.repo.GetView(pid, vid)
 	if err != nil {
 		return mapStoreErr(err, "view %s not found", vid)

@@ -19,7 +19,10 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) error {
 		return badRequest("name is required")
 	}
 	ownerID, _ := userIDFromContext(r.Context())
-	p := s.repo.CreateProject(ownerID, req.Name)
+	p, err := s.withLibraryAssets(s.repo.CreateProject(ownerID, req.Name), nil)
+	if err != nil {
+		return err
+	}
 	writeJSON(w, http.StatusOK, p)
 	return nil
 }
@@ -38,7 +41,7 @@ func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Server) getProject(w http.ResponseWriter, r *http.Request) error {
 	pid := r.PathValue("pid")
-	p, err := s.repo.GetProject(pid)
+	p, err := s.withLibraryAssets(s.repo.GetProject(pid))
 	if err != nil {
 		return mapStoreErr(err, "project %s not found", pid)
 	}
@@ -68,7 +71,7 @@ func (s *Server) updateStyle(w http.ResponseWriter, r *http.Request) error {
 	if !style.InteriorLights.Valid() {
 		return badRequest("interiorLights must be one of off, 3000k, 4000k, 6000k")
 	}
-	p, err := s.repo.UpdateStyle(pid, style)
+	p, err := s.withLibraryAssets(s.repo.UpdateStyle(pid, style))
 	if err != nil {
 		return mapStoreErr(err, "project %s not found", pid)
 	}
@@ -86,7 +89,7 @@ func (s *Server) setAnchor(w http.ResponseWriter, r *http.Request) error {
 	if err := readJSON(r, &req); err != nil {
 		return err
 	}
-	p, err := s.repo.SetAnchor(pid, req.RenderID)
+	p, err := s.withLibraryAssets(s.repo.SetAnchor(pid, req.RenderID))
 	if err != nil {
 		return mapStoreErr(err, "project or render not found")
 	}

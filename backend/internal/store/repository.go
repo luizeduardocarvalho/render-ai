@@ -10,6 +10,11 @@ import (
 // owner and the caller must not learn it exists).
 var ErrNotFound = errors.New("not found")
 
+// ErrInsufficientCredits is returned by AdjustCredits when applying deltaUnits
+// would take a user's balance below zero. The write is not applied - the
+// balance and ledger are left exactly as they were.
+var ErrInsufficientCredits = errors.New("insufficient credits")
+
 // Blob is a stored image (screenshot, reference photo, mask bitmap, or render
 // result) with its content type.
 type Blob struct {
@@ -57,12 +62,50 @@ type Repository interface {
 	// ErrNotFound). Returns ErrNotFound if the project doesn't exist or is
 	// already deleted.
 	DeleteProject(pid string) error
+	// ClearProjectAssets empties a project's legacy embedded Assets slice.
+	// Used exactly once per project by the asset-library migration (see the
+	// API layer's withLibraryAssets), after those assets have been imported
+	// into the owner's library under the same ids via ImportAssets - so a
+	// project only ever needs migrating the first time it's loaded after the
+	// library shipped.
+	ClearProjectAssets(pid string) error
 
-	// Assets.
-	CreateAsset(pid, name, description, color string) (*Asset, error)
-	UpdateAsset(pid, aid, name, description, color string) (*Asset, error)
-	DeleteAsset(pid, aid string) error
-	SetAssetReference(pid, aid, imageID string) (*Asset, error)
+	// Asset library: a user-wide library of assets shared by all of that
+	// user's projects (see API_CONTRACT.md's asset library section), keyed
+	// by ownerID (a Clerk user id, or "" when auth is disabled - see
+	// internal/api/auth.go). The project-scoped asset routes are back-compat
+	// wrappers that resolve {pid} to its owner and call these directly (see
+	// internal/api/assets.go).
+	ListAssets(ownerID string) ([]*Asset, error)
+	GetAsset(ownerID, aid string) (*Asset, error)
+	CreateAsset(ownerID, name, description, color string) (*Asset, error)
+	UpdateAsset(ownerID, aid, name, description, color string) (*Asset, error)
+	DeleteAsset(ownerID, aid string) error
+	SetAssetReference(ownerID, aid, imageID string) (*Asset, error)
+	// ImportAssets upserts-by-id into ownerID's library: an asset whose id is
+	// already present is left untouched (so migrating the same legacy
+	// project twice, or migrating two projects that happen to share stale
+	// data, is idempotent and never clobbers a library edit made since the
+	// first migration). Used only by the migration in withLibraryAssets.
+	ImportAssets(ownerID string, assets []*Asset) error
+
+	// Credits. Balances and ledger deltas are stored as integer "units" -
+	// see internal/api/credits.go for the unit<->credit conversion the API
+	// layer applies before this ever reaches JSON.
+	//
+	// GetCredits returns 0, nil for a user with no account yet (never
+	// ErrNotFound) - every user implicitly starts at a zero balance.
+	GetCredits(userID string) (int64, error)
+	// AdjustCredits atomically applies deltaUnits to userID's balance and
+	// appends entry (Reason set by the caller; ID/CreatedAt/DeltaUnits/
+	// BalanceAfterUnits are filled in here) to their ledger. If the result
+	// would be negative, nothing is written and it returns
+	// ErrInsufficientCredits. Safe for concurrent callers - two renders that
+	// would jointly overdraw the balance can never both succeed.
+	AdjustCredits(userID string, deltaUnits int64, entry CreditLedgerEntry) (balanceUnits int64, err error)
+	// ListCreditLedger returns up to limit entries (limit <= 0 means no
+	// limit), newest first.
+	ListCreditLedger(userID string, limit int) ([]CreditLedgerEntry, error)
 
 	// Views. DeleteView returns the blob IDs orphaned by the deletion
 	// (screenshot, mask bitmaps, render results) so the caller can remove them

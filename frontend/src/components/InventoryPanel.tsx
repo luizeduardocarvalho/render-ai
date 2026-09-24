@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ApiError } from "../api";
+import { ApiError, INSUFFICIENT_CREDITS_CODE } from "../api";
 import { useProject } from "../state/ProjectContext";
 import type { View } from "../types";
 
 export function InventoryPanel({ view }: { view: View }) {
   const { t } = useTranslation();
-  const { updateInventory, generateInventory } = useProject();
+  const { updateInventory, generateInventory, refreshMe } = useProject();
   const [text, setText] = useState(view.inventory);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -30,7 +30,12 @@ export function InventoryPanel({ view }: { view: View }) {
       const inventory = await generateInventory(view.id);
       setText(inventory);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("inventory.errors.generate"));
+      if (err instanceof ApiError && err.code === INSUFFICIENT_CREDITS_CODE) {
+        setError(t("inventory.errors.insufficientCredits"));
+        void refreshMe();
+      } else {
+        setError(err instanceof ApiError ? err.message : t("inventory.errors.generate"));
+      }
     } finally {
       setGenerating(false);
     }

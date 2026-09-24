@@ -11,6 +11,14 @@ frontend holds a working copy of the open project and syncs via these endpoints.
 
 Base URL: `http://localhost:8080`. All JSON unless noted. CORS is open to `http://localhost:5173`.
 
+**Auth.** Every data route requires a verified Clerk session (`requireAuth`)
+plus, for anything under `{pid}`, that the caller owns that project
+(`requireOwner`) - the app is open to any signed-in user, not just admins.
+Only `/api/admin/*` stays gated on the Clerk `publicMetadata.role` being
+exactly `"admin"` (`requireAdmin`): listing every user and granting credits.
+When `CLERK_SECRET_KEY` is unset (local dev), all of this is skipped and
+every request is treated as user `""`.
+
 ## Data model (shared shapes)
 
 ```ts
@@ -31,6 +39,7 @@ interface Asset {
   color: string;           // unique display color, hex "#RRGGBB"
   referenceImageId: string;// -> image blob endpoint
   hasReferenceImage: boolean;
+  createdAt: string;        // ISO
 }
 
 interface Mask {
@@ -119,7 +128,9 @@ interface Project {
                            // A caller never actually observes this: every route treats a
                            // deleted project as 404, so it is omitted from all live responses.
   style: StyleSettings;
-  assets: Asset[];
+  assets: Asset[];         // the OWNER's asset library (see "Asset library" below), not
+                           // project-specific data - every one of that user's projects
+                           // reports the same list here.
   views: View[];
   styleAnchorRenderId: string | null; // which render (in any view) is the anchor
 }
@@ -169,6 +180,35 @@ interface RenderJob {
   }[];
   renders: Render[];       // full Render objects for "done" variations, in variation order
   error?: string;          // set iff status == "failed": the first variation's error
+  creditsCharged: number;  // credits charged for the WHOLE job as originally charged
+                           // (unitsPerVariation * variations - see "Credits" below); not
+                           // net of any refunds, and 0 when auth is disabled.
+}
+
+// One entry in a user's credit ledger - see GET /api/me/credits below.
+interface CreditEntry {
+  id: string;
+  createdAt: string;       // ISO
+  delta: number;            // credits, signed (positive = grant/refund, negative = charge)
+  balanceAfter: number;     // credits, the balance right after this entry
+  reason: "grant" | "render" | "refund";
+  projectId?: string;
+  jobId?: string;
+  note?: string;
+  actorId?: string;         // set for "grant": the admin who granted it
+}
+
+// One row of GET /api/admin/users - see "Admin" below.
+interface AdminUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  imageUrl: string;
+  role: string;             // Clerk publicMetadata.role ("" if unset)
+  credits: number;
+  createdAt: string;        // ISO
+  lastSignInAt?: string;    // ISO
 }
 ```
 
@@ -230,11 +270,48 @@ Hosting (60s cutoff) or the API:
    blob; an `uploadId` can be used only once. Unused uploads are deleted
    after a day.
 
-### Assets
+### Asset library
+Assets belong to a USER, not a project: every one of a user's projects shares
+the same library, manageable from the project list screen (no project id
+needed) and still usable inside the editor. All routes below require only a
+signed-in user (`requireAuth`), scoped to the caller - there is no ownership
+check beyond "you are logged in as this user".
+
+- `GET    /api/assets` -> `Asset[]`, newest first
+- `POST   /api/assets` `{ name, description, color }` -> `Asset`
+- `PUT    /api/assets/{aid}` `{ name, description, color }` -> `Asset`
+- `DELETE /api/assets/{aid}` -> `204`. Does not scan the caller's projects to
+  clear the deleted id from masks: render already skips a mask whose
+  `assetId` no longer resolves to a library asset, and the frontend must
+  treat an unknown `assetId` as "unassigned".
+- `POST   /api/assets/{aid}/reference` multipart `file`, or JSON `{ uploadId }` -> `Asset`
+- `GET    /api/assets/{aid}/reference-url` -> `{ url }`, a signed URL for that
+  asset's reference image (404 if it has none) - for the library screen,
+  which has no project id to authenticate a project-scoped
+  `images/{id}/url` call through.
+- `POST   /api/uploads` `{ contentType }` -> same body/behavior as the
+  project-scoped direct-upload route below (`501` on the in-memory blob
+  store -> fall back to multipart).
+
+**Back-compat.** `GET /api/projects/{pid}` keeps returning `assets`, filled
+from the project OWNER's library (every project of that owner reports the
+same list). The project-scoped routes below keep working, operating on the
+owner's library (resolved from `{pid}` via the existing ownership check, so
+there is no separate per-project data any more):
 - `POST   /api/projects/{pid}/assets` `{ name, description, color }` -> `Asset`
 - `PUT    /api/projects/{pid}/assets/{aid}` `{ name, description, color }` -> `Asset`
 - `DELETE /api/projects/{pid}/assets/{aid}` -> `204`
 - `POST   /api/projects/{pid}/assets/{aid}/reference` multipart `file`, or JSON `{ uploadId }` -> `Asset`
+- `GET    /api/projects/{pid}/images/{id}/url` also keeps working for library
+  reference images (it only checks project ownership today, which is fine).
+
+**Migration.** Projects created before the library existed have assets
+embedded directly in the project doc, with masks pointing at those ids. The
+first time such a project is loaded (`GET /api/projects/{pid}` or any handler
+that reads the project), those assets are moved into the owner's library
+under the SAME ids (idempotently - an id already present in the library is
+left untouched) and then cleared from the project doc, so this only ever
+runs once per project and every existing mask binding keeps resolving.
 
 ### Views
 - `POST   /api/projects/{pid}/views` multipart `file` (+ form field `name`), or JSON `{ name, uploadId }` -> `View`
@@ -278,7 +355,12 @@ see `backend/DEPLOY.md`) does the actual Vertex AI call for each.
   -> **`202 Accepted`** with a `RenderJob` (its `variations` all start
   `"queued"`; `renders` is `[]`). If enqueueing a task fails, the job (and
   every not-yet-enqueued variation) is marked `"failed"` and the handler
-  returns `502 { "error": "queueing render: ..." }` instead.
+  returns `502 { "error": "queueing render: ..." }` instead - see "Credits"
+  below for what happens to the charge in that case.
+  Before creating the job, `unitsPerVariation * variations` credits are
+  debited from the project owner's balance atomically (see "Credits"); too
+  little balance -> **`402`** `{ "error": "insufficient credits", "code":
+  "insufficient_credits" }`, and nothing is created.
 
 - `GET    /api/projects/{pid}/render-jobs/{jid}` -> `200` with the current
   `RenderJob`, or `404` if it doesn't exist (or belongs to another project).
@@ -307,13 +389,67 @@ see `backend/DEPLOY.md`) does the actual Vertex AI call for each.
   tokens) at that model's own rates - see `ImageCallCost` in
   `backend/internal/render/pricing.go`. It does not reflect the actual tokens
   of any render that has run; `Render.metrics.estimatedCostUsd` is the real
-  figure for a given render.
+  figure for a given render. Each estimate also carries `credits`: the EXACT
+  credit cost of one variation at that model+resolution (see "Credits"
+  below) - unlike `costUsd`/`costBrl` this isn't an estimate, it's what
+  `POST .../render` actually charges.
+
+### Credits
+Credits gate rendering: everyone, including admins, pays credits for
+renders, from a per-user balance. 1 credit = one 2K Pro image (see
+`PRICING.md`): Pro 1K/2K = 1 credit/variation, Pro 4K = 2 credits/variation,
+Flash (1K) = 0.25 credit/variation. Balances are stored server-side as
+integer quarter-credit units, but the JSON API always speaks **credits as a
+number** (e.g. `12.25`).
+
+- `GET /api/me` -> `{ userId, role, isAdmin, credits: number }` (credits
+  added to the existing shape).
+- `GET /api/me/credits` -> `{ credits: number, ledger: CreditEntry[] }`,
+  ledger newest first, at most 50 entries.
+- Rendering debits credits atomically before a job is created (see the
+  Render section above for the 402 and the enqueue-failure/refund behavior).
+  `POST .../inventory/generate` requires a balance `> 0` (else the same 402)
+  but is not itself charged - it's a cheap text-model call.
+- **Refunds.** A render-job variation that ends up `"failed"` (a model
+  error, a storage error, or never getting queued because enqueueing itself
+  failed) is refunded its charged units exactly once - the job stores the
+  per-variation charge at creation time (so a later price-table change never
+  changes what a refund gives back) and a `Refunded` marker per variation
+  that's set inside the same job-update transaction that marks it failed, so
+  a redelivered worker task, or any other repeated failure observation, can
+  never refund the same variation twice. If job creation/enqueueing fails
+  outright (nothing was ever queued), the whole charge is refunded.
+- **Auth disabled** (`CLERK_SECRET_KEY` unset, local dev): all credit
+  checks/charges are skipped entirely, consistent with every other
+  auth-disabled bypass in this API. `GET /api/me` then reports the balance
+  of user `""` (normally 0). Frontend rule: the client-side "not enough
+  credits" disable is advisory, the server's 402 is the source of truth, and
+  when `userId === ""` the frontend skips the client-side check.
+
+### Admin
+Admin-only (`requireAdmin` - a signed-in user whose Clerk
+`publicMetadata.role` is exactly `"admin"`).
+
+- `GET  /api/admin/users?query=&limit=50&offset=0` -> `{ users: AdminUser[],
+  totalCount }`. Users come from the Clerk Backend API (search/paginated by
+  `query`/`limit`/`offset`), with `credits` merged in from the store.
+- `POST /api/admin/users/{uid}/credits` `{ amount: number, note?: string }`
+  -> `{ credits: number }`. `amount` is in credits: non-zero, a multiple of
+  0.25, `|amount| <= 10000`. Negative amounts are allowed (a correction) but
+  the balance may not go below zero - `400` if it would. Ledger reason
+  `"grant"`, `actorId` = the admin who made the call.
+- `GET  /api/admin/users/{uid}/credits` -> same shape as `GET
+  /api/me/credits`, for the named user.
 
 ### Images
 - `GET /api/images/{imageId}` -> raw bytes
 
 ## Error shape
-Non-2xx responses: `{ "error": "human readable message" }`.
+Non-2xx responses: `{ "error": "human readable message" }`. One error also
+carries a machine-readable `code`: a render (or inventory generation) that
+can't be paid for is `402 { "error": "insufficient credits", "code":
+"insufficient_credits" }` - the frontend should branch on `code`, not the
+message text.
 
 ## Notes for implementers
 - **Resolution guard**: `flash` + (`2K`|`4K`) is a 400 with a clear message; frontend also disables those.

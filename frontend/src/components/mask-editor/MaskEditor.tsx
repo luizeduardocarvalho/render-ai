@@ -21,6 +21,7 @@ import {
 import "./MaskEditor.css";
 import { MaskToolbar } from "./MaskToolbar";
 import { MasksList, type MaskSaveStatus } from "./MasksList";
+import { ConfirmDialog } from "../ConfirmDialog";
 
 export type Tool = "brush" | "eraser";
 
@@ -50,6 +51,7 @@ export function MaskEditor({ view }: { view: View }) {
   const [addingMask, setAddingMask] = useState(false);
   const [saveStatus, setSaveStatus] = useState<Record<string, MaskSaveStatus>>({});
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [pendingDeleteMask, setPendingDeleteMask] = useState<Mask | null>(null);
 
   // Ensure the selected mask stays valid as masks are added/removed.
   useEffect(() => {
@@ -262,13 +264,16 @@ export function MaskEditor({ view }: { view: View }) {
     }
   }
 
-  async function handleDeleteMask(mask: Mask) {
-    if (!window.confirm(t("maskEditor.deleteConfirm"))) return;
+  async function confirmDeleteMask() {
+    if (!pendingDeleteMask) return;
     try {
-      await deleteMask(view.id, mask.id);
-      canvasStore.current.delete(mask.id);
+      await deleteMask(view.id, pendingDeleteMask.id);
+      canvasStore.current.delete(pendingDeleteMask.id);
+      setPendingDeleteMask(null);
     } catch (err) {
-      setEditorError(err instanceof Error ? err.message : t("maskEditor.errors.deleteMask"));
+      const message = err instanceof Error ? err.message : t("maskEditor.errors.deleteMask");
+      setEditorError(message);
+      throw new Error(message);
     }
   }
 
@@ -394,12 +399,22 @@ export function MaskEditor({ view }: { view: View }) {
             selectedMaskId={selectedMaskId}
             onSelect={setSelectedMaskId}
             onToggleHidden={handleToggleHidden}
-            onDelete={handleDeleteMask}
+            onDelete={setPendingDeleteMask}
             onAssignAsset={handleAssignAsset}
             saveStatus={saveStatus}
           />
         </div>
       </div>
+
+      {pendingDeleteMask && (
+        <ConfirmDialog
+          title={t("masksList.deleteMask")}
+          body={t("maskEditor.deleteConfirm")}
+          confirmLabel={t("common.delete")}
+          onConfirm={confirmDeleteMask}
+          onCancel={() => setPendingDeleteMask(null)}
+        />
+      )}
     </section>
   );
 }

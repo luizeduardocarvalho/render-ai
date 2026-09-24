@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	renderpkg "render-ai/backend/internal/render"
+	"render-ai/backend/internal/store"
 )
 
 // assumedPromptTokens and assumedOutputTokens model a typical render request
@@ -23,6 +24,11 @@ type pricingEstimate struct {
 	Resolution string  `json:"resolution"`
 	CostUsd    float64 `json:"costUsd"`
 	CostBrl    float64 `json:"costBrl"`
+	// Credits is the credit cost of ONE variation at this model+resolution -
+	// see API_CONTRACT.md's credits section and credits.go's
+	// unitsPerVariation. Unlike CostUsd/CostBrl (an estimate from an assumed
+	// typical request), this is exact: what startRender actually charges.
+	Credits float64 `json:"credits"`
 }
 
 // pricingResponse is the body of GET /api/pricing.
@@ -62,6 +68,7 @@ func (s *Server) getPricing(w http.ResponseWriter, r *http.Request) error {
 				Resolution: resolution,
 				CostUsd:    cost,
 				CostBrl:    cost * table.UsdToBrl,
+				Credits:    unitsToCredits(unitsPerVariation(store.ModelChoice(model), store.Resolution(resolution))),
 			})
 		}
 	}

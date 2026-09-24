@@ -118,16 +118,17 @@ func (s *Server) requireAdmin(fn func(w http.ResponseWriter, r *http.Request) er
 
 // getMeResponse is the JSON body returned by GET /api/me.
 type getMeResponse struct {
-	UserID  string `json:"userId"`
-	Role    string `json:"role"`
-	IsAdmin bool   `json:"isAdmin"`
+	UserID  string  `json:"userId"`
+	Role    string  `json:"role"`
+	IsAdmin bool    `json:"isAdmin"`
+	Credits float64 `json:"credits"`
 }
 
-// getMe reports the caller's own Clerk user id and role, read server-side
-// exactly like requireAdmin does, so the frontend can learn whether it's
-// talking to an admin session without eating a 403 from an admin-gated
-// route. Unlike the data/render routes, this only requires a signed-in user
-// (see Router), not an admin one.
+// getMe reports the caller's own Clerk user id, role and credit balance,
+// so the frontend can learn whether it's talking to an admin session (for
+// the /admin link) without eating a 403 from an admin-gated route, and show
+// the credit chip. Unlike the render/admin routes, this only requires a
+// signed-in user (see Router), not an admin one - see requireAuth.
 func (s *Server) getMe(w http.ResponseWriter, r *http.Request) error {
 	userID, ok := userIDFromContext(r.Context())
 	if !ok {
@@ -135,8 +136,13 @@ func (s *Server) getMe(w http.ResponseWriter, r *http.Request) error {
 		// for local dev (see initAuth): requireAuth calls straight through
 		// without verifying a token, so there is no userID in context.
 		// Report as admin so the dev frontend behaves like a real admin
-		// session.
-		writeJSON(w, http.StatusOK, getMeResponse{UserID: "", Role: "admin", IsAdmin: true})
+		// session, and credits as the shared "" account's balance (normally
+		// 0 - see API_CONTRACT.md).
+		units, err := s.repo.GetCredits("")
+		if err != nil {
+			return internalErr("loading credits: %v", err)
+		}
+		writeJSON(w, http.StatusOK, getMeResponse{UserID: "", Role: "admin", IsAdmin: true, Credits: unitsToCredits(units)})
 		return nil
 	}
 
@@ -144,7 +150,73 @@ func (s *Server) getMe(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return internalErr("looking up role: %v", err)
 	}
+	units, err := s.repo.GetCredits(userID)
+	if err != nil {
+		return internalErr("loading credits: %v", err)
+	}
 
-	writeJSON(w, http.StatusOK, getMeResponse{UserID: userID, Role: role, IsAdmin: role == "admin"})
+	writeJSON(w, http.StatusOK, getMeResponse{UserID: userID, Role: role, IsAdmin: role == "admin", Credits: unitsToCredits(units)})
+	return nil
+}
+
+// ledgerPageSize bounds GET /api/me/credits and the admin equivalent to the
+// most recent 50 entries - see API_CONTRACT.md.
+const ledgerPageSize = 50
+
+// creditEntryResponse is one entry in the JSON body of GET /api/me/credits
+// (and its admin equivalent) - see API_CONTRACT.md's CreditEntry.
+type creditEntryResponse struct {
+	ID           string    `json:"id"`
+	CreatedAt    time.Time `json:"createdAt"`
+	Delta        float64   `json:"delta"`
+	BalanceAfter float64   `json:"balanceAfter"`
+	Reason       string    `json:"reason"`
+	ProjectID    *string   `json:"projectId,omitempty"`
+	JobID        *string   `json:"jobId,omitempty"`
+	Note         string    `json:"note,omitempty"`
+	ActorID      string    `json:"actorId,omitempty"`
+}
+
+// meCreditsResponse is the JSON body of GET /api/me/credits (and, for the
+// named user, the admin equivalent).
+type meCreditsResponse struct {
+	Credits float64               `json:"credits"`
+	Ledger  []creditEntryResponse `json:"ledger"`
+}
+
+// getMeCredits is GET /api/me/credits: the caller's own balance and recent
+// ledger.
+func (s *Server) getMeCredits(w http.ResponseWriter, r *http.Request) error {
+	userID, _ := userIDFromContext(r.Context())
+	return s.writeCreditsResponse(w, userID)
+}
+
+// writeCreditsResponse writes userID's balance and up-to-ledgerPageSize most
+// recent ledger entries, in the meCreditsResponse shape. Shared by
+// getMeCredits and the admin per-user credits endpoint (see admin.go).
+func (s *Server) writeCreditsResponse(w http.ResponseWriter, userID string) error {
+	units, err := s.repo.GetCredits(userID)
+	if err != nil {
+		return internalErr("loading credits: %v", err)
+	}
+	entries, err := s.repo.ListCreditLedger(userID, ledgerPageSize)
+	if err != nil {
+		return internalErr("loading credit ledger: %v", err)
+	}
+	ledger := make([]creditEntryResponse, len(entries))
+	for i, e := range entries {
+		ledger[i] = creditEntryResponse{
+			ID:           e.ID,
+			CreatedAt:    e.CreatedAt,
+			Delta:        unitsToCredits(e.DeltaUnits),
+			BalanceAfter: unitsToCredits(e.BalanceAfterUnits),
+			Reason:       e.Reason,
+			ProjectID:    e.ProjectID,
+			JobID:        e.JobID,
+			Note:         e.Note,
+			ActorID:      e.ActorID,
+		}
+	}
+	writeJSON(w, http.StatusOK, meCreditsResponse{Credits: unitsToCredits(units), Ledger: ledger})
 	return nil
 }

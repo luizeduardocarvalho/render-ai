@@ -4,6 +4,7 @@ import { ApiError } from "../api";
 import { useSignedImageUrl } from "../hooks/useSignedImageUrl";
 import { useProject } from "../state/ProjectContext";
 import type { View } from "../types";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 function ViewThumb({ view }: { view: View }) {
   const url = useSignedImageUrl(view.hasScreenshot ? view.screenshotImageId : null);
@@ -23,6 +24,7 @@ export function ViewsBar() {
   // (multipart fallback) or not uploading.
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<View | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
@@ -52,12 +54,13 @@ export function ViewsBar() {
     }
   }
 
-  async function handleDelete(vid: string, viewName: string) {
-    if (!window.confirm(t("viewsBar.deleteConfirm", { name: viewName }))) return;
+  async function confirmDelete() {
+    if (!pendingDelete) return;
     try {
-      await deleteView(vid);
+      await deleteView(pendingDelete.id);
+      setPendingDelete(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("viewsBar.deleteError"));
+      throw new Error(err instanceof ApiError ? err.message : t("viewsBar.deleteError"));
     }
   }
 
@@ -85,10 +88,10 @@ export function ViewsBar() {
               title={t("viewsBar.deleteTitle")}
               onClick={(e) => {
                 e.stopPropagation();
-                void handleDelete(v.id, v.name);
+                setPendingDelete(v);
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void handleDelete(v.id, v.name);
+                if (e.key === "Enter") setPendingDelete(v);
               }}
             >
               &times;
@@ -133,6 +136,16 @@ export function ViewsBar() {
       )}
 
       {error && <div className="error-banner views-bar-error">{error}</div>}
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title={t("viewsBar.deleteTitle")}
+          body={t("viewsBar.deleteConfirm", { name: pendingDelete.name })}
+          confirmLabel={t("common.delete")}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 }

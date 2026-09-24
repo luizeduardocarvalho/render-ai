@@ -20,7 +20,8 @@
     "none": "None",
     "yes": "Yes",
     "no": "No",
-    "notAvailable": "n/a"
+    "notAvailable": "n/a",
+    "close": "Close"
   },
   "languageSwitcher": {
     "pt": "PT",
@@ -30,9 +31,10 @@
   "auth": {
     "clerkMissing": "Clerk is not configured - set VITE_CLERK_PUBLISHABLE_KEY",
     "notAuthorized": {
-      "heading": "Access not approved yet",
-      "body": "This account isn't authorized for render-ai yet. Ask the team to grant you access, then sign in again.",
-      "signedInAs": "Signed in as"
+      "heading": "Admin access required",
+      "body": "This account doesn't have admin access. Ask an administrator to grant it, or go back to your projects.",
+      "signedInAs": "Signed in as",
+      "backToApp": "Back to projects"
     }
   },
   "picker": {
@@ -47,6 +49,10 @@
     "retry": "Retry",
     "thumbEmpty": "No views yet",
     "deleteTitle": "Delete project",
+    "tabs": {
+      "projects": "Projects",
+      "library": "Asset library"
+    },
     "delete": {
       "confirm": "Delete project \"{{name}}\"? Support can recover it for 30 days, then it's gone for good."
     },
@@ -160,7 +166,8 @@
     "saved": "Saved",
     "errors": {
       "generate": "Failed to generate inventory",
-      "save": "Failed to save inventory"
+      "save": "Failed to save inventory",
+      "insufficientCredits": "You don't have enough credits to generate an inventory. Ask an admin to top up your balance."
     }
   },
   "renderControls": {
@@ -183,9 +190,11 @@
     "renderButton_other": "Generate render ({{count}} variations)",
     "rendering": "Rendering... this can take up to a minute",
     "renderingProgress": "Rendering... {{done}} of {{count}} done",
-    "costPreview_one": "≈ {{cost}}",
-    "costPreview_other": "≈ {{cost}} for {{count}} variations",
-    "error": "Render failed. Please try again."
+    "costPreview_one": "≈ {{cost}} ({{credits}} credits)",
+    "costPreview_other": "≈ {{cost}} for {{count}} variations ({{credits}} credits)",
+    "error": "Render failed. Please try again.",
+    "insufficientCredits": "Not enough credits ({{available}} available, {{required}} required). Ask an admin to top up your balance.",
+    "insufficientCreditsError": "Render failed: insufficient credits. Ask an admin to top up your balance."
   },
   "renderHistory": {
     "title": "Render history",
@@ -299,5 +308,89 @@
     "show": "Show",
     "hide": "Hide",
     "deleteMask": "Delete mask"
+  },
+  "confirmDialog": {
+    "cancel": "Cancel",
+    "confirm": "Delete",
+    "error": "Something went wrong. Please try again."
+  },
+  "credits": {
+    "chip": {
+      "label": "credits"
+    },
+    "ledger": {
+      "title": "Credits",
+      "loading": "Loading...",
+      "error": "Failed to load credits",
+      "balance": "Balance: {{credits}} credits",
+      "empty": {
+        "title": "No activity yet",
+        "body": "Credits granted and spent will show up here."
+      },
+      "columns": {
+        "date": "Date",
+        "reason": "Reason",
+        "delta": "Change",
+        "balance": "Balance"
+      },
+      "reasons": {
+        "grant": "Grant",
+        "render": "Render",
+        "refund": "Refund"
+      }
+    }
+  },
+  "library": {
+    "subtitle": "Your reusable furniture and fixtures, shared across every project",
+    "loading": "Loading library...",
+    "empty": {
+      "body": "Add furniture or fixtures here to reuse them in any project."
+    },
+    "errors": {
+      "loadFailed": "Failed to load your asset library"
+    }
+  },
+  "admin": {
+    "link": "Admin",
+    "title": "Admin",
+    "subtitle": "Search users and manage credit balances",
+    "backToApp": "Back to app",
+    "loading": "Loading...",
+    "searchPlaceholder": "Search by name or email",
+    "search": "Search",
+    "columns": {
+      "user": "User",
+      "role": "Role",
+      "credits": "Credits",
+      "joined": "Joined"
+    },
+    "viewLedger": "View ledger",
+    "giveCredits": "Give credits",
+    "empty": {
+      "title": "No users found",
+      "body": "Try a different search."
+    },
+    "pagination": {
+      "range": "{{start}}-{{end}} of {{total}}",
+      "prev": "Previous",
+      "next": "Next"
+    },
+    "grant": {
+      "title": "Give credits to {{name}}",
+      "currentBalance": "Current balance: {{credits}} credits",
+      "amountLabel": "Amount (credits)",
+      "amountPlaceholder": "e.g. 10",
+      "amountHint": "Multiples of 0.25. Negative amounts correct a balance down, never below 0.",
+      "noteLabel": "Note (optional)",
+      "notePlaceholder": "e.g. support ticket #123",
+      "submit": "Give credits",
+      "error": "Failed to update credits"
+    },
+    "ledger": {
+      "title": "Credit ledger - {{name}}"
+    },
+    "errors": {
+      "loadMe": "Failed to load your account"
+    }
   }
 }

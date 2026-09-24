@@ -32,6 +32,10 @@
   gap: var(--space-4);
 }
 
+.picker-tabs {
+  align-self: flex-start;
+}
+
 .picker-heading {
   font-size: 22px;
   margin-bottom: var(--space-1);

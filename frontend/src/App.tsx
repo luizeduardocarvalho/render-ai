@@ -1,7 +1,9 @@
 import { UserButton } from "@clerk/clerk-react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import "./App.css";
 import { AssetLibrary } from "./components/AssetLibrary";
+import { CreditsChip } from "./components/CreditsChip";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import { ProjectPicker } from "./components/ProjectPicker";
 import { StylePanel } from "./components/StylePanel";
@@ -11,7 +13,7 @@ import { useProject } from "./state/ProjectContext";
 
 function App() {
   const { t } = useTranslation();
-  const { project, selectedView, closeProject } = useProject();
+  const { project, selectedView, closeProject, me } = useProject();
 
   if (!project) {
     return <ProjectPicker />;
@@ -28,6 +30,12 @@ function App() {
           </button>
         </div>
         <div className="app-topbar-right">
+          <CreditsChip />
+          {me?.isAdmin && (
+            <Link to="/admin" className="btn btn-ghost btn-sm">
+              {t("admin.link")}
+            </Link>
+          )}
           <LanguageSwitcher />
           <UserButton afterSignOutUrl="/sign-in" />
         </div>

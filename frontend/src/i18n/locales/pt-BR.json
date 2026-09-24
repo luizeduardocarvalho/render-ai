@@ -20,7 +20,8 @@
     "none": "Nenhum",
     "yes": "Sim",
     "no": "Não",
-    "notAvailable": "n/d"
+    "notAvailable": "n/d",
+    "close": "Fechar"
   },
   "languageSwitcher": {
     "pt": "PT",
@@ -30,9 +31,10 @@
   "auth": {
     "clerkMissing": "O Clerk não está configurado - defina VITE_CLERK_PUBLISHABLE_KEY",
     "notAuthorized": {
-      "heading": "Acesso ainda não aprovado",
-      "body": "Esta conta ainda não está autorizada a usar o render-ai. Peça à equipe para liberar seu acesso e entre novamente.",
-      "signedInAs": "Conectado como"
+      "heading": "Acesso de administrador necessário",
+      "body": "Esta conta não tem acesso de administrador. Peça a um administrador para liberá-lo, ou volte para seus projetos.",
+      "signedInAs": "Conectado como",
+      "backToApp": "Voltar aos projetos"
     }
   },
   "picker": {
@@ -47,6 +49,10 @@
     "retry": "Tentar novamente",
     "thumbEmpty": "Ainda sem vistas",
     "deleteTitle": "Excluir projeto",
+    "tabs": {
+      "projects": "Projetos",
+      "library": "Biblioteca de itens"
+    },
     "delete": {
       "confirm": "Excluir o projeto \"{{name}}\"? O suporte pode recuperá-lo por 30 dias, depois disso ele será perdido definitivamente."
     },
@@ -160,7 +166,8 @@
     "saved": "Salvo",
     "errors": {
       "generate": "Não foi possível gerar o inventário",
-      "save": "Não foi possível salvar o inventário"
+      "save": "Não foi possível salvar o inventário",
+      "insufficientCredits": "Você não tem créditos suficientes para gerar um inventário. Peça a um administrador para recarregar seu saldo."
     }
   },
   "renderControls": {
@@ -183,9 +190,11 @@
     "renderButton_other": "Gerar renderização ({{count}} variações)",
     "rendering": "Renderizando... isso pode levar até um minuto",
     "renderingProgress": "Renderizando... {{done}} de {{count}} concluídas",
-    "costPreview_one": "≈ {{cost}}",
-    "costPreview_other": "≈ {{cost}} para {{count}} variações",
-    "error": "Falha na renderização. Tente novamente."
+    "costPreview_one": "≈ {{cost}} ({{credits}} créditos)",
+    "costPreview_other": "≈ {{cost}} para {{count}} variações ({{credits}} créditos)",
+    "error": "Falha na renderização. Tente novamente.",
+    "insufficientCredits": "Créditos insuficientes ({{available}} disponíveis, {{required}} necessários). Peça a um administrador para recarregar seu saldo.",
+    "insufficientCreditsError": "Falha na renderização: créditos insuficientes. Peça a um administrador para recarregar seu saldo."
   },
   "renderHistory": {
     "title": "Histórico de renderizações",
@@ -299,5 +308,89 @@
     "show": "Mostrar",
     "hide": "Ocultar",
     "deleteMask": "Excluir máscara"
+  },
+  "confirmDialog": {
+    "cancel": "Cancelar",
+    "confirm": "Excluir",
+    "error": "Algo deu errado. Tente novamente."
+  },
+  "credits": {
+    "chip": {
+      "label": "créditos"
+    },
+    "ledger": {
+      "title": "Créditos",
+      "loading": "Carregando...",
+      "error": "Não foi possível carregar os créditos",
+      "balance": "Saldo: {{credits}} créditos",
+      "empty": {
+        "title": "Ainda sem atividade",
+        "body": "Créditos concedidos e usados vão aparecer aqui."
+      },
+      "columns": {
+        "date": "Data",
+        "reason": "Motivo",
+        "delta": "Variação",
+        "balance": "Saldo"
+      },
+      "reasons": {
+        "grant": "Concessão",
+        "render": "Renderização",
+        "refund": "Estorno"
+      }
+    }
+  },
+  "library": {
+    "subtitle": "Seus móveis e objetos reutilizáveis, compartilhados entre todos os projetos",
+    "loading": "Carregando biblioteca...",
+    "empty": {
+      "body": "Adicione móveis ou objetos fixos aqui para reutilizá-los em qualquer projeto."
+    },
+    "errors": {
+      "loadFailed": "Não foi possível carregar sua biblioteca de itens"
+    }
+  },
+  "admin": {
+    "link": "Admin",
+    "title": "Administração",
+    "subtitle": "Pesquise usuários e gerencie saldos de créditos",
+    "backToApp": "Voltar ao app",
+    "loading": "Carregando...",
+    "searchPlaceholder": "Pesquisar por nome ou e-mail",
+    "search": "Pesquisar",
+    "columns": {
+      "user": "Usuário",
+      "role": "Função",
+      "credits": "Créditos",
+      "joined": "Ingressou em"
+    },
+    "viewLedger": "Ver histórico",
+    "giveCredits": "Dar créditos",
+    "empty": {
+      "title": "Nenhum usuário encontrado",
+      "body": "Tente outra pesquisa."
+    },
+    "pagination": {
+      "range": "{{start}}-{{end}} de {{total}}",
+      "prev": "Anterior",
+      "next": "Próxima"
+    },
+    "grant": {
+      "title": "Dar créditos para {{name}}",
+      "currentBalance": "Saldo atual: {{credits}} créditos",
+      "amountLabel": "Quantidade (créditos)",
+      "amountPlaceholder": "ex.: 10",
+      "amountHint": "Múltiplos de 0,25. Valores negativos corrigem o saldo para baixo, nunca abaixo de 0.",
+      "noteLabel": "Nota (opcional)",
+      "notePlaceholder": "ex.: chamado de suporte #123",
+      "submit": "Dar créditos",
+      "error": "Não foi possível atualizar os créditos"
+    },
+    "ledger": {
+      "title": "Histórico de créditos - {{name}}"
+    },
+    "errors": {
+      "loadMe": "Não foi possível carregar sua conta"
+    }
   }
 }

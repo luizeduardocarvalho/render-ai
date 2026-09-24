@@ -1,12 +1,18 @@
 import { UserButton } from "@clerk/clerk-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { ApiError } from "../api";
 import { useSignedImageUrl } from "../hooks/useSignedImageUrl";
 import { useProject } from "../state/ProjectContext";
 import type { ProjectSummary } from "../types";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { CreditsChip } from "./CreditsChip";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { LibraryPanel } from "./LibraryPanel";
 import "./ProjectPicker.css";
+
+type PickerTab = "projects" | "library";
 
 function PickerThumb({ project }: { project: ProjectSummary }) {
   const { t } = useTranslation();
@@ -39,6 +45,7 @@ export function ProjectPicker() {
   const { t } = useTranslation();
   const relativeTime = useRelativeTime();
   const {
+    me,
     projects,
     projectsLoading,
     projectsError,
@@ -48,12 +55,14 @@ export function ProjectPicker() {
     deleteProject,
   } = useProject();
 
+  const [tab, setTab] = useState<PickerTab>("projects");
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ProjectSummary | null>(null);
 
   const isEmpty = !projectsLoading && !projectsError && (projects?.length ?? 0) === 0;
   const showForm = creating || isEmpty;
@@ -82,16 +91,17 @@ export function ProjectPicker() {
     }
   }
 
-  async function handleDelete(id: string, projectName: string) {
-    if (!window.confirm(t("picker.delete.confirm", { name: projectName }))) {
-      return;
-    }
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
     setDeleting(id);
     setError(null);
     try {
       await deleteProject(id);
+      setPendingDelete(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("picker.errors.deleteFailed"));
+      // Shown inside the still-open ConfirmDialog, not the page banner.
+      throw new Error(err instanceof ApiError ? err.message : t("picker.errors.deleteFailed"));
     } finally {
       setDeleting(null);
     }
@@ -102,6 +112,12 @@ export function ProjectPicker() {
       <header className="picker-topbar">
         <div className="app-brand">{t("app.brand")}</div>
         <div className="app-topbar-right">
+          <CreditsChip />
+          {me?.isAdmin && (
+            <Link to="/admin" className="btn btn-ghost btn-sm">
+              {t("admin.link")}
+            </Link>
+          )}
           <LanguageSwitcher />
           <UserButton afterSignOutUrl="/sign-in" />
         </div>
@@ -113,13 +129,34 @@ export function ProjectPicker() {
             <h1 className="picker-heading">{t("picker.heading")}</h1>
             <p className="field-hint">{t("picker.subtitle")}</p>
           </div>
-          {!showForm && (
+          {tab === "projects" && !showForm && (
             <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
               {t("picker.newProject")}
             </button>
           )}
         </div>
 
+        <div className="segmented picker-tabs">
+          <button
+            type="button"
+            className={`segmented-btn ${tab === "projects" ? "segmented-btn-active" : ""}`}
+            onClick={() => setTab("projects")}
+          >
+            {t("picker.tabs.projects")}
+          </button>
+          <button
+            type="button"
+            className={`segmented-btn ${tab === "library" ? "segmented-btn-active" : ""}`}
+            onClick={() => setTab("library")}
+          >
+            {t("picker.tabs.library")}
+          </button>
+        </div>
+
+        {tab === "library" && <LibraryPanel />}
+
+        {tab === "projects" && (
+          <>
         {error && <div className="error-banner">{error}</div>}
 
         {showForm && (
@@ -192,12 +229,12 @@ export function ProjectPicker() {
                   title={t("picker.deleteTitle")}
                   onClick={(e) => {
                     e.stopPropagation();
-                    void handleDelete(p.id, p.name);
+                    setPendingDelete(p);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.stopPropagation();
-                      void handleDelete(p.id, p.name);
+                      setPendingDelete(p);
                     }
                   }}
                 >
@@ -217,7 +254,19 @@ export function ProjectPicker() {
             ))}
           </div>
         )}
+          </>
+        )}
       </main>
+
+      {pendingDelete && (
+        <ConfirmDialog
+          title={t("picker.deleteTitle")}
+          body={t("picker.delete.confirm", { name: pendingDelete.name })}
+          confirmLabel={t("common.delete")}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 }

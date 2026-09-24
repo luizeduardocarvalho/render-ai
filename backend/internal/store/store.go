@@ -16,7 +16,15 @@ type MemoryStore struct {
 	mu         sync.Mutex
 	projects   map[string]*Project
 	blobs      map[string]Blob
-	renderJobs map[string]*RenderJob // keyed by jobKey(pid, jid)
+	renderJobs map[string]*RenderJob   // keyed by jobKey(pid, jid)
+	accounts   map[string]*userAccount // keyed by userID ("" when auth is disabled)
+	assetLibs  map[string][]*Asset     // keyed by ownerID, oldest first
+}
+
+// userAccount is one user's credit balance and ledger.
+type userAccount struct {
+	balanceUnits int64
+	ledger       []CreditLedgerEntry // oldest first
 }
 
 // Compile-time checks that MemoryStore satisfies both storage interfaces.
@@ -31,6 +39,8 @@ func NewMemory() *MemoryStore {
 		projects:   make(map[string]*Project),
 		blobs:      make(map[string]Blob),
 		renderJobs: make(map[string]*RenderJob),
+		accounts:   make(map[string]*userAccount),
+		assetLibs:  make(map[string][]*Asset),
 	}
 }
 
@@ -227,92 +237,206 @@ func (s *MemoryStore) SetAnchor(pid string, renderID *string) (*Project, error) 
 	})
 }
 
-// --- Assets ------------------------------------------------------------------
+// --- Asset library -----------------------------------------------------------
+//
+// The library is user-wide (keyed by ownerID, a Clerk user id or "" when auth
+// is disabled), not project-scoped - see Repository's doc comment and
+// API_CONTRACT.md's asset library section. ClearProjectAssets and
+// ImportAssets exist only to support the API layer's lazy migration of
+// legacy project-embedded assets into this library.
 
-// CreateAsset adds a new library asset to the project.
-func (s *MemoryStore) CreateAsset(pid, name, description, color string) (*Asset, error) {
-	var created *Asset
+// SeedLegacyProjectAssets is a test-only helper that directly sets a
+// project's legacy embedded Assets slice, simulating data written before the
+// asset library existed (production code never writes to project.Assets
+// directly any more - see ClearProjectAssets and the API layer's
+// withLibraryAssets). Used by the migration test in internal/api.
+func (s *MemoryStore) SeedLegacyProjectAssets(pid string, assets []*Asset) error {
 	_, err := s.withProject(pid, func(p *Project) error {
-		a := &Asset{ID: newID(), Name: name, Description: description, Color: color}
-		p.Assets = append(p.Assets, a)
-		c := *a
-		created = &c
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return created, nil
-}
-
-// UpdateAsset updates an existing asset's name, description and color.
-func (s *MemoryStore) UpdateAsset(pid, aid, name, description, color string) (*Asset, error) {
-	var updated *Asset
-	_, err := s.withProject(pid, func(p *Project) error {
-		for _, a := range p.Assets {
-			if a.ID == aid {
-				a.Name = name
-				a.Description = description
-				a.Color = color
-				c := *a
-				updated = &c
-				return nil
-			}
-		}
-		return ErrNotFound
-	})
-	if err != nil {
-		return nil, err
-	}
-	return updated, nil
-}
-
-// DeleteAsset removes an asset from the project, and un-assigns it from any
-// masks that referenced it (across all views).
-func (s *MemoryStore) DeleteAsset(pid, aid string) error {
-	_, err := s.withProject(pid, func(p *Project) error {
-		idx := -1
-		for i, a := range p.Assets {
-			if a.ID == aid {
-				idx = i
-				break
-			}
-		}
-		if idx == -1 {
-			return ErrNotFound
-		}
-		p.Assets = append(p.Assets[:idx], p.Assets[idx+1:]...)
-		for _, v := range p.Views {
-			for _, m := range v.Masks {
-				if m.AssetID != nil && *m.AssetID == aid {
-					m.AssetID = nil
-				}
-			}
-		}
+		p.Assets = assets
 		return nil
 	})
 	return err
 }
 
-// SetAssetReference attaches a reference photo blob to an asset.
-func (s *MemoryStore) SetAssetReference(pid, aid, imageID string) (*Asset, error) {
-	var updated *Asset
+// ClearProjectAssets empties a project's legacy embedded Assets slice.
+func (s *MemoryStore) ClearProjectAssets(pid string) error {
 	_, err := s.withProject(pid, func(p *Project) error {
-		for _, a := range p.Assets {
-			if a.ID == aid {
-				a.ReferenceImageID = imageID
-				a.HasReferenceImage = true
-				c := *a
-				updated = &c
-				return nil
-			}
-		}
-		return ErrNotFound
+		p.Assets = []*Asset{}
+		return nil
 	})
-	if err != nil {
-		return nil, err
+	return err
+}
+
+// ListAssets returns ownerID's library, newest first.
+func (s *MemoryStore) ListAssets(ownerID string) ([]*Asset, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	lib := s.assetLibs[ownerID]
+	out := make([]*Asset, len(lib))
+	for i, a := range lib {
+		c := *a
+		out[len(lib)-1-i] = &c
 	}
-	return updated, nil
+	return out, nil
+}
+
+// findLibraryAsset returns the (mutable, store-owned) asset with id aid in
+// ownerID's library. Callers must hold s.mu.
+func (s *MemoryStore) findLibraryAsset(ownerID, aid string) *Asset {
+	for _, a := range s.assetLibs[ownerID] {
+		if a.ID == aid {
+			return a
+		}
+	}
+	return nil
+}
+
+// GetAsset returns one asset from ownerID's library.
+func (s *MemoryStore) GetAsset(ownerID, aid string) (*Asset, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a := s.findLibraryAsset(ownerID, aid)
+	if a == nil {
+		return nil, ErrNotFound
+	}
+	c := *a
+	return &c, nil
+}
+
+// CreateAsset adds a new asset to ownerID's library.
+func (s *MemoryStore) CreateAsset(ownerID, name, description, color string) (*Asset, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a := &Asset{ID: newID(), Name: name, Description: description, Color: color, CreatedAt: time.Now().UTC()}
+	s.assetLibs[ownerID] = append(s.assetLibs[ownerID], a)
+	c := *a
+	return &c, nil
+}
+
+// UpdateAsset updates an existing library asset's name, description and color.
+func (s *MemoryStore) UpdateAsset(ownerID, aid, name, description, color string) (*Asset, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a := s.findLibraryAsset(ownerID, aid)
+	if a == nil {
+		return nil, ErrNotFound
+	}
+	a.Name, a.Description, a.Color = name, description, color
+	c := *a
+	return &c, nil
+}
+
+// DeleteAsset removes an asset from ownerID's library. It does not touch any
+// project's masks - see internal/api/assets.go's deleteLibraryAsset doc
+// comment for why that's fine.
+func (s *MemoryStore) DeleteAsset(ownerID, aid string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	lib := s.assetLibs[ownerID]
+	for i, a := range lib {
+		if a.ID == aid {
+			s.assetLibs[ownerID] = append(lib[:i:i], lib[i+1:]...)
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+// SetAssetReference attaches a reference photo blob to a library asset.
+func (s *MemoryStore) SetAssetReference(ownerID, aid, imageID string) (*Asset, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a := s.findLibraryAsset(ownerID, aid)
+	if a == nil {
+		return nil, ErrNotFound
+	}
+	a.ReferenceImageID = imageID
+	a.HasReferenceImage = true
+	c := *a
+	return &c, nil
+}
+
+// ImportAssets upserts-by-id into ownerID's library: an id already present is
+// left untouched. See Repository.ImportAssets.
+func (s *MemoryStore) ImportAssets(ownerID string, assets []*Asset) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	lib := s.assetLibs[ownerID]
+	existing := make(map[string]bool, len(lib))
+	for _, a := range lib {
+		existing[a.ID] = true
+	}
+	for _, a := range assets {
+		if existing[a.ID] {
+			continue
+		}
+		c := *a
+		if c.CreatedAt.IsZero() {
+			c.CreatedAt = time.Now().UTC()
+		}
+		lib = append(lib, &c)
+		existing[a.ID] = true
+	}
+	s.assetLibs[ownerID] = lib
+	return nil
+}
+
+// --- Credits -------------------------------------------------------------
+
+// GetCredits returns userID's balance in integer units, or 0 for a user with
+// no account yet.
+func (s *MemoryStore) GetCredits(userID string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[userID]
+	if !ok {
+		return 0, nil
+	}
+	return a.balanceUnits, nil
+}
+
+// AdjustCredits atomically applies deltaUnits to userID's balance (creating
+// the account on first use) and appends entry to their ledger. See
+// Repository.AdjustCredits.
+func (s *MemoryStore) AdjustCredits(userID string, deltaUnits int64, entry CreditLedgerEntry) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[userID]
+	if !ok {
+		a = &userAccount{}
+		s.accounts[userID] = a
+	}
+	newBalance := a.balanceUnits + deltaUnits
+	if newBalance < 0 {
+		return a.balanceUnits, ErrInsufficientCredits
+	}
+	entry.ID = newID()
+	entry.CreatedAt = time.Now().UTC()
+	entry.DeltaUnits = deltaUnits
+	entry.BalanceAfterUnits = newBalance
+	a.balanceUnits = newBalance
+	a.ledger = append(a.ledger, entry.clone())
+	return newBalance, nil
+}
+
+// ListCreditLedger returns up to limit entries (limit <= 0 means no limit)
+// from userID's ledger, newest first.
+func (s *MemoryStore) ListCreditLedger(userID string, limit int) ([]CreditLedgerEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.accounts[userID]
+	if !ok {
+		return []CreditLedgerEntry{}, nil
+	}
+	n := len(a.ledger)
+	if limit > 0 && limit < n {
+		n = limit
+	}
+	out := make([]CreditLedgerEntry, n)
+	for i := 0; i < n; i++ {
+		out[i] = a.ledger[len(a.ledger)-1-i].clone()
+	}
+	return out, nil
 }
 
 // --- Views -------------------------------------------------------------------

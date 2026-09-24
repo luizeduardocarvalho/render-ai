@@ -197,7 +197,7 @@ func TestCreateViewFromDirectUploadRejectsBadInput(t *testing.T) {
 func TestUploadAssetReferenceFromDirectUpload(t *testing.T) {
 	fs := newFakeUploadStore()
 	p := fs.CreateProject("owner-1", "P")
-	asset, err := fs.CreateAsset(p.ID, "Sofa", "a sofa", "#ff0000")
+	asset, err := fs.CreateAsset("owner-1", "Sofa", "a sofa", "#ff0000")
 	if err != nil {
 		t.Fatalf("creating asset: %v", err)
 	}

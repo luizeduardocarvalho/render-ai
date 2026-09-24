@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ApiError, getPricing } from "../api";
+import { ApiError, INSUFFICIENT_CREDITS_CODE, getPricing } from "../api";
 import { useProject } from "../state/ProjectContext";
 import type { ModelChoice, PricingResponse, Render, RenderJob, Resolution, View } from "../types";
+import { formatCredits } from "../lib/credits";
 
 interface RenderControlsProps {
   view: View;
@@ -11,7 +12,7 @@ interface RenderControlsProps {
 
 export function RenderControls({ view, onRendered }: RenderControlsProps) {
   const { t, i18n } = useTranslation();
-  const { renderView } = useProject();
+  const { renderView, me, refreshMe } = useProject();
   const [model, setModel] = useState<ModelChoice>("pro");
   const [resolution, setResolution] = useState<Resolution>("2K");
   const [preservationCheck, setPreservationCheck] = useState(true);
@@ -53,6 +54,17 @@ export function RenderControls({ view, onRendered }: RenderControlsProps) {
   const flashLocked = model === "flash";
   const estimate = pricing?.estimates.find((e) => e.model === model && e.resolution === resolution);
   const estimatedTotalBrl = estimate ? estimate.costBrl * variations : undefined;
+  const estimatedTotalCredits = estimate ? estimate.credits * variations : undefined;
+
+  // Client-side "not enough credits" is advisory only - the server's 402 is
+  // the source of truth. Auth-disabled dev (userId === "") never charges, so
+  // the check is skipped there too (see API_CONTRACT.md / api.ts renderView).
+  const devAuthDisabled = me?.userId === "";
+  const lowBalance =
+    !devAuthDisabled &&
+    me !== null &&
+    estimatedTotalCredits !== undefined &&
+    me.credits < estimatedTotalCredits;
 
   function handleModelChange(next: ModelChoice) {
     setModel(next);
@@ -73,11 +85,18 @@ export function RenderControls({ view, onRendered }: RenderControlsProps) {
       );
       onRendered(renders);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("renderControls.error"));
+      if (err instanceof ApiError && err.code === INSUFFICIENT_CREDITS_CODE) {
+        setError(t("renderControls.insufficientCreditsError"));
+      } else {
+        setError(err instanceof ApiError ? err.message : t("renderControls.error"));
+      }
     } finally {
       abortRef.current = null;
       setRendering(false);
       setProgressJob(null);
+      // The debit (and any refund) already happened server-side by the time
+      // this resolves either way - resync the chip.
+      void refreshMe();
     }
   }
 
@@ -164,15 +183,30 @@ export function RenderControls({ view, onRendered }: RenderControlsProps) {
 
         {error && <div className="error-banner">{error}</div>}
 
-        <button type="button" className="btn btn-primary btn-block" onClick={handleRender} disabled={rendering}>
+        {!rendering && lowBalance && me && estimatedTotalCredits !== undefined && (
+          <div className="error-banner">
+            {t("renderControls.insufficientCredits", {
+              available: formatCredits(me.credits, i18n.language),
+              required: formatCredits(estimatedTotalCredits, i18n.language),
+            })}
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="btn btn-primary btn-block"
+          onClick={handleRender}
+          disabled={rendering || lowBalance}
+        >
           {rendering ? <span className="spinner" /> : null}
           {rendering ? renderingLabel : t("renderControls.renderButton", { count: variations })}
         </button>
         {!rendering && estimatedTotalBrl !== undefined && (
-          <div className="field-hint render-cost-preview">
+          <div className={`field-hint render-cost-preview ${lowBalance ? "render-cost-preview-insufficient" : ""}`}>
             {t("renderControls.costPreview", {
               count: variations,
               cost: brlFormatter.format(estimatedTotalBrl),
+              credits: estimatedTotalCredits !== undefined ? formatCredits(estimatedTotalCredits, i18n.language) : "",
             })}
           </div>
         )}

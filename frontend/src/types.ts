@@ -124,6 +124,7 @@ export interface ProjectSummary {
 
 export interface ApiErrorBody {
   error: string;
+  code?: string;
 }
 
 // One model+resolution combination's estimated cost of a single render, from
@@ -133,6 +134,7 @@ export interface PricingEstimate {
   resolution: Resolution;
   costUsd: number;
   costBrl: number;
+  credits: number; // cost of ONE variation, in credits (1 credit = one 2K Pro image)
 }
 
 export interface PricingResponse {
@@ -169,6 +171,58 @@ export interface RenderJob {
   variations: RenderJobVariation[];
   renders: Render[]; // full Render objects for variations that are done, in order
   error?: string; // set when status === "failed": first variation error
+  creditsCharged?: number; // credits charged for the whole job, original charge (not net of refunds)
+}
+
+// ---- Credits ----
+
+// GET /api/me: the signed-in user's identity and credit balance. userId is ""
+// when Clerk auth is disabled (local dev without CLERK_SECRET_KEY) - the
+// frontend then skips client-side "not enough credits" checks, since the
+// backend does too (see api.ts renderView / RenderControls).
+export interface Me {
+  userId: string;
+  role?: string;
+  isAdmin: boolean;
+  credits: number;
+}
+
+export type CreditReason = "grant" | "render" | "refund";
+
+export interface CreditEntry {
+  id: string;
+  createdAt: string;
+  delta: number; // credits, signed
+  balanceAfter: number;
+  reason: CreditReason;
+  projectId?: string;
+  jobId?: string;
+  note?: string;
+  actorId?: string;
+}
+
+export interface CreditsResponse {
+  credits: number;
+  ledger: CreditEntry[]; // newest first, at most 50 entries
+}
+
+// ---- Admin ----
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  imageUrl?: string;
+  role?: string;
+  credits: number;
+  createdAt: string;
+  lastSignInAt?: string;
+}
+
+export interface AdminUsersResponse {
+  users: AdminUser[];
+  totalCount: number;
 }
 
 // Labels/hints for these constants live in the translation files (see

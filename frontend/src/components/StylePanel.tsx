@@ -112,7 +112,11 @@ export function StylePanel() {
           <span className="field-label" id="interior-lights-label">
             {t("style.interiorLights.label")}
           </span>
-          <div className="segmented" role="radiogroup" aria-labelledby="interior-lights-label">
+          <div
+            className="segmented segmented-fluid"
+            role="radiogroup"
+            aria-labelledby="interior-lights-label"
+          >
             {INTERIOR_LIGHTS_OPTIONS.map((o) => (
               <button
                 key={o.value}

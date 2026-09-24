@@ -1,7 +1,10 @@
 import type {
+  AdminUsersResponse,
   Asset,
   ApiErrorBody,
+  CreditsResponse,
   Mask,
+  Me,
   PricingResponse,
   Project,
   ProjectSummary,
@@ -19,12 +22,20 @@ import { getClerkToken } from "./lib/clerkToken";
 export const API_BASE =
   import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? "" : "http://localhost:8080");
 
+// Error code for a 402 render/generation rejection - see errors.go on the
+// backend. Callers compare `err.code` against this rather than matching on
+// the (possibly localized-by-nobody, but still not-for-matching) message.
+export const INSUFFICIENT_CREDITS_CODE = "insufficient_credits";
+
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Machine-readable error code from the response body, e.g. "insufficient_credits". */
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -113,13 +124,15 @@ async function request<T>(
     });
     if (!res.ok) {
       let message = `Request failed (${res.status})`;
+      let code: string | undefined;
       try {
         const body = (await res.json()) as ApiErrorBody;
         if (body?.error) message = body.error;
+        code = body?.code;
       } catch {
         // ignore body parse failures, keep default message
       }
-      throw new ApiError(res.status, message);
+      throw new ApiError(res.status, message, code);
     }
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
@@ -140,6 +153,40 @@ function json(body: unknown): RequestInit {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   };
+}
+
+// ---- Me / credits ----
+
+export function getMe(): Promise<Me> {
+  return request<Me>("/api/me");
+}
+
+export function getMyCredits(): Promise<CreditsResponse> {
+  return request<CreditsResponse>("/api/me/credits");
+}
+
+// ---- Admin ----
+
+export function listAdminUsers(
+  query: string,
+  limit: number,
+  offset: number,
+): Promise<AdminUsersResponse> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (query.trim()) params.set("query", query.trim());
+  return request<AdminUsersResponse>(`/api/admin/users?${params.toString()}`);
+}
+
+export function grantAdminCredits(
+  uid: string,
+  amount: number,
+  note?: string,
+): Promise<{ credits: number }> {
+  return request<{ credits: number }>(`/api/admin/users/${uid}/credits`, json({ amount, note }));
+}
+
+export function getAdminUserCredits(uid: string): Promise<CreditsResponse> {
+  return request<CreditsResponse>(`/api/admin/users/${uid}/credits`);
 }
 
 // ---- Projects ----
@@ -205,10 +252,91 @@ export function uploadAssetReference(
   file: File,
   opts?: UploadOptions,
 ): Promise<Asset> {
-  return uploadImage(pid, file, opts, {
+  return uploadImage(`/api/projects/${pid}/uploads`, file, opts, {
     path: `/api/projects/${pid}/assets/${aid}/reference`,
     fields: {},
   });
+}
+
+// ---- Asset library (user-wide, shared by all of the user's projects) ----
+//
+// Manageable from the project list screen (no project id in scope); the
+// in-editor sidebar keeps using the project-scoped routes above, which the
+// backend serves from the same underlying per-user library.
+
+export function listAssets(): Promise<Asset[]> {
+  return request<Asset[]>("/api/assets");
+}
+
+export function createLibraryAsset(data: {
+  name: string;
+  description: string;
+  color: string;
+}): Promise<Asset> {
+  return request<Asset>("/api/assets", json(data));
+}
+
+export function updateLibraryAsset(
+  aid: string,
+  data: { name: string; description: string; color: string },
+): Promise<Asset> {
+  return request<Asset>(`/api/assets/${aid}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteLibraryAsset(aid: string): Promise<void> {
+  return request<void>(`/api/assets/${aid}`, { method: "DELETE" });
+}
+
+export function uploadLibraryAssetReference(
+  aid: string,
+  file: File,
+  opts?: UploadOptions,
+): Promise<Asset> {
+  return uploadImage("/api/uploads", file, opts, {
+    path: `/api/assets/${aid}/reference`,
+    fields: {},
+  });
+}
+
+const assetRefSignedCache = new Map<string, SignedEntry>();
+
+/**
+ * Resolves a loadable URL for a library asset's reference image (used by the
+ * library screen, which has no project id to go through the project-scoped
+ * image route). Cached the same way fetchSignedImageUrl is.
+ */
+export async function fetchAssetReferenceUrl(aid: string, force = false): Promise<string> {
+  const now = Date.now();
+  const cached = assetRefSignedCache.get(aid);
+  if (!force && cached && now - cached.fetchedAt < SIGNED_TTL_MS) return cached.url;
+  if (!force && cached?.pending) return cached.pending;
+
+  const pending = request<{ url: string }>(`/api/assets/${aid}/reference-url`)
+    .then((r) => {
+      const url = resolveSignedUrl(r.url);
+      assetRefSignedCache.set(aid, { url, fetchedAt: Date.now() });
+      return url;
+    })
+    .catch((err) => {
+      assetRefSignedCache.delete(aid);
+      throw err;
+    });
+
+  assetRefSignedCache.set(aid, {
+    url: cached?.url ?? "",
+    fetchedAt: cached?.fetchedAt ?? 0,
+    pending,
+  });
+  return pending;
+}
+
+/** Drops any cached reference-image URL for a library asset. */
+export function invalidateAssetReferenceUrl(aid: string): void {
+  assetRefSignedCache.delete(aid);
 }
 
 // ---- Direct uploads ----
@@ -266,11 +394,15 @@ function putToSignedUrl(ticket: UploadTicket, file: File, onProgress?: (f: numbe
 }
 
 /** Returns the uploadId, or null when the backend can't take direct uploads. */
-async function directUpload(pid: string, file: File, onProgress?: (f: number) => void): Promise<string | null> {
+async function directUpload(
+  uploadsPath: string,
+  file: File,
+  onProgress?: (f: number) => void,
+): Promise<string | null> {
   if (!DIRECT_UPLOAD_TYPES.has(file.type)) return null;
   let ticket: UploadTicket;
   try {
-    ticket = await request<UploadTicket>(`/api/projects/${pid}/uploads`, json({ contentType: file.type }));
+    ticket = await request<UploadTicket>(uploadsPath, json({ contentType: file.type }));
   } catch (err) {
     if (err instanceof ApiError && err.status === 501) return null;
     throw err;
@@ -291,17 +423,18 @@ async function directUpload(pid: string, file: File, onProgress?: (f: number) =>
 }
 
 /**
- * Uploads an image for `target.path`: direct to storage when possible, then a
- * JSON POST of {...fields, uploadId}; otherwise a multipart POST of
+ * Uploads an image for `target.path`: direct to storage when possible (via
+ * `uploadsPath`, e.g. `/api/projects/{pid}/uploads` or `/api/uploads`), then
+ * a JSON POST of {...fields, uploadId}; otherwise a multipart POST of
  * {...fields, file}.
  */
 async function uploadImage<T>(
-  pid: string,
+  uploadsPath: string,
   file: File,
   opts: UploadOptions | undefined,
   target: { path: string; fields: Record<string, string> },
 ): Promise<T> {
-  const uploadId = await directUpload(pid, file, opts?.onProgress);
+  const uploadId = await directUpload(uploadsPath, file, opts?.onProgress);
   if (uploadId) {
     return request<T>(target.path, json({ ...target.fields, uploadId }), MULTIPART_UPLOAD_TIMEOUT_MS);
   }
@@ -314,7 +447,10 @@ async function uploadImage<T>(
 // ---- Views ----
 
 export function createView(pid: string, name: string, file: File, opts?: UploadOptions): Promise<View> {
-  return uploadImage(pid, file, opts, { path: `/api/projects/${pid}/views`, fields: { name } });
+  return uploadImage(`/api/projects/${pid}/uploads`, file, opts, {
+    path: `/api/projects/${pid}/views`,
+    fields: { name },
+  });
 }
 
 export function getView(pid: string, vid: string): Promise<View> {
