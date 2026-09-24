@@ -78,12 +78,15 @@ resource "google_project_iam_member" "deployer_firebase" {
   member  = google_service_account.deployer.member
 }
 
-# Only jobs in the GitHub `production` environment of this repository can
-# impersonate the deployer (the OIDC subject is
-# repo:<owner>/<repo>:environment:<name>), so environment protection rules
-# such as required reviewers apply to every deploy.
+# Only jobs in the GitHub `production` environment can impersonate the
+# deployer, so environment protection rules such as required reviewers apply
+# to every deploy. This matches on the `environment` claim rather than the
+# OIDC subject: with GitHub's immutable subjects the subject embeds numeric
+# owner/repo ids (repo:owner@123/repo@456:environment:production), so a
+# name-based subject never matches. The provider's attribute_condition
+# (github.tf) already limits tokens to this repository.
 resource "google_service_account_iam_member" "deployer_wif_binding" {
   service_account_id = google_service_account.deployer.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principal://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/subject/repo:${var.github_repository}:environment:${var.github_deploy_environment}"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.environment/${var.github_deploy_environment}"
 }

@@ -18,6 +18,9 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "google.subject"       = "assertion.sub"
     "attribute.repository" = "assertion.repository"
     "attribute.ref"        = "assertion.ref"
+    # Jobs that don't run in a GitHub environment have no `environment`
+    # claim; map those to "none" so the mapping never fails.
+    "attribute.environment" = "has(assertion.environment) ? assertion.environment : 'none'"
   }
 
   # Restrict to this one repository regardless of what attribute_mapping
