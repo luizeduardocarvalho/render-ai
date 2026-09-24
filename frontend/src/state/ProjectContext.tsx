@@ -33,6 +33,11 @@ interface ProjectContextValue {
   me: Me | null;
   meLoading: boolean;
   refreshMe: () => Promise<void>;
+  // Shifts the displayed balance by delta credits without a round trip, so
+  // the header reacts the moment a render is started (or a variation fails
+  // and is refunded). The next refreshMe() replaces it with the server's
+  // balance, which stays the source of truth.
+  adjustDisplayedCredits: (delta: number) => void;
 
   // Project selection (the picker).
   projects: ProjectSummary[] | null;
@@ -125,6 +130,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (!project) throw new Error("No active project");
     return project;
   }, [project]);
+
+  const adjustDisplayedCreditsFn = useCallback((delta: number) => {
+    setMe((prev) => (prev ? { ...prev, credits: Math.max(0, prev.credits + delta) } : prev));
+  }, []);
 
   const refreshMeFn = useCallback(async () => {
     setMeLoading(true);
@@ -476,6 +485,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     me,
     meLoading,
     refreshMe: refreshMeFn,
+    adjustDisplayedCredits: adjustDisplayedCreditsFn,
     projects,
     projectsLoading,
     projectsError,

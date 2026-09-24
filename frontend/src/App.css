@@ -277,9 +277,12 @@
 
 .credits-chip {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: center;
   gap: var(--space-1);
-  height: 30px;
+  height: 32px;
+  line-height: 1;
+  font: inherit;
   padding: 0 var(--space-3);
   border-radius: var(--radius-full);
   border: 1px solid var(--border-strong);

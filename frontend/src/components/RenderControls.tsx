@@ -12,7 +12,7 @@ interface RenderControlsProps {
 
 export function RenderControls({ view, onRendered }: RenderControlsProps) {
   const { t, i18n } = useTranslation();
-  const { renderView, me, refreshMe } = useProject();
+  const { renderView, me, refreshMe, adjustDisplayedCredits } = useProject();
   const [model, setModel] = useState<ModelChoice>("pro");
   const [resolution, setResolution] = useState<Resolution>("2K");
   const [preservationCheck, setPreservationCheck] = useState(true);
@@ -77,11 +77,29 @@ export function RenderControls({ view, onRendered }: RenderControlsProps) {
     setProgressJob(null);
     const controller = new AbortController();
     abortRef.current = controller;
+
+    // Show the debit in the header right away, then give each failed
+    // variation's share back as soon as polling reports it (the server
+    // refunds failed variations). refreshMe() in `finally` reconciles with
+    // the server's real balance either way - including a 402 or any other
+    // error before the job started, which undoes this debit.
+    const perVariation = devAuthDisabled ? 0 : (estimate?.credits ?? 0);
+    if (perVariation > 0) adjustDisplayedCredits(-perVariation * variations);
+    let refundedCount = 0;
+    const handleProgress = (job: RenderJob) => {
+      setProgressJob(job);
+      const failed = job.variations.filter((v) => v.status === "failed").length;
+      if (perVariation > 0 && failed > refundedCount) {
+        adjustDisplayedCredits(perVariation * (failed - refundedCount));
+        refundedCount = failed;
+      }
+    };
+
     try {
       const renders = await renderView(
         view.id,
         { model, resolution, preservationCheck, variations },
-        { onProgress: setProgressJob, signal: controller.signal },
+        { onProgress: handleProgress, signal: controller.signal },
       );
       onRendered(renders);
     } catch (err) {
@@ -95,8 +113,11 @@ export function RenderControls({ view, onRendered }: RenderControlsProps) {
       setRendering(false);
       setProgressJob(null);
       // The debit (and any refund) already happened server-side by the time
-      // this resolves either way - resync the chip.
+      // this resolves either way - replace the optimistic balance with it.
       void refreshMe();
+      // The worker records a variation as failed a moment before its refund
+      // lands, so a refresh right at the end can still miss it: check once more.
+      if (refundedCount > 0) window.setTimeout(() => void refreshMe(), 2000);
     }
   }
 
