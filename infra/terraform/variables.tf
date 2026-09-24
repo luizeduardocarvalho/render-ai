@@ -64,3 +64,9 @@ variable "cloud_run_max_instances" {
   default     = 4
   description = "Maximum Cloud Run instance count for render-ai-api."
 }
+
+variable "github_deploy_environment" {
+  type        = string
+  default     = "production"
+  description = "GitHub Actions environment whose jobs may impersonate the deployer service account (.github/workflows/deploy.yml)."
+}

@@ -1,0 +1,130 @@
+name: Deploy
+
+# Manual deploy to production: Actions -> Deploy -> Run workflow.
+#
+# Backend: builds backend/Dockerfile, pushes it to Artifact Registry and rolls
+# it out to the render-ai-api Cloud Run service. Only the image changes - env
+# vars, secret, service account and scaling stay as Terraform set them.
+# Frontend: builds frontend/ and runs `firebase deploy --only hosting,firestore`
+# (both Hosting sites plus firestore.rules).
+#
+# Runs in the GitHub `production` environment, so its protection rules (e.g.
+# required reviewers) apply, and signs in to Google Cloud through Workload
+# Identity Federation as the deployer service account (infra/terraform/
+# deploy.tf) - no keys are stored in GitHub.
+#
+# Variables (Settings -> Environments -> production -> Environment variables),
+# values from `terraform output` - see infra/terraform/README.md:
+#   GCP_WIF_PROVIDER            workload_identity_provider
+#   GCP_DEPLOYER_SA             deployer_service_account_email
+#   GCP_ARTIFACT_REPO           artifact_registry_repository
+#   GCP_PROJECT                 app project id (render-ai-studio)
+#   GCP_REGION                  us-central1
+#   VITE_CLERK_PUBLISHABLE_KEY  Clerk publishable key (not a secret)
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: What to deploy
+        type: choice
+        options: [both, backend, frontend]
+        default: both
+
+permissions:
+  contents: read
+  id-token: write
+
+# One deploy at a time; never cancel one halfway through.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  backend:
+    if: inputs.component != 'frontend'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push image
+        id: image
+        env:
+          REPO: ${{ vars.GCP_ARTIFACT_REPO }}
+        run: |
+          set -euo pipefail
+          image="${REPO}/render-ai-api:${GITHUB_SHA}"
+          gcloud auth configure-docker "${REPO%%/*}" --quiet
+          docker build -t "$image" backend
+          docker push "$image"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to Cloud Run
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+          PROJECT: ${{ vars.GCP_PROJECT }}
+          REGION: ${{ vars.GCP_REGION }}
+        run: |
+          set -euo pipefail
+          gcloud run deploy render-ai-api \
+            --image "$IMAGE" \
+            --project "$PROJECT" \
+            --region "$REGION" \
+            --quiet
+          gcloud run services describe render-ai-api \
+            --project "$PROJECT" --region "$REGION" \
+            --format='value(status.url,status.latestReadyRevisionName)'
+
+  frontend:
+    # Runs after the backend when both are deployed (the new frontend calls
+    # new API routes), and on its own when only the frontend is chosen.
+    needs: backend
+    if: >-
+      always() && inputs.component != 'backend' &&
+      (needs.backend.result == 'success' || needs.backend.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Build
+        working-directory: frontend
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then
+            echo "::error::VITE_CLERK_PUBLISHABLE_KEY is not set in the production environment."
+            exit 1
+          fi
+          pnpm install --frozen-lockfile
+          pnpm run check:i18n
+          pnpm run build
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - name: Deploy Hosting and Firestore rules
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT }}
+        run: npx --yes firebase-tools@15 deploy --only hosting,firestore --project "$PROJECT" --non-interactive

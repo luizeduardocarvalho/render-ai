@@ -159,3 +159,31 @@ secrets - none of them are sensitive:
   `backend/DEPLOY.md`'s "Backups and recovery" section) and is left as a
   manual, deliberate `gcloud storage buckets update --lock-retention-period`
   step, never something `terraform apply` can do.
+
+## GitHub Actions deploy
+
+`.github/workflows/deploy.yml` deploys by hand from GitHub (Actions -> Deploy
+-> Run workflow, choosing backend, frontend or both). It builds the backend
+image, pushes it to the Artifact Registry repository in `deploy.tf`, rolls it
+out to Cloud Run (only the image changes), then builds the frontend and runs
+`firebase deploy --only hosting,firestore`.
+
+It signs in as the `github-deployer` service account (`deploy.tf`), which
+only jobs in this repo's GitHub **`production` environment** can impersonate.
+After `terraform apply`:
+
+1. GitHub -> Settings -> Environments -> New environment `production`.
+   Optionally add yourself under *Required reviewers* so every deploy needs
+   an approval click.
+2. Add these **environment variables** (not secrets):
+
+| Variable | From |
+| --- | --- |
+| `GCP_WIF_PROVIDER` | `terraform output -raw workload_identity_provider` |
+| `GCP_DEPLOYER_SA` | `terraform output -raw deployer_service_account_email` |
+| `GCP_ARTIFACT_REPO` | `terraform output -raw artifact_registry_repository` |
+| `GCP_PROJECT` | the app project id, e.g. `render-ai-studio` |
+| `GCP_REGION` | `us-central1` |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk dashboard (publishable key, not the secret key) |
+
+`backend/deploy.sh` still works for deploys from a laptop.
