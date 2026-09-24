@@ -62,3 +62,22 @@ func TestEditPromptListsEveryRegion(t *testing.T) {
 		}
 	}
 }
+
+// The screenshot is only described when it is actually sent.
+func TestEditPromptDescribesTheScreenshotOnlyWhenSent(t *testing.T) {
+	regions := []EditRegionPrompt{{Number: 1, Color: "red", Instruction: "x"}}
+	with, err := EditPrompt("../../prompts/edit.tmpl", EditTemplateData{HasScreenshot: true, Regions: regions})
+	if err != nil {
+		t.Fatal(err)
+	}
+	without, err := EditPrompt("../../prompts/edit.tmpl", EditTemplateData{Regions: regions})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(with, "IMAGE 3: The original 3D model screenshot") {
+		t.Errorf("prompt should describe IMAGE 3 when the screenshot is sent:\n%s", with)
+	}
+	if strings.Contains(without, "IMAGE 3") {
+		t.Errorf("prompt mentions IMAGE 3 although no screenshot is sent:\n%s", without)
+	}
+}

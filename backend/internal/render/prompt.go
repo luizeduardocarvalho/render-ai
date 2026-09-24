@@ -83,7 +83,9 @@ type EditRegionPrompt struct {
 
 // EditTemplateData is the exact set of fields prompts/edit.tmpl expects.
 type EditTemplateData struct {
-	Regions []EditRegionPrompt
+	// HasScreenshot says IMAGE 3 is the original 3D screenshot of the view.
+	HasScreenshot bool
+	Regions       []EditRegionPrompt
 }
 
 // EditPrompt renders the Edit prompt from templatePath, loading it fresh on

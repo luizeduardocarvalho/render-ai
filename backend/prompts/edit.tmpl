@@ -5,7 +5,13 @@ marked below and leave everything else exactly as it is.
 IMAGE 1: The render to edit.
 IMAGE 2: The same render with the areas to change filled in solid colors at partial
   opacity. The colors are labels only; do not paint the colors themselves.
-
+{{ if .HasScreenshot }}IMAGE 3: The original 3D model screenshot (SketchUp) this render was made from. It is the
+  ground truth for what is in the room and where: its geometry, layout, and the objects in
+  each area. Use it to decide what a colored area should contain and how it should be shaped
+  and placed, especially when an instruction says something is wrong or should match the
+  model. Do NOT copy its flat, untextured look, and do NOT use it to change anything outside
+  the colored areas.
+{{ end }}
 === WHAT TO CHANGE ===
 {{ range .Regions }}- {{ .Color }} area (region {{ .Number }}): {{ .Instruction }}
 {{ end }}

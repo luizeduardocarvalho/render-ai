@@ -276,7 +276,21 @@ func (s *Server) assembleEditRequest(pid string, job *store.RenderJob) (*renderA
 		return nil, internalErr("building edit mask: %v", err)
 	}
 
-	prompt, err := renderpkg.EditPrompt(s.editPromptPath(), renderpkg.EditTemplateData{Regions: promptRegions})
+	// The view's original screenshot is the ground truth for what the room
+	// holds, so the model can tell how a region ought to look. A view always
+	// has one; if its blob is somehow gone the edit still runs without it.
+	images := [][]byte{sourceBlob.Data, overlayPNG}
+	screenshotBlob, hasScreenshot := s.blobs.GetBlob(view.ScreenshotImageID)
+	if view.HasScreenshot && hasScreenshot {
+		images = append(images, screenshotBlob.Data)
+	} else {
+		hasScreenshot = false
+	}
+
+	prompt, err := renderpkg.EditPrompt(s.editPromptPath(), renderpkg.EditTemplateData{
+		HasScreenshot: hasScreenshot,
+		Regions:       promptRegions,
+	})
 	if err != nil {
 		return nil, internalErr("building prompt: %v", err)
 	}
@@ -293,7 +307,7 @@ func (s *Server) assembleEditRequest(pid string, job *store.RenderJob) (*renderA
 			ModelID:     modelID,
 			AspectRatio: renderpkg.PickAspectRatio(w, h),
 			ImageSize:   string(job.Request.Resolution),
-			Images:      [][]byte{sourceBlob.Data, overlayPNG},
+			Images:      images,
 			Prompt:      prompt,
 		},
 		edit: &editAssembly{
