@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ApiError, imageUrl } from "../../api";
+import { ApiError, fetchSignedImageUrl } from "../../api";
+import { useSignedImageUrl } from "../../hooks/useSignedImageUrl";
 import { useProject } from "../../state/ProjectContext";
 import type { Render, View } from "../../types";
 import { BeforeAfterSlider } from "./BeforeAfterSlider";
@@ -17,6 +18,9 @@ export function ResultView({ view, render }: ResultViewProps) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const beforeUrl = useSignedImageUrl(view.screenshotImageId);
+  const afterUrl = useSignedImageUrl(render.resultImageId);
+
   const isAnchor = project?.styleAnchorRenderId === render.id;
 
   async function handleSetAnchor() {
@@ -32,10 +36,12 @@ export function ResultView({ view, render }: ResultViewProps) {
   }
 
   async function handleDownload() {
+    if (!project) return;
     setDownloading(true);
     setError(null);
     try {
-      const res = await fetch(imageUrl(render.resultImageId));
+      const signedUrl = await fetchSignedImageUrl(project.id, render.resultImageId);
+      const res = await fetch(signedUrl);
       if (!res.ok) throw new Error("Failed to download image");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -76,12 +82,18 @@ export function ResultView({ view, render }: ResultViewProps) {
       <div className="panel-body">
         {error && <div className="error-banner">{error}</div>}
 
-        <BeforeAfterSlider
-          beforeSrc={imageUrl(view.screenshotImageId)}
-          afterSrc={imageUrl(render.resultImageId)}
-          width={view.width}
-          height={view.height}
-        />
+        {beforeUrl && afterUrl ? (
+          <BeforeAfterSlider
+            beforeSrc={beforeUrl}
+            afterSrc={afterUrl}
+            width={view.width}
+            height={view.height}
+          />
+        ) : (
+          <div className="result-image-loading">
+            <span className="spinner" /> Loading image...
+          </div>
+        )}
 
         <MetricsPanel render={render} />
       </div>

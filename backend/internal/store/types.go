@@ -1,6 +1,7 @@
-// Package store implements the in-memory, mutex-protected data model for
-// render-ai. Everything here is lost on server restart - that is by design
-// for this proof of concept.
+// Package store defines the render-ai data model and its persistence
+// interfaces (Repository for structured data, BlobStore for image bytes). It
+// ships two backends: an in-memory one for local dev (lost on restart) and a
+// Firestore + GCS one for the deployed service.
 package store
 
 import "time"
@@ -124,9 +125,18 @@ type StyleSettings struct {
 }
 
 // Project is the top-level container for everything the frontend works with.
+//
+// OwnerID is the Clerk user id of the project's owner; every project-scoped
+// route is authorized against it (see the API layer). OrgID is reserved for a
+// future org-scoping model - it is always nil today, but present so projects
+// can gain an org dimension without a data migration.
 type Project struct {
 	ID                  string        `json:"id"`
+	OwnerID             string        `json:"ownerId"`
+	OrgID               *string       `json:"orgId"`
 	Name                string        `json:"name"`
+	CreatedAt           time.Time     `json:"createdAt"`
+	UpdatedAt           time.Time     `json:"updatedAt"`
 	Style               StyleSettings `json:"style"`
 	Assets              []*Asset      `json:"assets"`
 	Views               []*View       `json:"views"`
@@ -145,7 +155,11 @@ func defaultStyle() StyleSettings {
 func (p *Project) clone() *Project {
 	out := &Project{
 		ID:                  p.ID,
+		OwnerID:             p.OwnerID,
+		OrgID:               clonePtr(p.OrgID),
 		Name:                p.Name,
+		CreatedAt:           p.CreatedAt,
+		UpdatedAt:           p.UpdatedAt,
 		Style:               p.Style,
 		StyleAnchorRenderID: clonePtr(p.StyleAnchorRenderID),
 		Assets:              make([]*Asset, len(p.Assets)),

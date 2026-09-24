@@ -3,6 +3,7 @@ import type {
   ApiErrorBody,
   Mask,
   Project,
+  ProjectSummary,
   Render,
   RenderRequest,
   StyleSettings,
@@ -25,23 +26,71 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Builds the direct <img> src for a stored image blob.
- * Used for: asset reference photos, view screenshots and render results.
- */
-export function imageUrl(imageId: string): string {
-  return `${API_BASE}/api/images/${imageId}`;
+// Signed image URLs -----------------------------------------------------------
+//
+// Images are never loaded by a stable public path. The backend mints a URL for
+// each blob only after the per-project ownership check passes; in production
+// that's a short-lived V4 signed GCS URL loaded directly from the bucket, in
+// local dev it's the same-origin /api/images/{id} path. Callers pass the owning
+// project id so the ownership gate applies.
+//
+// Signed URLs must be used verbatim - appending query params (e.g. a cache
+// buster) to a GCS signed URL breaks its signature. To force a fresh URL, pass
+// `force` (or invalidate the cache); re-signing yields a distinct URL that also
+// bypasses the browser cache.
+
+interface SignedEntry {
+  url: string;
+  fetchedAt: number;
+  pending?: Promise<string>;
+}
+
+// Refresh comfortably before the backend's 1h signature expiry.
+const SIGNED_TTL_MS = 50 * 60 * 1000;
+const signedCache = new Map<string, SignedEntry>();
+
+function resolveSignedUrl(url: string): string {
+  // Dev returns a relative /api/images/... path; prod returns an absolute GCS
+  // URL. Only the relative form needs the API base prepended.
+  return url.startsWith("http") ? url : `${API_BASE}${url}`;
 }
 
 /**
- * The contract's Mask type carries no separate `bitmapImageId` field (unlike
- * Asset.referenceImageId / View.screenshotImageId), so the mask's own id is
- * the blob id for its bitmap PNG. Cache-bust with `v` after every re-upload
- * so the editor picks up the freshest painted bitmap.
+ * Resolves a loadable URL for an image blob, memoized per blob id until shortly
+ * before expiry. Pass `force` to bypass the cache and re-sign.
  */
-export function maskBitmapUrl(maskId: string, cacheBust?: number): string {
-  const base = `${API_BASE}/api/images/${maskId}`;
-  return cacheBust ? `${base}?v=${cacheBust}` : base;
+export async function fetchSignedImageUrl(
+  pid: string,
+  imageId: string,
+  force = false,
+): Promise<string> {
+  const now = Date.now();
+  const cached = signedCache.get(imageId);
+  if (!force && cached && now - cached.fetchedAt < SIGNED_TTL_MS) return cached.url;
+  if (!force && cached?.pending) return cached.pending;
+
+  const pending = request<{ url: string }>(`/api/projects/${pid}/images/${imageId}/url`)
+    .then((r) => {
+      const url = resolveSignedUrl(r.url);
+      signedCache.set(imageId, { url, fetchedAt: Date.now() });
+      return url;
+    })
+    .catch((err) => {
+      signedCache.delete(imageId);
+      throw err;
+    });
+
+  signedCache.set(imageId, {
+    url: cached?.url ?? "",
+    fetchedAt: cached?.fetchedAt ?? 0,
+    pending,
+  });
+  return pending;
+}
+
+/** Drops any cached signed URL for a blob, forcing the next fetch to re-sign. */
+export function invalidateSignedImageUrl(imageId: string): void {
+  signedCache.delete(imageId);
 }
 
 async function request<T>(
@@ -92,6 +141,10 @@ function json(body: unknown): RequestInit {
 }
 
 // ---- Projects ----
+
+export function listProjects(): Promise<ProjectSummary[]> {
+  return request<ProjectSummary[]>("/api/projects");
+}
 
 export function createProject(name: string): Promise<Project> {
   return request<Project>("/api/projects", json({ name }));

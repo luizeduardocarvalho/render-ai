@@ -1,6 +1,13 @@
 import { useRef, useState } from "react";
-import { ApiError, imageUrl } from "../api";
+import { ApiError } from "../api";
+import { useSignedImageUrl } from "../hooks/useSignedImageUrl";
 import { useProject } from "../state/ProjectContext";
+import type { View } from "../types";
+
+function ViewThumb({ view }: { view: View }) {
+  const url = useSignedImageUrl(view.hasScreenshot ? view.screenshotImageId : null);
+  return <span className="view-tab-thumb">{url && <img src={url} alt="" />}</span>;
+}
 
 export function ViewsBar() {
   const { project, selectedViewId, setSelectedViewId, createView, deleteView } = useProject();
@@ -57,9 +64,7 @@ export function ViewsBar() {
             className={`view-tab ${v.id === selectedViewId ? "view-tab-active" : ""}`}
             onClick={() => setSelectedViewId(v.id)}
           >
-            <span className="view-tab-thumb">
-              {v.hasScreenshot && <img src={imageUrl(v.screenshotImageId)} alt="" />}
-            </span>
+            <ViewThumb view={v} />
             <span className="view-tab-text">
               <span className="view-tab-name">{v.name}</span>
               <span className="view-tab-meta">

@@ -89,11 +89,25 @@ export interface StyleSettings {
 
 export interface Project {
   id: string;
+  ownerId?: string;
   name: string;
+  createdAt?: string;
+  updatedAt?: string;
   style: StyleSettings;
   assets: Asset[];
   views: View[];
   styleAnchorRenderId: string | null;
+}
+
+// Lightweight projection returned by GET /api/projects for the picker.
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  viewCount: number;
+  renderCount: number;
+  thumbnailImageId?: string;
 }
 
 export interface ApiErrorBody {

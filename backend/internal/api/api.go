@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"render-ai/backend/internal/config"
 	"render-ai/backend/internal/inventory"
@@ -19,29 +20,45 @@ import (
 // contract ("CORS is open to http://localhost:5173").
 const allowedOrigin = "http://localhost:5173"
 
-// Server holds everything the HTTP handlers need: the in-memory store, the
-// image renderer, the text model for inventory/preservation, and config.
+// Server holds everything the HTTP handlers need: the structured-data
+// repository, the blob store for image bytes, the image renderer, the text
+// model for inventory/preservation, and config.
 type Server struct {
-	store      *store.Store
+	repo       store.Repository
+	blobs      store.BlobStore
 	renderer   render.Renderer
 	textModel  *inventory.TextModel
 	cfg        *config.Config
 	promptPath string
 	roleCache  *roleCache
+	// serveBlobsLocally is true when the blob store is the in-memory one, whose
+	// SignedURL points back at GET /api/images/{id}. That public byte-serving
+	// route is then registered. With GCS, images load directly from signed GCS
+	// URLs, so the public route is omitted (it would otherwise stream private
+	// bytes to anyone holding the blob UUID).
+	serveBlobsLocally bool
 }
+
+// signedURLTTL is how long the signed URLs handed to the browser stay valid.
+// Long enough to keep a working session's images loading without refetching,
+// short enough that a leaked URL soon stops working.
+const signedURLTTL = time.Hour
 
 // NewServer builds a Server. textModel may be nil in environments without
 // Vertex AI credentials; inventory-generation and preservation-check
 // endpoints will then return a clear error instead of panicking.
-func NewServer(st *store.Store, renderer render.Renderer, textModel *inventory.TextModel, cfg *config.Config, promptPath string) *Server {
+func NewServer(repo store.Repository, blobs store.BlobStore, renderer render.Renderer, textModel *inventory.TextModel, cfg *config.Config, promptPath string) *Server {
 	initAuth(cfg.Auth.ClerkSecretKey)
+	_, localBlobs := blobs.(*store.MemoryStore)
 	return &Server{
-		store:      st,
-		renderer:   renderer,
-		textModel:  textModel,
-		cfg:        cfg,
-		promptPath: promptPath,
-		roleCache:  newRoleCache(),
+		repo:              repo,
+		blobs:             blobs,
+		renderer:          renderer,
+		textModel:         textModel,
+		cfg:               cfg,
+		promptPath:        promptPath,
+		roleCache:         newRoleCache(),
+		serveBlobsLocally: localBlobs,
 	}
 }
 
@@ -64,34 +81,54 @@ func NewServer(st *store.Store, renderer render.Renderer, textModel *inventory.T
 func (s *Server) Router() http.Handler {
 	mux := http.NewServeMux()
 
+	// Not project-scoped: create takes no pid, list is filtered to the caller's
+	// own projects inside the handler.
 	mux.HandleFunc("POST /api/projects", s.handle(s.requireAdmin(s.createProject)))
-	mux.HandleFunc("GET /api/projects/{pid}", s.handle(s.requireAdmin(s.getProject)))
-	mux.HandleFunc("PUT /api/projects/{pid}/style", s.handle(s.requireAdmin(s.updateStyle)))
-	mux.HandleFunc("POST /api/projects/{pid}/anchor", s.handle(s.requireAdmin(s.setAnchor)))
+	mux.HandleFunc("GET /api/projects", s.handle(s.requireAdmin(s.listProjects)))
 
-	mux.HandleFunc("POST /api/projects/{pid}/assets", s.handle(s.requireAdmin(s.createAsset)))
-	mux.HandleFunc("PUT /api/projects/{pid}/assets/{aid}", s.handle(s.requireAdmin(s.updateAsset)))
-	mux.HandleFunc("DELETE /api/projects/{pid}/assets/{aid}", s.handle(s.requireAdmin(s.deleteAsset)))
-	mux.HandleFunc("POST /api/projects/{pid}/assets/{aid}/reference", s.handle(s.requireAdmin(s.uploadAssetReference)))
+	// owned wraps a project-scoped handler with requireAdmin + the per-user
+	// ownership gate, so every {pid} route below is reachable only by the
+	// project's owner.
+	owned := func(fn handlerFunc) http.HandlerFunc {
+		return s.handle(s.requireAdmin(s.requireOwner(fn)))
+	}
 
-	mux.HandleFunc("POST /api/projects/{pid}/views", s.handle(s.requireAdmin(s.createView)))
-	mux.HandleFunc("GET /api/projects/{pid}/views/{vid}", s.handle(s.requireAdmin(s.getView)))
-	mux.HandleFunc("DELETE /api/projects/{pid}/views/{vid}", s.handle(s.requireAdmin(s.deleteView)))
-	mux.HandleFunc("PUT /api/projects/{pid}/views/{vid}/inventory", s.handle(s.requireAdmin(s.putInventory)))
-	mux.HandleFunc("POST /api/projects/{pid}/views/{vid}/inventory/generate", s.handle(s.requireAdmin(s.generateInventory)))
+	mux.HandleFunc("GET /api/projects/{pid}", owned(s.getProject))
+	mux.HandleFunc("PUT /api/projects/{pid}/style", owned(s.updateStyle))
+	mux.HandleFunc("POST /api/projects/{pid}/anchor", owned(s.setAnchor))
 
-	mux.HandleFunc("POST /api/projects/{pid}/views/{vid}/masks", s.handle(s.requireAdmin(s.createMask)))
-	mux.HandleFunc("PUT /api/projects/{pid}/views/{vid}/masks/{mid}", s.handle(s.requireAdmin(s.updateMask)))
-	mux.HandleFunc("PUT /api/projects/{pid}/views/{vid}/masks/{mid}/bitmap", s.handle(s.requireAdmin(s.uploadMaskBitmap)))
-	mux.HandleFunc("DELETE /api/projects/{pid}/views/{vid}/masks/{mid}", s.handle(s.requireAdmin(s.deleteMask)))
+	mux.HandleFunc("POST /api/projects/{pid}/assets", owned(s.createAsset))
+	mux.HandleFunc("PUT /api/projects/{pid}/assets/{aid}", owned(s.updateAsset))
+	mux.HandleFunc("DELETE /api/projects/{pid}/assets/{aid}", owned(s.deleteAsset))
+	mux.HandleFunc("POST /api/projects/{pid}/assets/{aid}/reference", owned(s.uploadAssetReference))
 
-	mux.HandleFunc("POST /api/projects/{pid}/views/{vid}/render", s.handle(s.requireAdmin(s.renderView)))
+	mux.HandleFunc("POST /api/projects/{pid}/views", owned(s.createView))
+	mux.HandleFunc("GET /api/projects/{pid}/views/{vid}", owned(s.getView))
+	mux.HandleFunc("DELETE /api/projects/{pid}/views/{vid}", owned(s.deleteView))
+	mux.HandleFunc("PUT /api/projects/{pid}/views/{vid}/inventory", owned(s.putInventory))
+	mux.HandleFunc("POST /api/projects/{pid}/views/{vid}/inventory/generate", owned(s.generateInventory))
+
+	mux.HandleFunc("POST /api/projects/{pid}/views/{vid}/masks", owned(s.createMask))
+	mux.HandleFunc("PUT /api/projects/{pid}/views/{vid}/masks/{mid}", owned(s.updateMask))
+	mux.HandleFunc("PUT /api/projects/{pid}/views/{vid}/masks/{mid}/bitmap", owned(s.uploadMaskBitmap))
+	mux.HandleFunc("DELETE /api/projects/{pid}/views/{vid}/masks/{mid}", owned(s.deleteMask))
+
+	mux.HandleFunc("POST /api/projects/{pid}/views/{vid}/render", owned(s.renderView))
+
+	// Mint a signed URL for an image blob. Project-scoped so the ownership gate
+	// above enforces per-user access; the {id} is the blob's own id.
+	mux.HandleFunc("GET /api/projects/{pid}/images/{id}/url", owned(s.getImageURL))
 
 	// Any signed-in user, not admin-gated - see the doc comment above.
 	mux.HandleFunc("GET /api/me", s.handle(s.requireAuth(s.getMe)))
 
-	// Left unauthenticated - see the doc comment above.
-	mux.HandleFunc("GET /api/images/{id}", s.handle(s.getImage))
+	// The public byte-serving route is only registered for the in-memory blob
+	// store (local dev), whose signed URLs point back here. With GCS, images
+	// load directly from signed GCS URLs and this route is intentionally absent
+	// so private bytes are never served by blob UUID alone.
+	if s.serveBlobsLocally {
+		mux.HandleFunc("GET /api/images/{id}", s.handle(s.getImage))
+	}
 
 	return withCORS(mux)
 }

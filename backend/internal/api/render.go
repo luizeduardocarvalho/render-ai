@@ -79,7 +79,7 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 
 	totalStart := time.Now()
 
-	project, err := s.store.GetProject(pid)
+	project, err := s.repo.GetProject(pid)
 	if err != nil {
 		return mapStoreErr(err, "project %s not found", pid)
 	}
@@ -91,7 +91,7 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 		return badRequest("view %s has no screenshot", vid)
 	}
 
-	screenshotBlob, ok := s.store.GetBlob(view.ScreenshotImageID)
+	screenshotBlob, ok := s.blobs.GetBlob(view.ScreenshotImageID)
 	if !ok {
 		return internalErr("screenshot blob missing for view %s", vid)
 	}
@@ -124,8 +124,8 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 
 	hasAnchor, anchorIndex := false, 0
 	if project.StyleAnchorRenderID != nil {
-		if anchorRender, err := s.store.FindRender(pid, *project.StyleAnchorRenderID); err == nil {
-			if anchorBlob, ok := s.store.GetBlob(anchorRender.ResultImageID); ok {
+		if anchorRender, err := s.repo.FindRender(pid, *project.StyleAnchorRenderID); err == nil {
+			if anchorBlob, ok := s.blobs.GetBlob(anchorRender.ResultImageID); ok {
 				images = append(images, anchorBlob.Data)
 				hasAnchor = true
 				anchorIndex = len(images)
@@ -204,7 +204,7 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 		if mimeType == "" {
 			mimeType = "image/png"
 		}
-		resultImageID := s.store.PutBlob(result.ImageData, mimeType)
+		resultImageID := s.blobs.PutBlob(result.ImageData, mimeType)
 
 		promptTokens, outputTokens := result.PromptTokens, result.OutputTokens
 
@@ -253,7 +253,7 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 		log.Printf("render: view=%s variation=%d/%d model=%s resolution=%s regions=%d anchor=%v imageCallMs=%d totalMs=%d promptTokens=%d outputTokens=%d costUsd=%s",
 			vid, i+1, variations, modelID, resolution, len(qualifying), hasAnchor, imageCallMs, totalMs, promptTokens, outputTokens, costDisplay)
 
-		addedRec, err := s.store.AddRender(pid, vid, rec)
+		addedRec, err := s.repo.AddRender(pid, vid, rec)
 		if err != nil {
 			return mapStoreErr(err, "view %s not found", vid)
 		}
@@ -285,7 +285,7 @@ func (s *Server) buildRegionMap(screenshotImg image.Image, qualifying []qualifyi
 	regions := make([]geometry.Region, 0, len(qualifying))
 	bitmaps := make([]image.Image, 0, len(qualifying))
 	for _, q := range qualifying {
-		bitmapBlob, ok := s.store.GetBlob(q.mask.ID)
+		bitmapBlob, ok := s.blobs.GetBlob(q.mask.ID)
 		if !ok {
 			return nil, nil, internalErr("mask bitmap blob missing for mask %s", q.mask.ID)
 		}
@@ -327,7 +327,7 @@ func (s *Server) appendAssetRefs(images [][]byte, qualifying []qualifyingMask, v
 			dropped++
 			continue
 		}
-		refBlob, ok := s.store.GetBlob(q.asset.ReferenceImageID)
+		refBlob, ok := s.blobs.GetBlob(q.asset.ReferenceImageID)
 		if !ok {
 			continue
 		}

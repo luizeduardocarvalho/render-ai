@@ -18,14 +18,27 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) error {
 	if req.Name == "" {
 		return badRequest("name is required")
 	}
-	p := s.store.CreateProject(req.Name)
+	ownerID, _ := userIDFromContext(r.Context())
+	p := s.repo.CreateProject(ownerID, req.Name)
 	writeJSON(w, http.StatusOK, p)
+	return nil
+}
+
+// listProjects returns the caller's own projects as lightweight summaries for
+// the project picker.
+func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) error {
+	ownerID, _ := userIDFromContext(r.Context())
+	summaries, err := s.repo.ListProjects(ownerID)
+	if err != nil {
+		return internalErr("listing projects: %v", err)
+	}
+	writeJSON(w, http.StatusOK, summaries)
 	return nil
 }
 
 func (s *Server) getProject(w http.ResponseWriter, r *http.Request) error {
 	pid := r.PathValue("pid")
-	p, err := s.store.GetProject(pid)
+	p, err := s.repo.GetProject(pid)
 	if err != nil {
 		return mapStoreErr(err, "project %s not found", pid)
 	}
@@ -39,7 +52,7 @@ func (s *Server) updateStyle(w http.ResponseWriter, r *http.Request) error {
 	if err := readJSON(r, &style); err != nil {
 		return err
 	}
-	p, err := s.store.UpdateStyle(pid, style)
+	p, err := s.repo.UpdateStyle(pid, style)
 	if err != nil {
 		return mapStoreErr(err, "project %s not found", pid)
 	}
@@ -57,7 +70,7 @@ func (s *Server) setAnchor(w http.ResponseWriter, r *http.Request) error {
 	if err := readJSON(r, &req); err != nil {
 		return err
 	}
-	p, err := s.store.SetAnchor(pid, req.RenderID)
+	p, err := s.repo.SetAnchor(pid, req.RenderID)
 	if err != nil {
 		return mapStoreErr(err, "project or render not found")
 	}

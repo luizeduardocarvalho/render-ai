@@ -17,6 +17,34 @@ type Config struct {
 	Pricing      PricingConfig      `yaml:"pricing"`
 	Preservation PreservationConfig `yaml:"preservation"`
 	Auth         AuthConfig         `yaml:"auth"`
+	Storage      StorageConfig      `yaml:"storage"`
+}
+
+// StorageConfig selects and configures where projects and image blobs are
+// persisted.
+//
+// Backend is "memory" (the default - in-process, lost on restart, for local
+// dev) or "firestore" (Cloud Firestore for structured data + a GCS bucket for
+// blobs, for the deployed backend). The firestore backend reuses the GCP
+// project from vertex.project.
+type StorageConfig struct {
+	Backend string `yaml:"backend"`
+	// Project is the GCP project that owns the Firestore database and blob
+	// bucket. Empty means auto-detect from the runtime credentials / metadata
+	// server (the ambient Cloud Run project). This is deliberately separate from
+	// vertex.project, which may point at a different (cross-project) project for
+	// Vertex AI.
+	Project string `yaml:"project"`
+	// BlobBucket is the GCS bucket name that holds image blobs (firestore
+	// backend only). Required when Backend is "firestore".
+	BlobBucket string `yaml:"blobBucket"`
+	// FirestoreDatabase is the Firestore database id. Empty means the project's
+	// default database ("(default)").
+	FirestoreDatabase string `yaml:"firestoreDatabase"`
+	// SignerServiceAccount is the service-account email used to sign GCS URLs
+	// via the IAM credentials API. Empty means auto-detect from the runtime
+	// service account (the normal case on Cloud Run).
+	SignerServiceAccount string `yaml:"signerServiceAccount"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -105,6 +133,24 @@ func Load(path string) (*Config, error) {
 	}
 	if v := os.Getenv("CLERK_SECRET_KEY"); v != "" {
 		cfg.Auth.ClerkSecretKey = v
+	}
+	if v := os.Getenv("STORAGE"); v != "" {
+		cfg.Storage.Backend = v
+	}
+	if v := os.Getenv("STORAGE_PROJECT"); v != "" {
+		cfg.Storage.Project = v
+	}
+	if v := os.Getenv("BLOB_BUCKET"); v != "" {
+		cfg.Storage.BlobBucket = v
+	}
+	if v := os.Getenv("FIRESTORE_DATABASE"); v != "" {
+		cfg.Storage.FirestoreDatabase = v
+	}
+	if v := os.Getenv("SIGNER_SERVICE_ACCOUNT"); v != "" {
+		cfg.Storage.SignerServiceAccount = v
+	}
+	if cfg.Storage.Backend == "" {
+		cfg.Storage.Backend = "memory"
 	}
 
 	// Cloud Run (and most PaaS platforms) inject PORT and require the server to

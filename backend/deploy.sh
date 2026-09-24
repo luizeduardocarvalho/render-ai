@@ -29,27 +29,30 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 #   per-request auth; the API's own Clerk auth (internal/api/auth.go) still
 #   gates every route except the deliberately-public GET /api/images/{id}.
 #
-# --min-instances=0 --max-instances=1
-#   This is an in-memory PoC: internal/store keeps all state (projects,
-#   assets, views, masks, rendered images) in the process, with no database.
-#   Pinning min=max=1 keeps exactly one instance alive at all times, so state
-#   survives between requests and never gets split or lost across replicas.
-#   Caveat: this means no scale-to-zero savings and no horizontal scaling -
-#   a redeploy or crash still loses all in-memory state, and a spike in
-#   traffic cannot be absorbed by adding instances. See DEPLOY.md.
+# --min-instances=0 --max-instances=4
+#   With STORAGE=firestore, all state lives in Firestore + GCS, not in the
+#   process, so requests can land on any instance and a redeploy/crash loses
+#   nothing. The old in-memory PoC single-instance pin is no longer needed;
+#   Cloud Run can scale (including to zero) normally. See DEPLOY.md. Cold
+#   starts now open the Firestore/GCS clients; if first-request latency on the
+#   render path matters, bump --min-instances to 1.
 #
 # --timeout=300
 #   Generous per-request timeout for synchronous Vertex AI renders.
 #   cfg.Server.RenderTimeoutSec (config.yaml) is 180s server-side; this Cloud
 #   Run request timeout must stay comfortably above that.
 #
-# --set-env-vars GOOGLE_CLOUD_PROJECT=labflux-project,GOOGLE_CLOUD_LOCATION=global,GOOGLE_CLOUD_TEXT_LOCATION=us-central1
+# --set-env-vars GOOGLE_CLOUD_PROJECT=labflux-project,...,STORAGE=firestore,BLOB_BUCKET=render-ai-studio-images
 #   Vertex AI stays in the existing labflux-project (models/credits already
 #   enabled there), accessed cross-project from this Cloud Run service.
 #   LOCATION=global is required for the Gemini 3 image models; TEXT_LOCATION
 #   =us-central1 is required because text models are not served from
 #   "global" (see backend/config/config.yaml comments and
 #   internal/config/config.go).
+#   STORAGE=firestore selects the Firestore + GCS persistence backend (default
+#   "memory" is in-process, local-dev only). BLOB_BUCKET must match the bucket
+#   created in DEPLOY.md 1b. STORAGE_PROJECT defaults to the ambient Cloud Run
+#   project (render-ai-studio), independent of GOOGLE_CLOUD_PROJECT.
 #
 # --set-secrets CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest
 #   Pulled from Secret Manager at container start time rather than baked
@@ -68,8 +71,8 @@ gcloud run deploy render-ai-api \
   --region us-central1 \
   --project render-ai-studio \
   --allow-unauthenticated \
-  --min-instances=0 --max-instances=1 \
+  --min-instances=0 --max-instances=4 \
   --timeout=300 \
-  --set-env-vars GOOGLE_CLOUD_PROJECT=labflux-project,GOOGLE_CLOUD_LOCATION=global,GOOGLE_CLOUD_TEXT_LOCATION=us-central1 \
+  --set-env-vars GOOGLE_CLOUD_PROJECT=labflux-project,GOOGLE_CLOUD_LOCATION=global,GOOGLE_CLOUD_TEXT_LOCATION=us-central1,STORAGE=firestore,BLOB_BUCKET=render-ai-studio-images \
   --set-secrets CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest \
   --service-account "render-ai-api@render-ai-studio.iam.gserviceaccount.com"

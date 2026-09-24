@@ -1,8 +1,9 @@
 import Konva from "konva";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Circle, Image as KonvaImage, Layer, Stage } from "react-konva";
-import { imageUrl, maskBitmapUrl } from "../../api";
+import { fetchSignedImageUrl } from "../../api";
 import { useImage } from "../../hooks/useImage";
+import { useSignedImageUrl } from "../../hooks/useSignedImageUrl";
 import { useProject } from "../../state/ProjectContext";
 import type { Mask, View } from "../../types";
 import {
@@ -54,8 +55,9 @@ export function MaskEditor({ view }: { view: View }) {
     setSelectedMaskId(view.masks[0]?.id ?? null);
   }, [view.masks, selectedMaskId]);
 
+  const screenshotUrl = useSignedImageUrl(view.hasScreenshot ? view.screenshotImageId : null);
   const { image: screenshotImg, loading: screenshotLoading, error: screenshotError } = useImage(
-    view.hasScreenshot ? imageUrl(view.screenshotImageId) : null,
+    screenshotUrl ?? null,
   );
 
   const canvasStore = useRef(new Map<string, CanvasEntry>());
@@ -137,7 +139,19 @@ export function MaskEditor({ view }: { view: View }) {
           if (e) e.bitmapState = "none";
           setEditorError("Failed to load a mask bitmap from the server.");
         };
-        img.src = maskBitmapUrl(mask.id);
+        // Resolve a signed URL for the mask's bitmap blob, then load it. crossOrigin
+        // is already set so the loaded image can be read back into a canvas.
+        if (project) {
+          void fetchSignedImageUrl(project.id, mask.id)
+            .then((url) => {
+              img.src = url;
+            })
+            .catch(() => {
+              const e = store.get(mask.id);
+              if (e) e.bitmapState = "none";
+              setEditorError("Failed to load a mask bitmap from the server.");
+            });
+        }
       } else if (entry.lastColor !== color) {
         recolorAll(entry.display, entry.raw, color);
         entry.lastColor = color;

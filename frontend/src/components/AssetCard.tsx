@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { ApiError, imageUrl } from "../api";
+import { ApiError } from "../api";
+import { useSignedImageUrl } from "../hooks/useSignedImageUrl";
 import { useProject } from "../state/ProjectContext";
 import type { Asset } from "../types";
 
@@ -18,6 +19,7 @@ export function AssetCard({ asset }: AssetCardProps) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const referenceUrl = useSignedImageUrl(asset.hasReferenceImage ? asset.referenceImageId : null);
 
   async function handleSave() {
     if (!name.trim()) return;
@@ -107,8 +109,8 @@ export function AssetCard({ asset }: AssetCardProps) {
   return (
     <li className="asset-card">
       <div className="asset-card-thumb" style={{ borderColor: asset.color }}>
-        {asset.hasReferenceImage ? (
-          <img src={imageUrl(asset.referenceImageId)} alt={asset.name} />
+        {asset.hasReferenceImage && referenceUrl ? (
+          <img src={referenceUrl} alt={asset.name} />
         ) : (
           <span className="asset-card-thumb-empty">No photo</span>
         )}

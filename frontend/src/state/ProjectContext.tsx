@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -11,14 +12,26 @@ import type {
   Asset,
   Mask,
   Project,
+  ProjectSummary,
   Render,
   RenderRequest,
   StyleSettings,
   View,
 } from "../types";
 
+const LAST_PROJECT_KEY = "render-ai:lastProjectId";
+
 interface ProjectContextValue {
   project: Project | null;
+
+  // Project selection (the picker).
+  projects: ProjectSummary[] | null;
+  projectsLoading: boolean;
+  projectsError: string | null;
+  refreshProjects: () => Promise<void>;
+  selectProject: (id: string) => Promise<void>;
+  closeProject: () => void;
+
   selectedViewId: string | null;
   selectedView: View | null;
   setSelectedViewId: (id: string | null) => void;
@@ -65,16 +78,82 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [project, setProject] = useState<Project | null>(null);
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
 
+  const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+
   const requireProject = useCallback(() => {
     if (!project) throw new Error("No active project");
     return project;
   }, [project]);
 
-  const createProjectFn = useCallback(async (name: string) => {
-    const p = await api.createProject(name);
+  const refreshProjectsFn = useCallback(async () => {
+    setProjectsLoading(true);
+    setProjectsError(null);
+    try {
+      setProjects(await api.listProjects());
+    } catch (err) {
+      setProjectsError(err instanceof Error ? err.message : "Failed to load projects");
+    } finally {
+      setProjectsLoading(false);
+    }
+  }, []);
+
+  // Load the project list once on mount.
+  useEffect(() => {
+    void refreshProjectsFn();
+  }, [refreshProjectsFn]);
+
+  const selectProjectFn = useCallback(async (id: string) => {
+    const p = await api.getProject(id);
     setProject(p);
     setSelectedViewId(p.views[0]?.id ?? null);
+    try {
+      localStorage.setItem(LAST_PROJECT_KEY, id);
+    } catch {
+      // ignore storage failures (private mode, quota) - selection still works.
+    }
   }, []);
+
+  // Auto-open the last project once the list has loaded, if it still exists.
+  useEffect(() => {
+    if (project || projects === null) return;
+    let lastId: string | null = null;
+    try {
+      lastId = localStorage.getItem(LAST_PROJECT_KEY);
+    } catch {
+      lastId = null;
+    }
+    if (lastId && projects.some((p) => p.id === lastId)) {
+      void selectProjectFn(lastId);
+    }
+  }, [project, projects, selectProjectFn]);
+
+  const closeProjectFn = useCallback(() => {
+    setProject(null);
+    setSelectedViewId(null);
+    try {
+      localStorage.removeItem(LAST_PROJECT_KEY);
+    } catch {
+      // ignore
+    }
+    void refreshProjectsFn();
+  }, [refreshProjectsFn]);
+
+  const createProjectFn = useCallback(
+    async (name: string) => {
+      const p = await api.createProject(name);
+      setProject(p);
+      setSelectedViewId(p.views[0]?.id ?? null);
+      try {
+        localStorage.setItem(LAST_PROJECT_KEY, p.id);
+      } catch {
+        // ignore
+      }
+      void refreshProjectsFn();
+    },
+    [refreshProjectsFn],
+  );
 
   const updateStyleFn = useCallback(
     async (style: StyleSettings) => {
@@ -267,6 +346,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const value: ProjectContextValue = {
     project,
+    projects,
+    projectsLoading,
+    projectsError,
+    refreshProjects: refreshProjectsFn,
+    selectProject: selectProjectFn,
+    closeProject: closeProjectFn,
     selectedViewId,
     selectedView,
     setSelectedViewId,

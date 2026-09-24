@@ -1,8 +1,13 @@
 # API Contract (frontend <-> backend)
 
 This is the single source of truth both the Go backend and the React frontend build against.
-All state is **in memory on the backend, keyed by project ID**. Restarting the server drops everything.
-The frontend holds its own working copy and syncs via these endpoints.
+
+State is **persisted per user**. The deployed backend stores structured data in
+Firestore and image blobs in a GCS bucket (`STORAGE=firestore`); local dev uses
+an in-memory store (`STORAGE=memory`, the default) that is lost on restart. Each
+project has an `ownerId` (the Clerk user id); every project-scoped route is
+authorized against it, and a caller only ever sees their own projects. The
+frontend holds a working copy of the open project and syncs via these endpoints.
 
 Base URL: `http://localhost:8080`. All JSON unless noted. CORS is open to `http://localhost:5173`.
 
@@ -94,11 +99,26 @@ interface StyleSettings {
 
 interface Project {
   id: string;
+  ownerId: string;         // Clerk user id of the owner (server-set)
+  orgId: string | null;    // reserved for future org scoping; always null today
   name: string;
+  createdAt: string;       // ISO
+  updatedAt: string;       // ISO
   style: StyleSettings;
   assets: Asset[];
   views: View[];
   styleAnchorRenderId: string | null; // which render (in any view) is the anchor
+}
+
+// Lightweight projection returned by GET /api/projects (the project picker).
+interface ProjectSummary {
+  id: string;
+  name: string;
+  createdAt: string;       // ISO
+  updatedAt: string;       // ISO
+  viewCount: number;
+  renderCount: number;
+  thumbnailImageId?: string; // first view's screenshot blob id, if any
 }
 ```
 
@@ -106,13 +126,30 @@ interface Project {
 
 Images are never inlined in JSON. Each image is a server-side blob with an ID.
 - Upload: `multipart/form-data` with a `file` field -> returns `{ "imageId": "..." }` where relevant, or the parent object is returned with the id filled in.
-- Fetch: `GET /api/images/{imageId}` -> raw PNG/JPEG bytes with correct `Content-Type`.
 - Masks use the same blob mechanism but are always PNG (white-on-black) at screenshot resolution.
+
+**Reading images (signed URLs).** The frontend never hardcodes a blob's URL.
+To load a blob it first asks for a signed URL, then uses that as the `<img src>`
+(or fetches it for download):
+
+- `GET /api/projects/{pid}/images/{imageId}/url` -> `{ "url": "..." }`
+
+This route is authenticated and ownership-gated via `{pid}`, so per-user access
+is enforced when the URL is minted. In production the URL is a short-lived (~1h)
+V4-signed GCS URL loaded directly from the bucket; in local dev (`memory`
+backend) it is the same-origin `/api/images/{imageId}` path. Signed URLs must be
+used verbatim - do not append query params to a GCS signed URL (it breaks the
+signature); to refresh, request a new one.
+
+- `GET /api/images/{imageId}` -> raw bytes. **Only registered for the in-memory
+  (dev) backend**, where the signed URL above points back at it. With the GCS
+  backend this route does not exist - images load straight from signed GCS URLs.
 
 ## Endpoints
 
 ### Projects
-- `POST   /api/projects` `{ name }` -> `Project`
+- `GET    /api/projects` -> `ProjectSummary[]` (the caller's own projects, most-recently-updated first)
+- `POST   /api/projects` `{ name }` -> `Project` (owner set to the caller)
 - `GET    /api/projects/{pid}` -> `Project`
 - `PUT    /api/projects/{pid}/style` `StyleSettings` -> `Project`
 - `POST   /api/projects/{pid}/anchor` `{ renderId | null }` -> `Project`  (set/clear style anchor)
