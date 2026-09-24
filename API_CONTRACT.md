@@ -70,14 +70,13 @@ interface RenderMetrics {
   regionCount: number;
   anchorUsed: boolean;
   imageCallMs: number;     // latency of the image generation call only
-  totalMs: number;         // includes inventory/check calls done for this render
-  // promptTokens/outputTokens/thoughtsTokens are summed across every model
-  // call this render made: the image generation call, plus the text-model
-  // preservation check if it ran. outputTokens is TEXT output only - it
-  // never includes the image call's own generated-image tokens, which are
-  // priced per-image (see PricingResponse) rather than per-token, to avoid
-  // double-counting them at the text/thinking output rate. thoughtsTokens is
-  // the thinking-token portion, broken out for visibility; it's already
+  totalMs: number;         // includes the preservation check's edge-IoU compute, if it ran
+  // promptTokens/outputTokens/thoughtsTokens are from the image generation
+  // call only. outputTokens is TEXT output only - it never includes the
+  // image call's own generated-image tokens, which are priced per-image
+  // (see PricingResponse) rather than per-token, to avoid double-counting
+  // them at the text/thinking output rate. thoughtsTokens is the
+  // thinking-token portion, broken out for visibility; it's already
   // included in whatever estimatedCostUsd charges at the output rate.
   promptTokens?: number;
   outputTokens?: number;
@@ -88,12 +87,6 @@ interface RenderMetrics {
 interface PreservationReport {
   edgeScore: number;       // 0..1 edge IoU (dilated, masked regions excluded)
   edgeFlag: boolean;       // true if below threshold
-  inventory: {
-    removed: string[];
-    added: string[];
-    moved: string[];
-    raw?: string;          // model's raw notes
-  };
 }
 
 interface View {

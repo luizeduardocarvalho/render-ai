@@ -52,17 +52,9 @@ export interface RenderMetrics {
   estimatedCostUsd?: number;
 }
 
-export interface PreservationInventory {
-  removed: string[];
-  added: string[];
-  moved: string[];
-  raw?: string;
-}
-
 export interface PreservationReport {
   edgeScore: number;
   edgeFlag: boolean;
-  inventory: PreservationInventory;
 }
 
 export interface Render {

@@ -74,17 +74,6 @@ export function MetricsPanel({ render }: { render: Render }) {
               {preservation.edgeFlag ? t("metricsPanel.belowThreshold") : ""}
             </span>
           </div>
-          <div className="preservation-lists">
-            <PreservationList label={t("metricsPanel.removed")} items={preservation.inventory.removed} tone="danger" />
-            <PreservationList label={t("metricsPanel.added")} items={preservation.inventory.added} tone="accent" />
-            <PreservationList label={t("metricsPanel.moved")} items={preservation.inventory.moved} tone="warning" />
-          </div>
-          {preservation.inventory.raw && (
-            <details className="preservation-raw">
-              <summary>{t("metricsPanel.rawNotes")}</summary>
-              <pre>{preservation.inventory.raw}</pre>
-            </details>
-          )}
         </div>
       )}
     </div>
@@ -96,37 +85,6 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="metric-item">
       <dt>{label}</dt>
       <dd>{value}</dd>
-    </div>
-  );
-}
-
-function PreservationList({
-  label,
-  items,
-  tone,
-}: {
-  label: string;
-  items: string[] | null | undefined;
-  tone: "danger" | "accent" | "warning";
-}) {
-  const { t } = useTranslation();
-  // The backend may serialize an empty diff list as null (Go nil slice), so
-  // normalize before reading .length.
-  const list = items ?? [];
-  return (
-    <div className="preservation-list">
-      <span className={`badge badge-${tone}`}>
-        {label} ({list.length})
-      </span>
-      {list.length > 0 ? (
-        <ul>
-          {list.map((item, i) => (
-            <li key={i}>{item}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="field-hint">{t("metricsPanel.none")}</p>
-      )}
     </div>
   );
 }

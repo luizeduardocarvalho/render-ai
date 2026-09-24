@@ -16,9 +16,8 @@ Per 2K render with the Pro model, with a typical request of 7 input images
 | Output image (1K or 2K) | 1,120 tokens at $120 / 1M | 0.134 | 0.69 |
 | Input images and prompt | ~5.4k tokens at $2 / 1M | 0.011 | 0.06 |
 | Thinking / text output | a few hundred tokens at $12 / 1M | ~0.005 | ~0.03 |
-| Preservation check (optional, `gemini-2.5-flash`) | ~3k in, ~300 out | ~0.002 | ~0.01 |
 | Cloud Run + Firestore | | ~0.001 | ~0.005 |
-| **Model and infrastructure** | | **≈ 0.15** | **≈ 0.80** |
+| **Model and infrastructure** | | **≈ 0.15** | **≈ 0.78** |
 | Failure and retry buffer (+10%) | | 0.015 | 0.08 |
 | Storage (GCS + backup) and image views | | ~0.004 | ~0.02 |
 | **Our cost per 2K image** | | **≈ 0.17** | **≈ 0.90** |

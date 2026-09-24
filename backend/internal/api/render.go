@@ -697,13 +697,8 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	}
 
 	if job.Request.PreservationCheck {
-		preservation, extraPromptTokens, extraOutputTokens, extraThoughtsTokens := s.runPreservationCheck(
-			ctx, assembly.screenshotImg, assembly.screenshotEdges, assembly.screenshotBlob.Data, result, assembly.view, assembly.maskBitmaps)
-		rec.Preservation = preservation
-		promptTokens += extraPromptTokens
-		outputTokens += extraOutputTokens
-		thoughtsTokens += extraThoughtsTokens
-		totalCost += renderpkg.TextCallCost(pricingTable.Text, extraPromptTokens, extraOutputTokens+extraThoughtsTokens)
+		rec.Preservation = s.runPreservationCheck(
+			assembly.screenshotImg, assembly.screenshotEdges, result, assembly.view, assembly.maskBitmaps)
 	}
 
 	totalMs := assembly.assemblyMs + time.Since(variationStart).Milliseconds()
@@ -895,27 +890,22 @@ func (s *Server) appendAssetRefs(images [][]byte, qualifying []qualifyingMask, v
 	return images, assetRefs
 }
 
-// runPreservationCheck computes the edge-IoU score and asks the text model
-// for a removed/added/moved diff. It never fails the overall render - any
-// error here is logged and reflected in the report instead. The three token
-// return values (prompt, text output, thinking) are priced separately by the
-// caller at the text model's rates.
+// runPreservationCheck computes the edge-IoU score between the screenshot
+// and the render result. It never fails the overall render - any error here
+// is logged and reflected in the report instead.
 func (s *Server) runPreservationCheck(
-	ctx context.Context,
 	screenshotImg image.Image,
 	screenshotEdges *image.Gray,
-	screenshotPNG []byte,
 	result renderpkg.RenderResult,
 	view *store.View,
 	maskBitmaps []image.Image,
-) (*store.PreservationReport, int32, int32, int32) {
+) *store.PreservationReport {
 	report := &store.PreservationReport{}
 
 	resultImg, _, err := imageutil.Decode(result.ImageData)
 	if err != nil {
 		log.Printf("preservation check: decoding render result: %v", err)
-		report.Inventory.Raw = fmt.Sprintf("preservation check failed: could not decode render result: %v", err)
-		return report, 0, 0, 0
+		return report
 	}
 
 	resized := geometry.Resize(resultImg, view.Width, view.Height)
@@ -929,33 +919,11 @@ func (s *Server) runPreservationCheck(
 	score, err := geometry.EdgeIoU(screenshotEdges, resultEdges, s.cfg.Preservation.EdgeDilationPx, exclude)
 	if err != nil {
 		log.Printf("preservation check: computing edge IoU: %v", err)
-	} else {
-		report.EdgeScore = score
-		report.EdgeFlag = score < s.cfg.Preservation.EdgeScoreFlagThreshold
+		return report
 	}
-
-	if s.textModel == nil {
-		report.Inventory.Raw = "preservation inventory check skipped: text model is not configured"
-		return report, 0, 0, 0
-	}
-
-	resultPNG, err := imageutil.EncodePNG(resized)
-	if err != nil {
-		log.Printf("preservation check: encoding resized result: %v", err)
-		return report, 0, 0, 0
-	}
-
-	diff, promptTokens, outputTokens, thoughtsTokens, err := s.textModel.CheckPreservation(ctx, screenshotPNG, resultPNG, view.Inventory)
-	if err != nil {
-		log.Printf("preservation check: text model call: %v", err)
-	}
-	report.Inventory = store.PreservationInventory{
-		Removed: nonNilStrings(diff.Removed),
-		Added:   nonNilStrings(diff.Added),
-		Moved:   nonNilStrings(diff.Moved),
-		Raw:     diff.Raw,
-	}
-	return report, promptTokens, outputTokens, thoughtsTokens
+	report.EdgeScore = score
+	report.EdgeFlag = score < s.cfg.Preservation.EdgeScoreFlagThreshold
+	return report
 }
 
 func findViewIn(p *store.Project, vid string) *store.View {
@@ -986,15 +954,6 @@ func parseHexColor(s string) (color.RGBA, error) {
 		return color.RGBA{}, err
 	}
 	return color.RGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 255}, nil
-}
-
-// nonNilStrings returns an empty (non-nil) slice for a nil input so the JSON
-// response carries [] instead of null, matching the contract's array shape.
-func nonNilStrings(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
 }
 
 func inventoryOrPlaceholder(inv string) string {

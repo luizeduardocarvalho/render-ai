@@ -29,9 +29,8 @@ library (with a reference photo), and the model places that exact product into
 the scene matching the screenshot's perspective and lighting - not a generic
 "make it photoreal" pass. Cross-angle coherence comes from pinning a chosen
 render as a style anchor reused across other views. Preservation checks (edge-IoU
-against the screenshot plus an object-inventory diff) report when a render drifts
-from the original geometry. Runs locally and in memory - no cloud storage, no
-database.
+against the screenshot) report when a render drifts from the original geometry.
+Runs locally and in memory - no cloud storage, no database.
 
 ## Operating Context
 
@@ -49,8 +48,8 @@ surface.
 
 - Models (via Google Vertex AI): "Pro" = `gemini-3-pro-image` (Nano Banana Pro),
   1K/2K/4K, up to 14 input images; "Flash" = `gemini-3.1-flash-image`
-  (Nano Banana 2), 1K only; a text model (`gemini-2.5-flash`) for object
-  inventory and preservation checks.
+  (Nano Banana 2), 1K only; a text model (`gemini-2.5-flash`) for the object
+  inventory.
 - One image model call per render. Inputs, in order: screenshot, region map,
   Canny edge map, style anchor (if set), then asset reference photos.
 - Flash supports 1K only (2K/4K is rejected). Seed is not exposed by the image

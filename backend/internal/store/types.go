@@ -131,20 +131,10 @@ type RenderMetrics struct {
 	EstimatedCostUsd *float64   `json:"estimatedCostUsd,omitempty"`
 }
 
-// PreservationInventory is the text model's structured diff of what changed
-// between the screenshot and the render.
-type PreservationInventory struct {
-	Removed []string `json:"removed"`
-	Added   []string `json:"added"`
-	Moved   []string `json:"moved"`
-	Raw     string   `json:"raw,omitempty"`
-}
-
 // PreservationReport is attached to a Render when preservationCheck was on.
 type PreservationReport struct {
-	EdgeScore float64               `json:"edgeScore"`
-	EdgeFlag  bool                  `json:"edgeFlag"`
-	Inventory PreservationInventory `json:"inventory"`
+	EdgeScore float64 `json:"edgeScore"`
+	EdgeFlag  bool    `json:"edgeFlag"`
 }
 
 // Render is one image generation result for a view.
@@ -287,9 +277,6 @@ func (r *Render) clone() *Render {
 	clone.Metrics.EstimatedCostUsd = clonePtr(r.Metrics.EstimatedCostUsd)
 	if r.Preservation != nil {
 		p := *r.Preservation
-		p.Inventory.Removed = cloneStrings(r.Preservation.Inventory.Removed)
-		p.Inventory.Added = cloneStrings(r.Preservation.Inventory.Added)
-		p.Inventory.Moved = cloneStrings(r.Preservation.Inventory.Moved)
 		clone.Preservation = &p
 	}
 	return &clone
@@ -371,17 +358,6 @@ func (v RenderJobVariation) clone() RenderJobVariation {
 	out.RenderID = clonePtr(v.RenderID)
 	out.Error = clonePtr(v.Error)
 	out.RunningAt = clonePtr(v.RunningAt)
-	return out
-}
-
-// cloneStrings copies a slice while preserving its nil-vs-empty distinction
-// (unlike append([]string(nil), s...), which collapses an empty slice to nil).
-func cloneStrings(s []string) []string {
-	if s == nil {
-		return nil
-	}
-	out := make([]string, len(s))
-	copy(out, s)
 	return out
 }
 

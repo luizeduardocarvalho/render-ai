@@ -244,12 +244,7 @@
     "notAvailable": "n/d",
     "preservationCheck": "Verificação de preservação",
     "edgeScore": "Pontuação de bordas {{score}}",
-    "belowThreshold": " - abaixo do limite",
-    "removed": "Removidos",
-    "added": "Adicionados",
-    "moved": "Movidos",
-    "none": "Nenhum",
-    "rawNotes": "Notas brutas do modelo"
+    "belowThreshold": " - abaixo do limite"
   },
   "beforeAfterSlider": {
     "before": "Antes",

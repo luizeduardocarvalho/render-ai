@@ -244,12 +244,7 @@
     "notAvailable": "n/a",
     "preservationCheck": "Preservation check",
     "edgeScore": "Edge score {{score}}",
-    "belowThreshold": " - below threshold",
-    "removed": "Removed",
-    "added": "Added",
-    "moved": "Moved",
-    "none": "None",
-    "rawNotes": "Raw model notes"
+    "belowThreshold": " - below threshold"
   },
   "beforeAfterSlider": {
     "before": "Before",
