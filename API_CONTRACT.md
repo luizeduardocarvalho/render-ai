@@ -62,8 +62,17 @@ interface RenderMetrics {
   anchorUsed: boolean;
   imageCallMs: number;     // latency of the image generation call only
   totalMs: number;         // includes inventory/check calls done for this render
+  // promptTokens/outputTokens/thoughtsTokens are summed across every model
+  // call this render made: the image generation call, plus the text-model
+  // preservation check if it ran. outputTokens is TEXT output only - it
+  // never includes the image call's own generated-image tokens, which are
+  // priced per-image (see PricingResponse) rather than per-token, to avoid
+  // double-counting them at the text/thinking output rate. thoughtsTokens is
+  // the thinking-token portion, broken out for visibility; it's already
+  // included in whatever estimatedCostUsd charges at the output rate.
   promptTokens?: number;
   outputTokens?: number;
+  thoughtsTokens?: number;
   estimatedCostUsd?: number;
 }
 
@@ -106,6 +115,9 @@ interface Project {
   name: string;
   createdAt: string;       // ISO
   updatedAt: string;       // ISO
+  deletedAt?: string;      // ISO; present only on a soft-deleted project - see DELETE below.
+                           // A caller never actually observes this: every route treats a
+                           // deleted project as 404, so it is omitted from all live responses.
   style: StyleSettings;
   assets: Asset[];
   views: View[];
@@ -121,6 +133,17 @@ interface ProjectSummary {
   viewCount: number;
   renderCount: number;
   thumbnailImageId?: string; // first view's screenshot blob id, if any
+}
+
+// Returned by GET /api/pricing - see the Pricing endpoint below.
+interface PricingResponse {
+  usdToBrl: number;
+  estimates: {
+    model: ModelChoice;
+    resolution: Resolution;
+    costUsd: number;
+    costBrl: number;
+  }[];
 }
 ```
 
@@ -153,8 +176,20 @@ signature); to refresh, request a new one.
 - `GET    /api/projects` -> `ProjectSummary[]` (the caller's own projects, most-recently-updated first)
 - `POST   /api/projects` `{ name }` -> `Project` (owner set to the caller)
 - `GET    /api/projects/{pid}` -> `Project`
+- `DELETE /api/projects/{pid}` -> `204` (**soft delete** - see below)
 - `PUT    /api/projects/{pid}/style` `StyleSettings` -> `Project`
 - `POST   /api/projects/{pid}/anchor` `{ renderId | null }` -> `Project`  (set/clear style anchor)
+
+**Deleting a project is a soft delete.** It sets `deletedAt` on the project
+doc; nothing else is touched - views, renders and their blobs are left in
+place, so the project is recoverable (by support, directly in the store) for
+30 days. From that point on every route treats the project as gone: it drops
+out of `GET /api/projects`, and `GET/PUT/POST/DELETE` on `{pid}` (and anything
+nested under it) all return 404, exactly like a project that never existed or
+belongs to someone else. Deleting an already-deleted or missing project also
+returns 404. A scheduled purge job to hard-delete projects 30+ days past
+`deletedAt` (doc + views/renders + blobs) is not implemented yet - see
+`PERSISTENCE_HANDOFF.md`.
 
 ### Assets
 - `POST   /api/projects/{pid}/assets` `{ name, description, color }` -> `Asset`
@@ -196,6 +231,17 @@ signature); to refresh, request a new one.
   Errors return `{ "error": "message" }` with a 4xx/5xx and a clear message for:
   refusal, no image returned, timeout, invalid resolution for model - but only
   when the *first* variation fails (no successes yet to return instead).
+
+### Pricing
+- `GET /api/pricing` -> `PricingResponse`. Requires only a signed-in user (like
+  `/api/me`), not project ownership - it's a static price list, not project
+  data. For every model+resolution combination the UI offers, `costUsd`/
+  `costBrl` estimate the cost of one render: the per-image price plus an
+  assumed typical request (6,000 input tokens, 500 thinking/text output
+  tokens) at that model's own rates - see `ImageCallCost` in
+  `backend/internal/render/pricing.go`. It does not reflect the actual tokens
+  of any render that has run; `Render.metrics.estimatedCostUsd` is the real
+  figure for a given render.
 
 ### Images
 - `GET /api/images/{imageId}` -> raw bytes

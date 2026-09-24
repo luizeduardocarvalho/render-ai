@@ -2,6 +2,7 @@ import type {
   Asset,
   ApiErrorBody,
   Mask,
+  PricingResponse,
   Project,
   ProjectSummary,
   Render,
@@ -166,6 +167,12 @@ export function setAnchor(pid: string, renderId: string | null): Promise<Project
   return request<Project>(`/api/projects/${pid}/anchor`, json({ renderId }));
 }
 
+// Soft delete: the project (and its views/renders/blobs) is recoverable by
+// support for 30 days, not purged immediately - see PERSISTENCE_HANDOFF.md.
+export function deleteProject(pid: string): Promise<void> {
+  return request<void>(`/api/projects/${pid}`, { method: "DELETE" });
+}
+
 // ---- Assets ----
 
 export function createAsset(
@@ -281,4 +288,22 @@ export function renderView(pid: string, vid: string, req: RenderRequest): Promis
     json(req),
     180_000,
   );
+}
+
+// ---- Pricing ----
+
+// Pricing barely changes and is the same for every user, so it's fetched at
+// most once per page load and shared from here rather than refetched by
+// every component that wants to show a cost preview.
+let pricingPromise: Promise<PricingResponse> | null = null;
+
+/** Estimated per-render cost for every model+resolution the UI offers. */
+export function getPricing(): Promise<PricingResponse> {
+  if (!pricingPromise) {
+    pricingPromise = request<PricingResponse>("/api/pricing").catch((err) => {
+      pricingPromise = null; // allow a retry on the next call
+      throw err;
+    });
+  }
+  return pricingPromise;
 }

@@ -7,3 +7,11 @@
 # Env files with real secrets (per-package .env.example stays tracked)
 .env
 .env.local
+
+# Terraform local state/cache and per-checkout variables (.terraform.lock.hcl
+# IS committed - see infra/terraform/README.md)
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/terraform.tfvars
+infra/terraform/imports.tf

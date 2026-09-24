@@ -177,6 +177,11 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 	// image-call latency.
 	assemblyMs := time.Since(totalStart).Milliseconds()
 
+	pricingTable := s.pricingTable()
+	// model is already validated to be "pro"/"flash" above, so this always
+	// resolves; an unpriced resolution still yields ok=false further down.
+	imgPricing, _ := pricingTable.ImagePricingFor(string(model))
+
 	// Each loop iteration below is one independent sample from the model
 	// (no seed is exposed, so each call already differs) and becomes its
 	// own first-class store.Render, appended to the view's history as soon
@@ -188,6 +193,19 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 		result, err := s.renderer.Render(ctx, renderReq)
 		imageCallMs := time.Since(variationStart).Milliseconds()
 		if err != nil {
+			// A failed call still bills its input (and sometimes thinking)
+			// tokens - result carries whatever usage the model reported even
+			// though no image came back. Log that estimated cost for
+			// visibility; persisting it isn't in scope yet (it will come
+			// with a jobs/credits system).
+			failCost, failCostOK := renderpkg.ImageCallCost(imgPricing, string(resolution), result.PromptTokens, result.TextOutputTokens, result.ThoughtsTokens)
+			failCostDisplay := "n/a"
+			if failCostOK {
+				failCostDisplay = fmt.Sprintf("%.4f", failCost)
+			}
+			log.Printf("render: failed attempt view=%s variation=%d/%d model=%s resolution=%s promptTokens=%d outputTokens=%d thoughtsTokens=%d costUsd=%s error=%v",
+				vid, i+1, variations, modelID, resolution, result.PromptTokens, result.TextOutputTokens, result.ThoughtsTokens, failCostDisplay, err)
+
 			if len(created) == 0 {
 				if ctx.Err() == context.DeadlineExceeded {
 					return timeoutErr("render timed out after %ds", s.cfg.Server.RenderTimeoutSec)
@@ -205,9 +223,36 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 		if mimeType == "" {
 			mimeType = "image/png"
 		}
-		resultImageID := s.blobs.PutBlob(result.ImageData, mimeType)
+		resultImageID, err := s.blobs.PutBlob(result.ImageData, mimeType)
+		if err != nil {
+			lostCost, _ := renderpkg.ImageCallCost(imgPricing, string(resolution), result.PromptTokens, result.TextOutputTokens, result.ThoughtsTokens)
+			log.Printf("render: failed attempt view=%s variation=%d/%d model=%s resolution=%s stage=store costUsd=%.4f error=%v",
+				vid, i+1, variations, modelID, resolution, lostCost, err)
+			// A model call was already paid for and returned a usable image -
+			// losing it here (unstored) is exactly the failure worth treating
+			// like a failed variation, not silently dropping it: if nothing has
+			// been saved yet this whole request fails, otherwise we stop early
+			// and hand back the variations that did make it to storage.
+			if len(created) == 0 {
+				return badGateway("storing render result: %v", err)
+			}
+			log.Printf("render: view=%s variation=%d/%d failed to store result after %d succeeded, stopping early: %v",
+				vid, i+1, variations, len(created), err)
+			break
+		}
 
-		promptTokens, outputTokens := result.PromptTokens, result.OutputTokens
+		// promptTokens/outputTokens/thoughtsTokens accumulate across both
+		// calls this render makes: the image call, and (if preservationCheck
+		// is on) the text-model preservation check. outputTokens is TEXT
+		// output only - it never includes the image call's own generated-
+		// image tokens, which are priced per-image instead (see
+		// render/pricing.go and RenderResult.TextOutputTokens).
+		promptTokens := result.PromptTokens
+		outputTokens := result.TextOutputTokens
+		thoughtsTokens := result.ThoughtsTokens
+
+		imageCost, haveCost := renderpkg.ImageCallCost(imgPricing, string(resolution), result.PromptTokens, result.TextOutputTokens, result.ThoughtsTokens)
+		totalCost := imageCost
 
 		rec := &store.Render{
 			ID:            uuid.NewString(),
@@ -220,11 +265,13 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if req.PreservationCheck {
-			preservation, extraPromptTokens, extraOutputTokens := s.runPreservationCheck(
+			preservation, extraPromptTokens, extraOutputTokens, extraThoughtsTokens := s.runPreservationCheck(
 				ctx, screenshotImg, screenshotEdges, screenshotBlob.Data, result, view, maskBitmaps)
 			rec.Preservation = preservation
 			promptTokens += extraPromptTokens
 			outputTokens += extraOutputTokens
+			thoughtsTokens += extraThoughtsTokens
+			totalCost += renderpkg.TextCallCost(pricingTable.Text, extraPromptTokens, extraOutputTokens+extraThoughtsTokens)
 		}
 
 		totalMs := assemblyMs + time.Since(variationStart).Milliseconds()
@@ -242,8 +289,12 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 			metrics.PromptTokens = &pt
 			metrics.OutputTokens = &ot
 		}
-		if cost, ok := renderpkg.EstimateCost(s.pricingTable(), string(model), string(resolution), promptTokens, outputTokens); ok {
-			metrics.EstimatedCostUsd = &cost
+		if thoughtsTokens > 0 {
+			tt := thoughtsTokens
+			metrics.ThoughtsTokens = &tt
+		}
+		if haveCost {
+			metrics.EstimatedCostUsd = &totalCost
 		}
 		rec.Metrics = metrics
 
@@ -251,8 +302,8 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 		if metrics.EstimatedCostUsd != nil {
 			costDisplay = fmt.Sprintf("%.4f", *metrics.EstimatedCostUsd)
 		}
-		log.Printf("render: view=%s variation=%d/%d model=%s resolution=%s regions=%d anchor=%v imageCallMs=%d totalMs=%d promptTokens=%d outputTokens=%d costUsd=%s",
-			vid, i+1, variations, modelID, resolution, len(qualifying), hasAnchor, imageCallMs, totalMs, promptTokens, outputTokens, costDisplay)
+		log.Printf("render: view=%s variation=%d/%d model=%s resolution=%s regions=%d anchor=%v imageCallMs=%d totalMs=%d promptTokens=%d outputTokens=%d thoughtsTokens=%d costUsd=%s",
+			vid, i+1, variations, modelID, resolution, len(qualifying), hasAnchor, imageCallMs, totalMs, promptTokens, outputTokens, thoughtsTokens, costDisplay)
 
 		addedRec, err := s.repo.AddRender(pid, vid, rec)
 		if err != nil {
@@ -350,7 +401,9 @@ func (s *Server) appendAssetRefs(images [][]byte, qualifying []qualifyingMask, v
 
 // runPreservationCheck computes the edge-IoU score and asks the text model
 // for a removed/added/moved diff. It never fails the overall render - any
-// error here is logged and reflected in the report instead.
+// error here is logged and reflected in the report instead. The three token
+// return values (prompt, text output, thinking) are priced separately by the
+// caller at the text model's rates.
 func (s *Server) runPreservationCheck(
 	ctx context.Context,
 	screenshotImg image.Image,
@@ -359,14 +412,14 @@ func (s *Server) runPreservationCheck(
 	result renderpkg.RenderResult,
 	view *store.View,
 	maskBitmaps []image.Image,
-) (*store.PreservationReport, int32, int32) {
+) (*store.PreservationReport, int32, int32, int32) {
 	report := &store.PreservationReport{}
 
 	resultImg, _, err := imageutil.Decode(result.ImageData)
 	if err != nil {
 		log.Printf("preservation check: decoding render result: %v", err)
 		report.Inventory.Raw = fmt.Sprintf("preservation check failed: could not decode render result: %v", err)
-		return report, 0, 0
+		return report, 0, 0, 0
 	}
 
 	resized := geometry.Resize(resultImg, view.Width, view.Height)
@@ -387,16 +440,16 @@ func (s *Server) runPreservationCheck(
 
 	if s.textModel == nil {
 		report.Inventory.Raw = "preservation inventory check skipped: text model is not configured"
-		return report, 0, 0
+		return report, 0, 0, 0
 	}
 
 	resultPNG, err := imageutil.EncodePNG(resized)
 	if err != nil {
 		log.Printf("preservation check: encoding resized result: %v", err)
-		return report, 0, 0
+		return report, 0, 0, 0
 	}
 
-	diff, promptTokens, outputTokens, err := s.textModel.CheckPreservation(ctx, screenshotPNG, resultPNG, view.Inventory)
+	diff, promptTokens, outputTokens, thoughtsTokens, err := s.textModel.CheckPreservation(ctx, screenshotPNG, resultPNG, view.Inventory)
 	if err != nil {
 		log.Printf("preservation check: text model call: %v", err)
 	}
@@ -406,7 +459,7 @@ func (s *Server) runPreservationCheck(
 		Moved:   nonNilStrings(diff.Moved),
 		Raw:     diff.Raw,
 	}
-	return report, promptTokens, outputTokens
+	return report, promptTokens, outputTokens, thoughtsTokens
 }
 
 func findViewIn(p *store.Project, vid string) *store.View {
@@ -457,9 +510,24 @@ func inventoryOrPlaceholder(inv string) string {
 
 func (s *Server) pricingTable() renderpkg.PricingTable {
 	return renderpkg.PricingTable{
-		ImagePro:      s.cfg.Pricing.Image.Pro,
-		ImageFlash:    s.cfg.Pricing.Image.Flash,
-		InputPerMTok:  s.cfg.Pricing.Text.InputPerMTok,
-		OutputPerMTok: s.cfg.Pricing.Text.OutputPerMTok,
+		ProImage: renderpkg.ImagePricing{
+			PerImage: s.cfg.Pricing.ProImage.PerImage,
+			TokenPricing: renderpkg.TokenPricing{
+				InputPerMTok:  s.cfg.Pricing.ProImage.InputPerMTok,
+				OutputPerMTok: s.cfg.Pricing.ProImage.OutputPerMTok,
+			},
+		},
+		FlashImage: renderpkg.ImagePricing{
+			PerImage: s.cfg.Pricing.FlashImage.PerImage,
+			TokenPricing: renderpkg.TokenPricing{
+				InputPerMTok:  s.cfg.Pricing.FlashImage.InputPerMTok,
+				OutputPerMTok: s.cfg.Pricing.FlashImage.OutputPerMTok,
+			},
+		},
+		Text: renderpkg.TokenPricing{
+			InputPerMTok:  s.cfg.Pricing.Text.InputPerMTok,
+			OutputPerMTok: s.cfg.Pricing.Text.OutputPerMTok,
+		},
+		UsdToBrl: s.cfg.Pricing.UsdToBrl,
 	}
 }

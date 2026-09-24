@@ -137,6 +137,21 @@ New deps added to `go.mod`: `cloud.google.com/go/firestore`,
    First `STORAGE=firestore` deploy should sanity-check create/list/upload/
    render/signed-URL. Watch for: a needed Firestore composite index (shouldn't
    be - views/renders are sorted in Go), and bucket CORS for canvas reads.
-3. **Optional: `DELETE /api/projects/{pid}`** - still not implemented; the
-   picker has no delete affordance yet. Add both if wanted.
-4. **Commit** - nothing is committed yet.
+3. **`DELETE /api/projects/{pid}`** - done. Owner-gated like every other
+   `{pid}` route; soft delete only (`Project.DeletedAt`) - views, renders and
+   blobs are left in place so a project is recoverable for 30 days. Every
+   `Repository` method that loads a project doc (`ProjectOwner`, `GetProject`,
+   `ListProjects`, and every mutator) treats a deleted project as not found;
+   in `FirestoreStore` this goes through one shared `projectDocFromSnap`
+   helper so a direct call can't bypass it even when the API's ownership gate
+   is skipped (auth disabled). `ListProjects` filters deleted projects in Go
+   rather than adding a Firestore `deletedAt` clause, to avoid a new composite
+   index alongside the existing `ownerId` query. The picker has a delete
+   button per card (`ProjectPicker.tsx`), confirmed via `window.confirm`,
+   naming the project and the 30-day recovery window.
+   **Not done:** a scheduled purge job to hard-delete projects whose
+   `DeletedAt` is more than 30 days old (project doc + views/renders
+   subcollections/docs + their blobs). TODO comments mark where it would go
+   in `store.go` and `firestore.go`.
+4. **Commit** - nothing is committed yet (as of this handoff; project
+   soft-delete above is a separate follow-up commit on top).

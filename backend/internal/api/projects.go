@@ -46,6 +46,19 @@ func (s *Server) getProject(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// deleteProject soft-deletes the project named by {pid}: views, renders and
+// their blobs are left in place (see store.Repository.DeleteProject), so this
+// is a 30-day-recoverable delete, not a purge. An already-deleted or missing
+// project returns 404, same as every other project-scoped route.
+func (s *Server) deleteProject(w http.ResponseWriter, r *http.Request) error {
+	pid := r.PathValue("pid")
+	if err := s.repo.DeleteProject(pid); err != nil {
+		return mapStoreErr(err, "project %s not found", pid)
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
 func (s *Server) updateStyle(w http.ResponseWriter, r *http.Request) error {
 	pid := r.PathValue("pid")
 	var style store.StyleSettings

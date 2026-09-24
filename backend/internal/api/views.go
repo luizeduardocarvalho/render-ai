@@ -19,7 +19,10 @@ func (s *Server) createView(w http.ResponseWriter, r *http.Request) error {
 		return badRequest("invalid screenshot image: %v", decErr)
 	}
 
-	imageID := s.blobs.PutBlob(data, contentTypeForFormat(format))
+	imageID, err := s.blobs.PutBlob(data, contentTypeForFormat(format))
+	if err != nil {
+		return badGateway("storing screenshot: %v", err)
+	}
 	v, err := s.repo.CreateView(pid, name, imageID, cfg.Width, cfg.Height)
 	if err != nil {
 		return mapStoreErr(err, "project %s not found", pid)

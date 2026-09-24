@@ -18,20 +18,30 @@ models:
   flashImage: "gemini-3.1-flash-image" # Nano Banana 2   (1K only)  - global endpoint
   text: "gemini-2.5-flash"             # inventory + preservation inventory check (runs on textLocation)
 
-# Fill in current prices. Used only to estimate cost for the metrics panel.
-# Image prices are per generated image at the given resolution.
+# Fill in current prices. Used to estimate cost for the metrics panel and for
+# GET /api/pricing. perImage is per generated image at the given resolution
+# (this already covers the output image's own tokens - see EstimateCost).
+# inputPerMTok/outputPerMTok are USD per 1M tokens for that model's own
+# prompt/thinking/text-output tokens.
 pricing:
-  image:
-    pro:
+  proImage: # gemini-3-pro-image (Nano Banana Pro), Vertex AI pricing page
+    perImage:
       "1K": 0.134
       "2K": 0.134
       "4K": 0.24
-    flash:
+    inputPerMTok: 2.00
+    outputPerMTok: 12.00 # text and thinking output
+  flashImage: # gemini-3.1-flash-image (Nano Banana 2)
+    perImage:
       "1K": 0.039
-  # Text model token pricing, USD per 1M tokens. Fill with current values.
+    inputPerMTok: 0.50  # TODO verify on the Vertex AI pricing page
+    outputPerMTok: 3.00 # TODO verify on the Vertex AI pricing page
+  # Text model token pricing, USD per 1M tokens (inventory + preservation check).
   text:
-    inputPerMTok: 0.10
-    outputPerMTok: 0.40
+    inputPerMTok: 0.30
+    outputPerMTok: 2.50
+  # USD -> BRL rate used only to show a BRL estimate alongside the USD one.
+  usdToBrl: 5.16
 
 preservation:
   # Edge IoU below this is flagged in the UI.

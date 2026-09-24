@@ -36,21 +36,25 @@ func newID() string { return uuid.NewString() }
 
 // --- Blobs -----------------------------------------------------------------
 
-// PutBlob stores data under a new random ID and returns it.
-func (s *MemoryStore) PutBlob(data []byte, contentType string) string {
+// PutBlob stores data under a new random ID and returns it. It never fails -
+// the map write cannot error - but returns an error to satisfy BlobStore
+// alongside GCSStore, whose writes can.
+func (s *MemoryStore) PutBlob(data []byte, contentType string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	id := newID()
 	s.blobs[id] = Blob{Data: data, ContentType: contentType}
-	return id
+	return id, nil
 }
 
 // PutBlobAt stores data under a caller-chosen ID, overwriting any existing
-// blob there. Used for mask bitmaps, whose image ID is the mask's own ID.
-func (s *MemoryStore) PutBlobAt(id string, data []byte, contentType string) {
+// blob there. Used for mask bitmaps, whose image ID is the mask's own ID. It
+// never fails; see PutBlob.
+func (s *MemoryStore) PutBlobAt(id string, data []byte, contentType string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.blobs[id] = Blob{Data: data, ContentType: contentType}
+	return nil
 }
 
 // GetBlob fetches a stored blob by ID.
@@ -97,13 +101,13 @@ func (s *MemoryStore) CreateProject(ownerID, name string) *Project {
 }
 
 // ListProjects returns lightweight summaries of every project owned by
-// ownerID, newest first.
+// ownerID, newest first. Soft-deleted projects are excluded.
 func (s *MemoryStore) ListProjects(ownerID string) ([]ProjectSummary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]ProjectSummary, 0)
 	for _, p := range s.projects {
-		if p.OwnerID != ownerID {
+		if p.OwnerID != ownerID || p.DeletedAt != nil {
 			continue
 		}
 		out = append(out, summarize(p))
@@ -112,13 +116,25 @@ func (s *MemoryStore) ListProjects(ownerID string) ([]ProjectSummary, error) {
 	return out, nil
 }
 
+// liveProject looks up a project by id, treating a soft-deleted project the
+// same as a missing one (ErrNotFound). Every method below that loads a
+// project by id goes through this single helper, so deletion is enforced
+// consistently. Callers must hold s.mu.
+func (s *MemoryStore) liveProject(pid string) (*Project, error) {
+	p, ok := s.projects[pid]
+	if !ok || p.DeletedAt != nil {
+		return nil, ErrNotFound
+	}
+	return p, nil
+}
+
 // ProjectOwner returns the owner id of a project, or ErrNotFound.
 func (s *MemoryStore) ProjectOwner(pid string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.projects[pid]
-	if !ok {
-		return "", ErrNotFound
+	p, err := s.liveProject(pid)
+	if err != nil {
+		return "", err
 	}
 	return p.OwnerID, nil
 }
@@ -127,9 +143,9 @@ func (s *MemoryStore) ProjectOwner(pid string) (string, error) {
 func (s *MemoryStore) GetProject(pid string) (*Project, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.projects[pid]
-	if !ok {
-		return nil, ErrNotFound
+	p, err := s.liveProject(pid)
+	if err != nil {
+		return nil, err
 	}
 	return p.clone(), nil
 }
@@ -139,15 +155,35 @@ func (s *MemoryStore) GetProject(pid string) (*Project, error) {
 func (s *MemoryStore) withProject(pid string, fn func(p *Project) error) (*Project, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.projects[pid]
-	if !ok {
-		return nil, ErrNotFound
+	p, err := s.liveProject(pid)
+	if err != nil {
+		return nil, err
 	}
 	if err := fn(p); err != nil {
 		return nil, err
 	}
 	p.UpdatedAt = time.Now().UTC()
 	return p.clone(), nil
+}
+
+// DeleteProject soft-deletes a project: it (and its views/renders/blobs) is
+// left in place, but liveProject makes every other method treat it as gone.
+// Returns ErrNotFound if the project doesn't exist or is already deleted.
+//
+// TODO: a scheduled purge job should hard-delete projects whose DeletedAt is
+// more than 30 days old - removing the project, its views/renders and their
+// blobs from the BlobStore. Not implemented here; see PERSISTENCE_HANDOFF.md.
+func (s *MemoryStore) DeleteProject(pid string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, err := s.liveProject(pid)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	p.DeletedAt = &now
+	p.UpdatedAt = now
+	return nil
 }
 
 // UpdateStyle replaces the project's style settings.
@@ -331,9 +367,9 @@ func (s *MemoryStore) GetView(pid, vid string) (*View, error) {
 func (s *MemoryStore) DeleteView(pid, vid string) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.projects[pid]
-	if !ok {
-		return nil, ErrNotFound
+	p, err := s.liveProject(pid)
+	if err != nil {
+		return nil, err
 	}
 	idx := -1
 	for i, v := range p.Views {
@@ -505,9 +541,9 @@ func (s *MemoryStore) AddRender(pid, vid string, r *Render) (*Render, error) {
 func (s *MemoryStore) FindRender(pid, renderID string) (*Render, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.projects[pid]
-	if !ok {
-		return nil, ErrNotFound
+	p, err := s.liveProject(pid)
+	if err != nil {
+		return nil, err
 	}
 	for _, v := range p.Views {
 		for _, r := range v.Renders {

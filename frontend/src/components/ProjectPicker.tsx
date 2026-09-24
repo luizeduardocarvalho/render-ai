@@ -30,14 +30,22 @@ function relativeTime(iso: string): string {
 }
 
 export function ProjectPicker() {
-  const { projects, projectsLoading, projectsError, refreshProjects, selectProject, createProject } =
-    useProject();
+  const {
+    projects,
+    projectsLoading,
+    projectsError,
+    refreshProjects,
+    selectProject,
+    createProject,
+    deleteProject,
+  } = useProject();
 
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const isEmpty = !projectsLoading && !projectsError && (projects?.length ?? 0) === 0;
   const showForm = creating || isEmpty;
@@ -63,6 +71,25 @@ export function ProjectPicker() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to open project");
       setOpening(null);
+    }
+  }
+
+  async function handleDelete(id: string, projectName: string) {
+    if (
+      !window.confirm(
+        `Delete project "${projectName}"? Support can recover it for 30 days, then it's gone for good.`,
+      )
+    ) {
+      return;
+    }
+    setDeleting(id);
+    setError(null);
+    try {
+      await deleteProject(id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete project");
+    } finally {
+      setDeleting(null);
     }
   }
 
@@ -148,9 +175,27 @@ export function ProjectPicker() {
                 type="button"
                 className="picker-card"
                 onClick={() => void handleOpen(p.id)}
-                disabled={opening !== null}
+                disabled={opening !== null || deleting !== null}
               >
                 <PickerThumb project={p} />
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className="picker-card-delete"
+                  title="Delete project"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleDelete(p.id, p.name);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.stopPropagation();
+                      void handleDelete(p.id, p.name);
+                    }
+                  }}
+                >
+                  {deleting === p.id ? <span className="spinner" /> : "×"}
+                </span>
                 <span className="picker-card-body">
                   <span className="picker-card-name">{p.name}</span>
                   <span className="picker-card-meta">

@@ -1,12 +1,14 @@
-import { useState } from "react";
-import { ApiError } from "../api";
+import { useEffect, useState } from "react";
+import { ApiError, getPricing } from "../api";
 import { useProject } from "../state/ProjectContext";
-import type { ModelChoice, Render, Resolution, View } from "../types";
+import type { ModelChoice, PricingResponse, Render, Resolution, View } from "../types";
 
 interface RenderControlsProps {
   view: View;
   onRendered: (renders: Render[]) => void;
 }
+
+const brlFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 export function RenderControls({ view, onRendered }: RenderControlsProps) {
   const { renderView } = useProject();
@@ -16,8 +18,26 @@ export function RenderControls({ view, onRendered }: RenderControlsProps) {
   const [variations, setVariations] = useState<1 | 2>(1);
   const [rendering, setRendering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pricing, setPricing] = useState<PricingResponse | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPricing()
+      .then((p) => {
+        if (!cancelled) setPricing(p);
+      })
+      .catch(() => {
+        // Cost preview is a nice-to-have - if pricing can't be fetched, just
+        // hide it rather than blocking or erroring the render controls.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const flashLocked = model === "flash";
+  const estimate = pricing?.estimates.find((e) => e.model === model && e.resolution === resolution);
+  const estimatedTotalBrl = estimate ? estimate.costBrl * variations : undefined;
 
   function handleModelChange(next: ModelChoice) {
     setModel(next);
@@ -121,6 +141,12 @@ export function RenderControls({ view, onRendered }: RenderControlsProps) {
             ? "Rendering... this can take up to a minute"
             : `Generate render${variations > 1 ? ` (${variations} variations)` : ""}`}
         </button>
+        {!rendering && estimatedTotalBrl !== undefined && (
+          <div className="field-hint render-cost-preview">
+            ≈ {brlFormatter.format(estimatedTotalBrl)}
+            {variations > 1 ? ` for ${variations} variations` : ""}
+          </div>
+        )}
       </div>
     </section>
   );

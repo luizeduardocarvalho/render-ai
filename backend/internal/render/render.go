@@ -20,17 +20,31 @@ type RenderRequest struct {
 	Prompt      string
 }
 
-// RenderResult is what a successful Renderer call produced.
+// RenderResult is what a Renderer call produced. ImageData is nil on a
+// failed call (refusal, no image returned, etc.), but the token fields are
+// still populated when the model reported usage - Vertex bills input (and
+// sometimes thinking) tokens even when no image comes back, so callers can
+// still estimate and log that cost. See Renderer.
 type RenderResult struct {
-	ImageData    []byte
-	MIMEType     string
+	ImageData []byte
+	MIMEType  string
+	// PromptTokens is the call's billed input tokens.
 	PromptTokens int32
-	OutputTokens int32
+	// TextOutputTokens is the call's billed TEXT output tokens only - it
+	// deliberately excludes the generated image's own tokens, which are
+	// priced per-image instead (see render/pricing.go).
+	TextOutputTokens int32
+	// ThoughtsTokens is the call's billed thinking-output tokens, if any.
+	ThoughtsTokens int32
 }
 
 // Renderer generates one image from a RenderRequest. It is an interface so
 // other backends (sequential multi-pass, SDXL, ...) can be added later
 // without touching the render assembly code.
+//
+// On error, the returned RenderResult may still carry non-zero token counts
+// (see RenderResult) - implementations should populate them whenever the
+// underlying API reported usage, even though ImageData is empty.
 type Renderer interface {
 	Render(ctx context.Context, req RenderRequest) (RenderResult, error)
 }

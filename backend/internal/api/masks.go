@@ -83,7 +83,9 @@ func (s *Server) uploadMaskBitmap(w http.ResponseWriter, r *http.Request) error 
 	// The mask's bitmap blob is stored under the mask's own ID, so
 	// GET /api/images/{maskId} fetches it - Mask has no separate image-id
 	// field in the contract.
-	s.blobs.PutBlobAt(mid, data, "image/png")
+	if err := s.blobs.PutBlobAt(mid, data, "image/png"); err != nil {
+		return badGateway("storing mask bitmap: %v", err)
+	}
 	m, err := s.repo.SetMaskBitmap(pid, vid, mid)
 	if err != nil {
 		return mapStoreErr(err, "mask %s not found", mid)

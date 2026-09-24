@@ -94,6 +94,7 @@ func (s *Server) Router() http.Handler {
 	}
 
 	mux.HandleFunc("GET /api/projects/{pid}", owned(s.getProject))
+	mux.HandleFunc("DELETE /api/projects/{pid}", owned(s.deleteProject))
 	mux.HandleFunc("PUT /api/projects/{pid}/style", owned(s.updateStyle))
 	mux.HandleFunc("POST /api/projects/{pid}/anchor", owned(s.setAnchor))
 
@@ -119,8 +120,11 @@ func (s *Server) Router() http.Handler {
 	// above enforces per-user access; the {id} is the blob's own id.
 	mux.HandleFunc("GET /api/projects/{pid}/images/{id}/url", owned(s.getImageURL))
 
-	// Any signed-in user, not admin-gated - see the doc comment above.
+	// Any signed-in user, not admin-gated - see the doc comment above. Same
+	// for pricing: it's a static price list, not project data, so it needs
+	// no ownership check either.
 	mux.HandleFunc("GET /api/me", s.handle(s.requireAuth(s.getMe)))
+	mux.HandleFunc("GET /api/pricing", s.handle(s.requireAuth(s.getPricing)))
 
 	// The public byte-serving route is only registered for the in-memory blob
 	// store (local dev), whose signed URLs point back here. With GCS, images

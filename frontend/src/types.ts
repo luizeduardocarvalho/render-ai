@@ -40,8 +40,15 @@ export interface RenderMetrics {
   anchorUsed: boolean;
   imageCallMs: number;
   totalMs: number;
+  // promptTokens/outputTokens/thoughtsTokens are summed across every model
+  // call this render made: the image call, plus the preservation check if it
+  // ran. outputTokens is TEXT output only - it excludes the image call's own
+  // generated-image tokens, which are priced per-image instead of per-token
+  // (see PricingResponse). thoughtsTokens is the thinking-token portion,
+  // already folded into whatever estimatedCostUsd charges at the output rate.
   promptTokens?: number;
   outputTokens?: number;
+  thoughtsTokens?: number;
   estimatedCostUsd?: number;
 }
 
@@ -117,6 +124,20 @@ export interface ProjectSummary {
 
 export interface ApiErrorBody {
   error: string;
+}
+
+// One model+resolution combination's estimated cost of a single render, from
+// GET /api/pricing.
+export interface PricingEstimate {
+  model: ModelChoice;
+  resolution: Resolution;
+  costUsd: number;
+  costBrl: number;
+}
+
+export interface PricingResponse {
+  usdToBrl: number;
+  estimates: PricingEstimate[];
 }
 
 export interface RenderRequest {

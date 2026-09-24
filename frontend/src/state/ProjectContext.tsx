@@ -31,6 +31,7 @@ interface ProjectContextValue {
   refreshProjects: () => Promise<void>;
   selectProject: (id: string) => Promise<void>;
   closeProject: () => void;
+  deleteProject: (id: string) => Promise<void>;
 
   selectedViewId: string | null;
   selectedView: View | null;
@@ -139,6 +140,31 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
     void refreshProjectsFn();
   }, [refreshProjectsFn]);
+
+  const deleteProjectFn = useCallback(
+    async (id: string) => {
+      await api.deleteProject(id);
+      setProjects((prev) => (prev ? prev.filter((p) => p.id !== id) : prev));
+      if (project?.id === id) {
+        setProject(null);
+        setSelectedViewId(null);
+      }
+      let lastId: string | null = null;
+      try {
+        lastId = localStorage.getItem(LAST_PROJECT_KEY);
+      } catch {
+        lastId = null;
+      }
+      if (lastId === id) {
+        try {
+          localStorage.removeItem(LAST_PROJECT_KEY);
+        } catch {
+          // ignore
+        }
+      }
+    },
+    [project?.id],
+  );
 
   const createProjectFn = useCallback(
     async (name: string) => {
@@ -352,6 +378,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     refreshProjects: refreshProjectsFn,
     selectProject: selectProjectFn,
     closeProject: closeProjectFn,
+    deleteProject: deleteProjectFn,
     selectedViewId,
     selectedView,
     setSelectedViewId,
