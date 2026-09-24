@@ -73,6 +73,6 @@ gcloud run deploy render-ai-api \
   --allow-unauthenticated \
   --min-instances=0 --max-instances=4 \
   --timeout=300 \
-  --set-env-vars GOOGLE_CLOUD_PROJECT=labflux-project,GOOGLE_CLOUD_LOCATION=global,GOOGLE_CLOUD_TEXT_LOCATION=us-central1,STORAGE=firestore,BLOB_BUCKET=render-ai-studio-images \
+  --set-env-vars GOOGLE_CLOUD_PROJECT=labflux-project,GOOGLE_CLOUD_LOCATION=global,GOOGLE_CLOUD_TEXT_LOCATION=us-central1,STORAGE=firestore,BLOB_BUCKET=render-ai-studio-images,STORAGE_PROJECT=render-ai-studio \
   --set-secrets CLERK_SECRET_KEY=CLERK_SECRET_KEY:latest \
   --service-account "render-ai-api@render-ai-studio.iam.gserviceaccount.com"
