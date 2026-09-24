@@ -361,117 +361,302 @@ func renderExists(p *Project, renderID string) bool {
 	return false
 }
 
-// --- Assets ------------------------------------------------------------------
+// --- Asset library -------------------------------------------------------
+//
+// The library is user-wide, stored at users/{uid}/assets/{aid} - see
+// Repository's doc comment and API_CONTRACT.md's asset library section.
+// userDocID maps ownerID to the users/ document id (Firestore rejects an
+// empty document id, so the auth-disabled "" user gets a fixed sentinel).
 
-func (f *FirestoreStore) CreateAsset(pid, name, description, color string) (*Asset, error) {
-	a := &Asset{ID: newID(), Name: name, Description: description, Color: color}
-	if err := f.mutateProject(context.Background(), pid, func(pd *projectDoc) error {
-		pd.Assets = append(pd.Assets, a)
-		return nil
-	}); err != nil {
-		return nil, err
+func userDocID(userID string) string {
+	if userID == "" {
+		return "_dev_"
 	}
-	c := *a
-	return &c, nil
+	return userID
 }
 
-func (f *FirestoreStore) UpdateAsset(pid, aid, name, description, color string) (*Asset, error) {
-	var updated *Asset
-	if err := f.mutateProject(context.Background(), pid, func(pd *projectDoc) error {
-		for _, a := range pd.Assets {
-			if a.ID == aid {
-				a.Name, a.Description, a.Color = name, description, color
-				c := *a
-				updated = &c
-				return nil
-			}
+func (f *FirestoreStore) users() *firestore.CollectionRef {
+	return f.client.Collection("users")
+}
+
+func (f *FirestoreStore) assets(ownerID string) *firestore.CollectionRef {
+	return f.users().Doc(userDocID(ownerID)).Collection("assets")
+}
+
+type assetDoc struct {
+	Name              string    `firestore:"name"`
+	Description       string    `firestore:"description"`
+	Color             string    `firestore:"color"`
+	ReferenceImageID  string    `firestore:"referenceImageId"`
+	HasReferenceImage bool      `firestore:"hasReferenceImage"`
+	CreatedAt         time.Time `firestore:"createdAt"`
+}
+
+func assetDocFrom(a *Asset) *assetDoc {
+	return &assetDoc{
+		Name: a.Name, Description: a.Description, Color: a.Color,
+		ReferenceImageID: a.ReferenceImageID, HasReferenceImage: a.HasReferenceImage,
+		CreatedAt: a.CreatedAt,
+	}
+}
+
+func (d *assetDoc) toAsset(id string) *Asset {
+	return &Asset{
+		ID: id, Name: d.Name, Description: d.Description, Color: d.Color,
+		ReferenceImageID: d.ReferenceImageID, HasReferenceImage: d.HasReferenceImage,
+		CreatedAt: d.CreatedAt,
+	}
+}
+
+// ClearProjectAssets empties a project's legacy embedded Assets slice.
+func (f *FirestoreStore) ClearProjectAssets(pid string) error {
+	return f.mutateProject(context.Background(), pid, func(pd *projectDoc) error {
+		pd.Assets = []*Asset{}
+		return nil
+	})
+}
+
+// ListAssets returns ownerID's library, newest first.
+func (f *FirestoreStore) ListAssets(ownerID string) ([]*Asset, error) {
+	ctx := context.Background()
+	snaps, err := f.assets(ownerID).Documents(ctx).GetAll()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*Asset, 0, len(snaps))
+	for _, snap := range snaps {
+		var d assetDoc
+		if err := snap.DataTo(&d); err != nil {
+			return nil, err
 		}
-		return ErrNotFound
-	}); err != nil {
+		out = append(out, d.toAsset(snap.Ref.ID))
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out, nil
+}
+
+func (f *FirestoreStore) GetAsset(ownerID, aid string) (*Asset, error) {
+	snap, err := f.assets(ownerID).Doc(aid).Get(context.Background())
+	if isNotFound(err) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	var d assetDoc
+	if err := snap.DataTo(&d); err != nil {
+		return nil, err
+	}
+	return d.toAsset(aid), nil
+}
+
+func (f *FirestoreStore) CreateAsset(ownerID, name, description, color string) (*Asset, error) {
+	ref := f.assets(ownerID).NewDoc()
+	a := &Asset{ID: ref.ID, Name: name, Description: description, Color: color, CreatedAt: time.Now().UTC()}
+	if _, err := ref.Set(context.Background(), assetDocFrom(a)); err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+func (f *FirestoreStore) UpdateAsset(ownerID, aid, name, description, color string) (*Asset, error) {
+	ctx := context.Background()
+	ref := f.assets(ownerID).Doc(aid)
+	var updated *Asset
+	err := f.client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(ref)
+		if isNotFound(err) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		var d assetDoc
+		if err := snap.DataTo(&d); err != nil {
+			return err
+		}
+		d.Name, d.Description, d.Color = name, description, color
+		updated = d.toAsset(aid)
+		return tx.Set(ref, &d)
+	})
+	if err != nil {
 		return nil, err
 	}
 	return updated, nil
 }
 
-func (f *FirestoreStore) DeleteAsset(pid, aid string) error {
+func (f *FirestoreStore) DeleteAsset(ownerID, aid string) error {
 	ctx := context.Background()
-	if err := f.mutateProject(ctx, pid, func(pd *projectDoc) error {
-		idx := -1
-		for i, a := range pd.Assets {
-			if a.ID == aid {
-				idx = i
-				break
-			}
-		}
-		if idx == -1 {
+	ref := f.assets(ownerID).Doc(aid)
+	if _, err := ref.Get(ctx); err != nil {
+		if isNotFound(err) {
 			return ErrNotFound
 		}
-		pd.Assets = append(pd.Assets[:idx], pd.Assets[idx+1:]...)
-		return nil
-	}); err != nil {
 		return err
 	}
-	// Un-assign the deleted asset from any masks referencing it. Masks live on
-	// view docs (a separate collection), so this is a follow-up pass, done
-	// per-view so each write stays a single-document update.
-	return f.clearAssetFromMasks(ctx, pid, aid)
+	_, err := ref.Delete(ctx)
+	return err
 }
 
-// clearAssetFromMasks nulls out AssetID on every mask (across all views) that
-// referenced the given asset. Each view is updated in its own transaction; a
-// view with no matching mask is left untouched.
-func (f *FirestoreStore) clearAssetFromMasks(ctx context.Context, pid, aid string) error {
-	pref := f.projects().Doc(pid)
-	vsnaps, err := pref.Collection("views").Documents(ctx).GetAll()
-	if err != nil {
-		return err
-	}
-	for _, vs := range vsnaps {
-		var vd viewDoc
-		if err := vs.DataTo(&vd); err != nil {
+func (f *FirestoreStore) SetAssetReference(ownerID, aid, imageID string) (*Asset, error) {
+	ctx := context.Background()
+	ref := f.assets(ownerID).Doc(aid)
+	var updated *Asset
+	err := f.client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(ref)
+		if isNotFound(err) {
+			return ErrNotFound
+		}
+		if err != nil {
 			return err
 		}
-		affected := false
-		for _, m := range vd.Masks {
-			if m.AssetID != nil && *m.AssetID == aid {
-				affected = true
-				break
-			}
+		var d assetDoc
+		if err := snap.DataTo(&d); err != nil {
+			return err
 		}
-		if !affected {
+		d.ReferenceImageID = imageID
+		d.HasReferenceImage = true
+		updated = d.toAsset(aid)
+		return tx.Set(ref, &d)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
+// ImportAssets upserts-by-id into ownerID's library: an id already present is
+// left untouched (idempotent migration - see Repository.ImportAssets). Each
+// asset is its own Get+Set, not one big transaction: this runs at most once
+// per legacy project and a partial failure is safely resumable (already
+// migrated ids are skipped next time).
+func (f *FirestoreStore) ImportAssets(ownerID string, assets []*Asset) error {
+	ctx := context.Background()
+	col := f.assets(ownerID)
+	for _, a := range assets {
+		ref := col.Doc(a.ID)
+		snap, err := ref.Get(ctx)
+		if err != nil && !isNotFound(err) {
+			return err
+		}
+		if err == nil && snap.Exists() {
 			continue
 		}
-		if err := f.mutateView(ctx, pid, vs.Ref.ID, func(vd *viewDoc) error {
-			for _, m := range vd.Masks {
-				if m.AssetID != nil && *m.AssetID == aid {
-					m.AssetID = nil
-				}
-			}
-			return nil
-		}); err != nil {
+		doc := assetDocFrom(a)
+		if doc.CreatedAt.IsZero() {
+			doc.CreatedAt = time.Now().UTC()
+		}
+		if _, err := ref.Set(ctx, doc); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (f *FirestoreStore) SetAssetReference(pid, aid, imageID string) (*Asset, error) {
-	var updated *Asset
-	if err := f.mutateProject(context.Background(), pid, func(pd *projectDoc) error {
-		for _, a := range pd.Assets {
-			if a.ID == aid {
-				a.ReferenceImageID = imageID
-				a.HasReferenceImage = true
-				c := *a
-				updated = &c
-				return nil
+// --- Credits ---------------------------------------------------------------
+//
+// Balances live at users/{uid} (balanceUnits), ledger entries at
+// users/{uid}/creditLedger/{id} - see Repository's doc comment and
+// internal/api/credits.go for the unit<->credit conversion.
+
+type userDoc struct {
+	BalanceUnits int64 `firestore:"balanceUnits"`
+}
+
+type creditLedgerDoc struct {
+	CreatedAt         time.Time `firestore:"createdAt"`
+	DeltaUnits        int64     `firestore:"deltaUnits"`
+	BalanceAfterUnits int64     `firestore:"balanceAfterUnits"`
+	Reason            string    `firestore:"reason"`
+	ProjectID         *string   `firestore:"projectId,omitempty"`
+	JobID             *string   `firestore:"jobId,omitempty"`
+	Note              string    `firestore:"note,omitempty"`
+	ActorID           string    `firestore:"actorId,omitempty"`
+}
+
+func ledgerDocFrom(e CreditLedgerEntry) *creditLedgerDoc {
+	return &creditLedgerDoc{
+		CreatedAt: e.CreatedAt, DeltaUnits: e.DeltaUnits, BalanceAfterUnits: e.BalanceAfterUnits,
+		Reason: e.Reason, ProjectID: e.ProjectID, JobID: e.JobID, Note: e.Note, ActorID: e.ActorID,
+	}
+}
+
+func (d *creditLedgerDoc) toEntry(id string) CreditLedgerEntry {
+	return CreditLedgerEntry{
+		ID: id, CreatedAt: d.CreatedAt, DeltaUnits: d.DeltaUnits, BalanceAfterUnits: d.BalanceAfterUnits,
+		Reason: d.Reason, ProjectID: d.ProjectID, JobID: d.JobID, Note: d.Note, ActorID: d.ActorID,
+	}
+}
+
+func (f *FirestoreStore) GetCredits(userID string) (int64, error) {
+	snap, err := f.users().Doc(userDocID(userID)).Get(context.Background())
+	if isNotFound(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	var ud userDoc
+	if err := snap.DataTo(&ud); err != nil {
+		return 0, err
+	}
+	return ud.BalanceUnits, nil
+}
+
+func (f *FirestoreStore) AdjustCredits(userID string, deltaUnits int64, entry CreditLedgerEntry) (int64, error) {
+	ctx := context.Background()
+	uref := f.users().Doc(userDocID(userID))
+	lref := uref.Collection("creditLedger").NewDoc()
+	var newBalance int64
+	err := f.client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(uref)
+		var ud userDoc
+		if err != nil && !isNotFound(err) {
+			return err
+		}
+		if err == nil {
+			if derr := snap.DataTo(&ud); derr != nil {
+				return derr
 			}
 		}
-		return ErrNotFound
-	}); err != nil {
+		newBalance = ud.BalanceUnits + deltaUnits
+		if newBalance < 0 {
+			return ErrInsufficientCredits
+		}
+		ud.BalanceUnits = newBalance
+		if err := tx.Set(uref, &ud); err != nil {
+			return err
+		}
+		entry.CreatedAt = time.Now().UTC()
+		entry.DeltaUnits = deltaUnits
+		entry.BalanceAfterUnits = newBalance
+		return tx.Set(lref, ledgerDocFrom(entry))
+	})
+	if err != nil {
+		return 0, err
+	}
+	return newBalance, nil
+}
+
+func (f *FirestoreStore) ListCreditLedger(userID string, limit int) ([]CreditLedgerEntry, error) {
+	ctx := context.Background()
+	q := f.users().Doc(userDocID(userID)).Collection("creditLedger").OrderBy("createdAt", firestore.Desc)
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	snaps, err := q.Documents(ctx).GetAll()
+	if err != nil {
 		return nil, err
 	}
-	return updated, nil
+	out := make([]CreditLedgerEntry, 0, len(snaps))
+	for _, snap := range snaps {
+		var d creditLedgerDoc
+		if err := snap.DataTo(&d); err != nil {
+			return nil, err
+		}
+		out = append(out, d.toEntry(snap.Ref.ID))
+	}
+	return out, nil
 }
 
 // --- Views -------------------------------------------------------------------
@@ -832,31 +1017,34 @@ func (f *FirestoreStore) FindRender(pid, renderID string) (*Render, error) {
 // --- Render jobs -------------------------------------------------------------
 
 type renderJobDoc struct {
-	ViewID     string               `firestore:"viewId"`
-	CreatedAt  time.Time            `firestore:"createdAt"`
-	UpdatedAt  time.Time            `firestore:"updatedAt"`
-	Request    RenderJobRequest     `firestore:"request"`
-	Variations []RenderJobVariation `firestore:"variations"`
+	ViewID                   string               `firestore:"viewId"`
+	CreatedAt                time.Time            `firestore:"createdAt"`
+	UpdatedAt                time.Time            `firestore:"updatedAt"`
+	Request                  RenderJobRequest     `firestore:"request"`
+	Variations               []RenderJobVariation `firestore:"variations"`
+	ChargedUnitsPerVariation int64                `firestore:"chargedUnitsPerVariation"`
 }
 
 func renderJobDocFrom(j *RenderJob) renderJobDoc {
 	return renderJobDoc{
-		ViewID:     j.ViewID,
-		CreatedAt:  j.CreatedAt,
-		UpdatedAt:  j.UpdatedAt,
-		Request:    j.Request,
-		Variations: j.Variations,
+		ViewID:                   j.ViewID,
+		CreatedAt:                j.CreatedAt,
+		UpdatedAt:                j.UpdatedAt,
+		Request:                  j.Request,
+		Variations:               j.Variations,
+		ChargedUnitsPerVariation: j.ChargedUnitsPerVariation,
 	}
 }
 
 func (jd *renderJobDoc) toRenderJob(id string) *RenderJob {
 	return (&RenderJob{
-		ID:         id,
-		ViewID:     jd.ViewID,
-		CreatedAt:  jd.CreatedAt,
-		UpdatedAt:  jd.UpdatedAt,
-		Request:    jd.Request,
-		Variations: jd.Variations,
+		ID:                       id,
+		ViewID:                   jd.ViewID,
+		CreatedAt:                jd.CreatedAt,
+		UpdatedAt:                jd.UpdatedAt,
+		Request:                  jd.Request,
+		Variations:               jd.Variations,
+		ChargedUnitsPerVariation: jd.ChargedUnitsPerVariation,
 	}).clone()
 }
 

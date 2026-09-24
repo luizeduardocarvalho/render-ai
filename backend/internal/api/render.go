@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -125,21 +126,50 @@ func (s *Server) startRender(w http.ResponseWriter, r *http.Request) error {
 		return badRequest("view %s has no screenshot", vid)
 	}
 
+	// Debit the project owner's balance atomically before the job even
+	// exists, so two concurrent renders can never both pass a check against
+	// a balance that's about to go negative - see API_CONTRACT.md's credits
+	// section. authEnabled mirrors every other dev-bypass in this package
+	// (see requireAuth): with CLERK_SECRET_KEY unset, nothing is charged,
+	// unitsPerVar stays 0, and nothing is ever refunded either.
+	authEnabled := s.cfg.Auth.ClerkSecretKey != ""
+	jobID := uuid.NewString()
+	var unitsPerVar int64
+	if authEnabled {
+		unitsPerVar = unitsPerVariation(jobReq.Model, jobReq.Resolution)
+		total := unitsPerVar * int64(jobReq.Variations)
+		pidCopy, jobIDCopy := pid, jobID
+		if _, err := s.repo.AdjustCredits(project.OwnerID, -total, store.CreditLedgerEntry{
+			Reason:    store.CreditReasonRender,
+			ProjectID: &pidCopy,
+			JobID:     &jobIDCopy,
+		}); err != nil {
+			if errors.Is(err, store.ErrInsufficientCredits) {
+				return insufficientCreditsErr()
+			}
+			return internalErr("charging credits: %v", err)
+		}
+	}
+
 	now := time.Now().UTC()
 	variations := make([]store.RenderJobVariation, jobReq.Variations)
 	for i := range variations {
 		variations[i] = store.RenderJobVariation{Status: store.RenderJobQueued}
 	}
 	job := &store.RenderJob{
-		ID:         uuid.NewString(),
-		ViewID:     vid,
-		CreatedAt:  now,
-		UpdatedAt:  now,
-		Request:    jobReq,
-		Variations: variations,
+		ID:                       jobID,
+		ViewID:                   vid,
+		CreatedAt:                now,
+		UpdatedAt:                now,
+		Request:                  jobReq,
+		Variations:               variations,
+		ChargedUnitsPerVariation: unitsPerVar,
 	}
 	created, err := s.repo.CreateRenderJob(pid, job)
 	if err != nil {
+		// The debit above already happened and nothing was queued: refund it
+		// all back.
+		s.refundUnits(project.OwnerID, pid, jobID, unitsPerVar*int64(jobReq.Variations), "job creation failed")
 		return mapStoreErr(err, "project %s not found", pid)
 	}
 
@@ -149,6 +179,7 @@ func (s *Server) startRender(w http.ResponseWriter, r *http.Request) error {
 			// Per the contract: mark the job failed (this variation and any
 			// after it that never got a task) and report 502 - never leave a
 			// variation stuck "queued" with nothing that will ever run it.
+			// failRemainingVariations also refunds their charge, exactly once.
 			s.failRemainingVariations(pid, created.ID, i, fmt.Sprintf("queueing render: %v", err))
 			return badGateway("queueing render: %v", err)
 		}
@@ -165,20 +196,58 @@ func (s *Server) startRender(w http.ResponseWriter, r *http.Request) error {
 // failRemainingVariations marks every variation from idx onward that is
 // still queued as failed with msg - used when enqueueing itself fails
 // partway through, so no variation is left queued with no task that will
-// ever claim it.
+// ever claim it - and refunds their charged credits, exactly once: each
+// variation's Refunded flag is claimed inside this same UpdateRenderJob call,
+// so a variation already failed/refunded by something else is left alone.
 func (s *Server) failRemainingVariations(pid, jid string, from int, msg string) {
+	var refundUnitsTotal int64
 	_, err := s.repo.UpdateRenderJob(pid, jid, func(j *store.RenderJob) error {
+		refundUnitsTotal = 0
 		for i := from; i < len(j.Variations); i++ {
-			if j.Variations[i].Status == store.RenderJobQueued {
-				j.Variations[i].Status = store.RenderJobFailed
-				errCopy := msg
-				j.Variations[i].Error = &errCopy
+			if j.Variations[i].Status != store.RenderJobQueued {
+				continue
+			}
+			j.Variations[i].Status = store.RenderJobFailed
+			errCopy := msg
+			j.Variations[i].Error = &errCopy
+			if !j.Variations[i].Refunded && j.ChargedUnitsPerVariation > 0 {
+				j.Variations[i].Refunded = true
+				refundUnitsTotal += j.ChargedUnitsPerVariation
 			}
 		}
 		return nil
 	})
 	if err != nil {
 		log.Printf("render: recording enqueue failure project=%s job=%s: %v", pid, jid, err)
+		return
+	}
+	if refundUnitsTotal == 0 {
+		return
+	}
+	ownerID, err := s.repo.ProjectOwner(pid)
+	if err != nil {
+		log.Printf("render: refunding credits after enqueue failure project=%s job=%s: %v", pid, jid, err)
+		return
+	}
+	s.refundUnits(ownerID, pid, jid, refundUnitsTotal, fmt.Sprintf("queueing failed: %s", msg))
+}
+
+// refundUnits credits units back to ownerID with reason "refund", logging
+// (never failing its caller - there's no HTTP response left to report
+// through by the time this runs) if the write itself fails. units <= 0 is a
+// no-op: auth was disabled, or nothing was ever charged.
+func (s *Server) refundUnits(ownerID, pid, jid string, units int64, note string) {
+	if units <= 0 {
+		return
+	}
+	pidCopy, jidCopy := pid, jid
+	if _, err := s.repo.AdjustCredits(ownerID, units, store.CreditLedgerEntry{
+		Reason:    store.CreditReasonRefund,
+		ProjectID: &pidCopy,
+		JobID:     &jidCopy,
+		Note:      note,
+	}); err != nil {
+		log.Printf("render: refunding credits owner=%s project=%s job=%s units=%d: %v", ownerID, pid, jid, units, err)
 	}
 }
 
@@ -194,6 +263,10 @@ type renderJobResponse struct {
 	Variations []renderJobVariationView `json:"variations"`
 	Renders    []*store.Render          `json:"renders"`
 	Error      *string                  `json:"error,omitempty"`
+	// CreditsCharged is the credit cost of the whole job as originally
+	// charged (unitsPerVariation * variations, converted to credits) - not
+	// net of any refunds. 0 when auth was disabled.
+	CreditsCharged float64 `json:"creditsCharged"`
 }
 
 type renderJobVariationView struct {
@@ -276,14 +349,15 @@ func (s *Server) buildRenderJobResponse(pid string, job *store.RenderJob) (*rend
 	}
 
 	resp := &renderJobResponse{
-		ID:         job.ID,
-		ViewID:     job.ViewID,
-		Status:     status,
-		CreatedAt:  job.CreatedAt,
-		UpdatedAt:  job.UpdatedAt,
-		Request:    job.Request,
-		Variations: variations,
-		Renders:    nonNilRenders(renders),
+		ID:             job.ID,
+		ViewID:         job.ViewID,
+		Status:         status,
+		CreatedAt:      job.CreatedAt,
+		UpdatedAt:      job.UpdatedAt,
+		Request:        job.Request,
+		Variations:     variations,
+		Renders:        nonNilRenders(renders),
+		CreditsCharged: unitsToCredits(job.ChargedUnitsPerVariation * int64(len(job.Variations))),
 	}
 	if status == store.RenderJobFailed {
 		resp.Error = firstFailedErr
@@ -382,7 +456,11 @@ type renderAssembly struct {
 func (s *Server) assembleRenderRequest(pid, vid string, jobReq store.RenderJobRequest) (*renderAssembly, error) {
 	start := time.Now()
 
-	project, err := s.repo.GetProject(pid)
+	// withLibraryAssets so qualifyingMasks/appendAssetRefs below resolve
+	// against the owner's asset library, exactly like the getProject
+	// handler - this is the worker path, so it needs its own call (see
+	// API_CONTRACT.md's asset library section).
+	project, err := s.withLibraryAssets(s.repo.GetProject(pid))
 	if err != nil {
 		return nil, mapStoreErr(err, "project %s not found", pid)
 	}
@@ -670,24 +748,50 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	s.completeVariation(pid, jid, idx, addedRec.ID)
 }
 
-// failVariation marks one variation failed with msg. Logged (not returned)
-// on its own storage error, since RunRenderVariation has no caller left to
-// report to by this point - see buildRenderJobResponse's stale-running rule
-// as the eventual fallback if this write itself never lands.
+// failVariation marks one variation failed with msg and refunds its charged
+// credits, exactly once: the claim (Refunded false -> true) happens inside
+// the same UpdateRenderJob call as the failed-status write, so a variation
+// that's already terminal or already refunded is left alone - no second
+// refund is ever issued, even under a redelivered task (RunRenderVariation's
+// own claimed-by-status-transition check already keeps this from being
+// called twice for one delivery, but the Refunded flag is the belt-and-
+// braces guarantee actually promised by API_CONTRACT.md). Logged (not
+// returned) on its own storage error, since RunRenderVariation has no caller
+// left to report to by this point - see buildRenderJobResponse's
+// stale-running rule as the eventual fallback if this write itself never
+// lands.
 func (s *Server) failVariation(pid, jid string, idx int, msg string) {
+	var refund int64
 	_, err := s.repo.UpdateRenderJob(pid, jid, func(j *store.RenderJob) error {
+		refund = 0
 		if idx < 0 || idx >= len(j.Variations) {
 			return nil
 		}
-		j.Variations[idx].Status = store.RenderJobFailed
+		v := &j.Variations[idx]
+		wasTerminal := v.Status == store.RenderJobDone || v.Status == store.RenderJobFailed
+		v.Status = store.RenderJobFailed
 		errCopy := msg
-		j.Variations[idx].Error = &errCopy
-		j.Variations[idx].RunningAt = nil
+		v.Error = &errCopy
+		v.RunningAt = nil
+		if !wasTerminal && !v.Refunded && j.ChargedUnitsPerVariation > 0 {
+			v.Refunded = true
+			refund = j.ChargedUnitsPerVariation
+		}
 		return nil
 	})
 	if err != nil {
 		log.Printf("render worker: recording failure project=%s job=%s variation=%d: %v", pid, jid, idx, err)
+		return
 	}
+	if refund == 0 {
+		return
+	}
+	ownerID, err := s.repo.ProjectOwner(pid)
+	if err != nil {
+		log.Printf("render worker: refunding credits project=%s job=%s variation=%d: %v", pid, jid, idx, err)
+		return
+	}
+	s.refundUnits(ownerID, pid, jid, refund, fmt.Sprintf("variation %d failed: %s", idx, msg))
 }
 
 // completeVariation marks one variation done, pointing at the Render that

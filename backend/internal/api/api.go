@@ -5,6 +5,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -41,6 +42,11 @@ type Server struct {
 	// a fake and never need real Google credentials; defaults to
 	// verifyGoogleOIDCToken in NewServer.
 	oidcValidator OIDCValidator
+	// listClerkUsers backs GET /api/admin/users - a field (not a package
+	// function), like oidcValidator, so tests can inject a fake and never
+	// need a real Clerk account; defaults to listClerkUsersViaAPI in
+	// NewServer. See admin.go.
+	listClerkUsers listClerkUsersFunc
 	// serveBlobsLocally is true when the blob store is the in-memory one, whose
 	// SignedURL points back at GET /api/images/{id}. That public byte-serving
 	// route is then registered. With GCS, images load directly from signed GCS
@@ -73,22 +79,20 @@ func NewServer(repo store.Repository, blobs store.BlobStore, renderer render.Ren
 		roleCache:         newRoleCache(),
 		queue:             queue,
 		oidcValidator:     verifyGoogleOIDCToken,
+		listClerkUsers:    listClerkUsersViaAPI,
 		serveBlobsLocally: localBlobs,
 	}
 }
 
 // Router builds the full HTTP handler, including CORS.
 //
-// The app is deployed at a public URL with open Clerk sign-up, so every
-// data/render route below is admin-gated with requireAdmin (see roles.go):
-// a signed-in user is let through only if their Clerk publicMetadata role is
-// exactly "admin", read server-side from the verified Clerk user - never
-// from anything the client sends. This protects renderView in particular,
-// which spends real Vertex AI credits.
-//
-// GET /api/me is the one exception among authenticated routes: it requires
-// only a verified session (requireAuth), not the admin role, so the
-// frontend can learn its own role without eating a 403.
+// The app is open to every signed-in user (open Clerk sign-up): every
+// data/render route below requires only a verified session (requireAuth),
+// plus - for anything under {pid} - that the caller owns that project
+// (requireOwner). Only /api/admin/* stays gated on the Clerk publicMetadata
+// role being exactly "admin" (requireAdmin, see roles.go): listing every
+// user and granting credits are the only things that stay admin-only, per
+// API_CONTRACT.md.
 //
 // GET /api/images/{id} is deliberately left fully public: it's fetched via
 // <img src>, which can't send an Authorization header, so it stays readable
@@ -98,14 +102,14 @@ func (s *Server) Router() http.Handler {
 
 	// Not project-scoped: create takes no pid, list is filtered to the caller's
 	// own projects inside the handler.
-	mux.HandleFunc("POST /api/projects", s.handle(s.requireAdmin(s.createProject)))
-	mux.HandleFunc("GET /api/projects", s.handle(s.requireAdmin(s.listProjects)))
+	mux.HandleFunc("POST /api/projects", s.handle(s.requireAuth(s.createProject)))
+	mux.HandleFunc("GET /api/projects", s.handle(s.requireAuth(s.listProjects)))
 
-	// owned wraps a project-scoped handler with requireAdmin + the per-user
+	// owned wraps a project-scoped handler with requireAuth + the per-user
 	// ownership gate, so every {pid} route below is reachable only by the
 	// project's owner.
 	owned := func(fn handlerFunc) http.HandlerFunc {
-		return s.handle(s.requireAdmin(s.requireOwner(fn)))
+		return s.handle(s.requireAuth(s.requireOwner(fn)))
 	}
 
 	mux.HandleFunc("GET /api/projects/{pid}", owned(s.getProject))
@@ -139,11 +143,31 @@ func (s *Server) Router() http.Handler {
 	// above enforces per-user access; the {id} is the blob's own id.
 	mux.HandleFunc("GET /api/projects/{pid}/images/{id}/url", owned(s.getImageURL))
 
-	// Any signed-in user, not admin-gated - see the doc comment above. Same
-	// for pricing: it's a static price list, not project data, so it needs
-	// no ownership check either.
+	// Any signed-in user, not project- or admin-gated - see the doc comment
+	// above. Same for pricing: it's a static price list, not project data,
+	// so it needs no ownership check either.
 	mux.HandleFunc("GET /api/me", s.handle(s.requireAuth(s.getMe)))
+	mux.HandleFunc("GET /api/me/credits", s.handle(s.requireAuth(s.getMeCredits)))
 	mux.HandleFunc("GET /api/pricing", s.handle(s.requireAuth(s.getPricing)))
+
+	// The user-wide asset library (see API_CONTRACT.md's asset library
+	// section): scoped to the caller inside each handler (no {pid}, so no
+	// requireOwner), shared by every one of that user's projects.
+	mux.HandleFunc("GET /api/assets", s.handle(s.requireAuth(s.listLibraryAssets)))
+	mux.HandleFunc("POST /api/assets", s.handle(s.requireAuth(s.createLibraryAsset)))
+	mux.HandleFunc("PUT /api/assets/{aid}", s.handle(s.requireAuth(s.updateLibraryAsset)))
+	mux.HandleFunc("DELETE /api/assets/{aid}", s.handle(s.requireAuth(s.deleteLibraryAsset)))
+	mux.HandleFunc("POST /api/assets/{aid}/reference", s.handle(s.requireAuth(s.uploadLibraryAssetReference)))
+	mux.HandleFunc("GET /api/assets/{aid}/reference-url", s.handle(s.requireAuth(s.getAssetReferenceURL)))
+	// Direct-upload URLs for the library screen, which has no project id -
+	// createUpload itself never looks at {pid}, so it's reused verbatim.
+	mux.HandleFunc("POST /api/uploads", s.handle(s.requireAuth(s.createUpload)))
+
+	// Admin-only (requireAdmin, not requireAuth - see the doc comment above
+	// and roles.go).
+	mux.HandleFunc("GET /api/admin/users", s.handle(s.requireAdmin(s.adminListUsers)))
+	mux.HandleFunc("POST /api/admin/users/{uid}/credits", s.handle(s.requireAdmin(s.adminGrantCredits)))
+	mux.HandleFunc("GET /api/admin/users/{uid}/credits", s.handle(s.requireAdmin(s.adminGetUserCredits)))
 
 	// The public byte-serving route is only registered for the in-memory blob
 	// store (local dev), whose signed URLs point back here. With GCS, images
@@ -199,7 +223,12 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func writeErr(w http.ResponseWriter, err error) {
 	status, msg := statusAndMessage(err)
 	log.Printf("api: request error (%d): %v", status, err)
-	writeJSON(w, status, map[string]string{"error": msg})
+	body := map[string]string{"error": msg}
+	var he *httpError
+	if errors.As(err, &he) && he.code != "" {
+		body["code"] = he.code
+	}
+	writeJSON(w, status, body)
 }
 
 // readJSON decodes the request body into v. An empty body is treated as "no

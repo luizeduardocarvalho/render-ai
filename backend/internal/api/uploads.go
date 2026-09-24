@@ -50,7 +50,7 @@ type uploadResponse struct {
 func (s *Server) createUpload(w http.ResponseWriter, r *http.Request) error {
 	uploads, ok := s.blobs.(store.DirectUploads)
 	if !ok {
-		return &httpError{http.StatusNotImplemented, "direct uploads are not supported by this blob store"}
+		return &httpError{status: http.StatusNotImplemented, message: "direct uploads are not supported by this blob store"}
 	}
 	var body uploadRequestBody
 	if err := readJSON(r, &body); err != nil {

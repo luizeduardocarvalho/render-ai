@@ -9,39 +9,50 @@ import (
 )
 
 // httpError pairs an error message with the HTTP status it should produce.
+// code, when set, is echoed as an extra "code" field alongside "error" in the
+// JSON body (see writeErr) - machine-readable, for the one error the frontend
+// must branch on specifically: 402 insufficient credits.
 type httpError struct {
 	status  int
 	message string
+	code    string
 }
 
 func (e *httpError) Error() string { return e.message }
 
 func badRequest(format string, args ...any) *httpError {
-	return &httpError{http.StatusBadRequest, fmt.Sprintf(format, args...)}
+	return &httpError{status: http.StatusBadRequest, message: fmt.Sprintf(format, args...)}
 }
 
 func unauthorized(format string, args ...any) *httpError {
-	return &httpError{http.StatusUnauthorized, fmt.Sprintf(format, args...)}
+	return &httpError{status: http.StatusUnauthorized, message: fmt.Sprintf(format, args...)}
 }
 
 func forbidden(format string, args ...any) *httpError {
-	return &httpError{http.StatusForbidden, fmt.Sprintf(format, args...)}
+	return &httpError{status: http.StatusForbidden, message: fmt.Sprintf(format, args...)}
 }
 
 func notFoundErr(format string, args ...any) *httpError {
-	return &httpError{http.StatusNotFound, fmt.Sprintf(format, args...)}
+	return &httpError{status: http.StatusNotFound, message: fmt.Sprintf(format, args...)}
 }
 
 func internalErr(format string, args ...any) *httpError {
-	return &httpError{http.StatusInternalServerError, fmt.Sprintf(format, args...)}
+	return &httpError{status: http.StatusInternalServerError, message: fmt.Sprintf(format, args...)}
 }
 
 func badGateway(format string, args ...any) *httpError {
-	return &httpError{http.StatusBadGateway, fmt.Sprintf(format, args...)}
+	return &httpError{status: http.StatusBadGateway, message: fmt.Sprintf(format, args...)}
 }
 
 func timeoutErr(format string, args ...any) *httpError {
-	return &httpError{http.StatusGatewayTimeout, fmt.Sprintf(format, args...)}
+	return &httpError{status: http.StatusGatewayTimeout, message: fmt.Sprintf(format, args...)}
+}
+
+// insufficientCreditsErr is the 402 a render (or inventory generation) that
+// can't be paid for returns - see API_CONTRACT.md's credits section. The
+// frontend branches on the "code" field, not the message text.
+func insufficientCreditsErr() *httpError {
+	return &httpError{status: http.StatusPaymentRequired, message: "insufficient credits", code: "insufficient_credits"}
 }
 
 // mapStoreErr turns store.ErrNotFound into a 404 with a friendlier message,

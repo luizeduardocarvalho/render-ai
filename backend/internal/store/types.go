@@ -49,13 +49,53 @@ const (
 )
 
 // Asset is a library item (a real product) that a mask region can resolve to.
+// Assets belong to a user (see Repository's asset-library methods), not a
+// project - CreatedAt orders a user's library newest-first.
 type Asset struct {
-	ID                string `json:"id"`
-	Name              string `json:"name"`
-	Description       string `json:"description"`
-	Color             string `json:"color"`
-	ReferenceImageID  string `json:"referenceImageId"`
-	HasReferenceImage bool   `json:"hasReferenceImage"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	Description       string    `json:"description"`
+	Color             string    `json:"color"`
+	ReferenceImageID  string    `json:"referenceImageId"`
+	HasReferenceImage bool      `json:"hasReferenceImage"`
+	CreatedAt         time.Time `json:"createdAt"`
+}
+
+// Credit ledger reasons - see Repository.AdjustCredits and
+// API_CONTRACT.md's credits section.
+const (
+	CreditReasonGrant  = "grant"  // an admin topped the account up (or corrected it down).
+	CreditReasonRender = "render" // a render job debited the account.
+	CreditReasonRefund = "refund" // a render variation that never delivered was refunded.
+)
+
+// CreditLedgerEntry is one entry in a user's credit ledger: a signed delta
+// (in integer units - see internal/api/credits.go) plus enough context to
+// explain it later. AdjustCredits fills ID/CreatedAt/DeltaUnits/
+// BalanceAfterUnits; the caller sets Reason and whichever of
+// ProjectID/JobID/Note/ActorID applies.
+type CreditLedgerEntry struct {
+	ID                string
+	CreatedAt         time.Time
+	DeltaUnits        int64
+	BalanceAfterUnits int64
+	// Reason is one of the CreditReason* constants above.
+	Reason    string
+	ProjectID *string
+	JobID     *string
+	Note      string
+	// ActorID is the Clerk user id of who made this change, when it wasn't
+	// the account owner themselves - set for CreditReasonGrant (the admin
+	// who granted it).
+	ActorID string
+}
+
+// clone returns a deep copy of the entry.
+func (e CreditLedgerEntry) clone() CreditLedgerEntry {
+	out := e
+	out.ProjectID = clonePtr(e.ProjectID)
+	out.JobID = clonePtr(e.JobID)
+	return out
 }
 
 // Mask is a painted region on a view, optionally bound to an Asset. Its
@@ -286,6 +326,12 @@ type RenderJobVariation struct {
 	RenderID  *string         `json:"renderId,omitempty"`
 	Error     *string         `json:"error,omitempty"`
 	RunningAt *time.Time      `json:"-"`
+	// Refunded marks that this variation's charged credits have already been
+	// refunded (or never need to be - it's still queued/running, or it
+	// succeeded). Set inside the same UpdateRenderJob call that first marks
+	// the variation failed, so a redelivered task or a second failure
+	// observation can never refund it twice. Not surfaced to the frontend.
+	Refunded bool `json:"-"`
 }
 
 // RenderJob is one POST .../render request turned into a job: one Cloud
@@ -301,6 +347,12 @@ type RenderJob struct {
 	UpdatedAt  time.Time            `json:"updatedAt"`
 	Request    RenderJobRequest     `json:"request"`
 	Variations []RenderJobVariation `json:"variations"`
+	// ChargedUnitsPerVariation is the credit cost (in integer units - see
+	// internal/api/credits.go) of one variation of this job, fixed at
+	// creation time so a later change to the price table never changes what
+	// a refund gives back. 0 when auth was disabled at creation time (no
+	// credits were ever charged, so none are ever refunded either).
+	ChargedUnitsPerVariation int64 `json:"-"`
 }
 
 // clone returns a deep copy of the job, so callers can freely read or

@@ -72,7 +72,7 @@ func multipartFileRequest(t *testing.T, method, url string, data []byte) *http.R
 func TestUploadAssetReferenceFailsLoudlyOnBlobWriteError(t *testing.T) {
 	repo := store.NewMemory()
 	p := repo.CreateProject("owner-1", "P")
-	asset, err := repo.CreateAsset(p.ID, "Sofa", "a sofa", "#ff0000")
+	asset, err := repo.CreateAsset("owner-1", "Sofa", "a sofa", "#ff0000")
 	if err != nil {
 		t.Fatalf("creating asset: %v", err)
 	}
@@ -93,14 +93,12 @@ func TestUploadAssetReferenceFailsLoudlyOnBlobWriteError(t *testing.T) {
 	}
 
 	// The asset must not have been updated to reference an unsaved blob.
-	got, getErr := repo.GetProject(p.ID)
+	got, getErr := repo.GetAsset("owner-1", asset.ID)
 	if getErr != nil {
-		t.Fatalf("getting project: %v", getErr)
+		t.Fatalf("getting asset: %v", getErr)
 	}
-	for _, a := range got.Assets {
-		if a.ID == asset.ID && a.HasReferenceImage {
-			t.Fatal("asset was recorded as having a reference image despite the blob write failing")
-		}
+	if got.HasReferenceImage {
+		t.Fatal("asset was recorded as having a reference image despite the blob write failing")
 	}
 }
 
