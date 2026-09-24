@@ -170,6 +170,9 @@ func (g *GCSStore) writeBlobOnce(id string, data []byte, contentType string, che
 	w.CRC32C = checksum
 	w.SendCRC32C = true
 	if _, err := w.Write(data); err != nil {
+		// Cancel before Close so the upload is aborted rather than committed
+		// with whatever bytes made it through.
+		cancel()
 		_ = w.Close()
 		return err
 	}
