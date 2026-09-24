@@ -12,6 +12,7 @@ import (
 
 	"render-ai/backend/internal/config"
 	"render-ai/backend/internal/inventory"
+	"render-ai/backend/internal/jobs"
 	"render-ai/backend/internal/render"
 	"render-ai/backend/internal/store"
 )
@@ -31,6 +32,15 @@ type Server struct {
 	cfg        *config.Config
 	promptPath string
 	roleCache  *roleCache
+	// queue dispatches one render-job variation at a time to
+	// RunRenderVariation - either in-process (jobs.Inline) or via Cloud
+	// Tasks (jobs.CloudTasks), per cfg.Jobs.Queue. See render.go.
+	queue jobs.Queue
+	// oidcValidator verifies the Google OIDC token Cloud Tasks attaches to
+	// worker requests. A field (not a package function) so tests can inject
+	// a fake and never need real Google credentials; defaults to
+	// verifyGoogleOIDCToken in NewServer.
+	oidcValidator OIDCValidator
 	// serveBlobsLocally is true when the blob store is the in-memory one, whose
 	// SignedURL points back at GET /api/images/{id}. That public byte-serving
 	// route is then registered. With GCS, images load directly from signed GCS
@@ -46,8 +56,11 @@ const signedURLTTL = time.Hour
 
 // NewServer builds a Server. textModel may be nil in environments without
 // Vertex AI credentials; inventory-generation and preservation-check
-// endpoints will then return a clear error instead of panicking.
-func NewServer(repo store.Repository, blobs store.BlobStore, renderer render.Renderer, textModel *inventory.TextModel, cfg *config.Config, promptPath string) *Server {
+// endpoints will then return a clear error instead of panicking. queue is
+// how enqueued render-job variations reach RunRenderVariation - build a
+// jobs.Inline (then call SetHandler(srv.RunRenderVariation) once srv
+// exists) or a jobs.CloudTasks; see cmd/server/main.go.
+func NewServer(repo store.Repository, blobs store.BlobStore, renderer render.Renderer, textModel *inventory.TextModel, cfg *config.Config, promptPath string, queue jobs.Queue) *Server {
 	initAuth(cfg.Auth.ClerkSecretKey)
 	_, localBlobs := blobs.(*store.MemoryStore)
 	return &Server{
@@ -58,6 +71,8 @@ func NewServer(repo store.Repository, blobs store.BlobStore, renderer render.Ren
 		cfg:               cfg,
 		promptPath:        promptPath,
 		roleCache:         newRoleCache(),
+		queue:             queue,
+		oidcValidator:     verifyGoogleOIDCToken,
 		serveBlobsLocally: localBlobs,
 	}
 }
@@ -114,7 +129,8 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("PUT /api/projects/{pid}/views/{vid}/masks/{mid}/bitmap", owned(s.uploadMaskBitmap))
 	mux.HandleFunc("DELETE /api/projects/{pid}/views/{vid}/masks/{mid}", owned(s.deleteMask))
 
-	mux.HandleFunc("POST /api/projects/{pid}/views/{vid}/render", owned(s.renderView))
+	mux.HandleFunc("POST /api/projects/{pid}/views/{vid}/render", owned(s.startRender))
+	mux.HandleFunc("GET /api/projects/{pid}/render-jobs/{jid}", owned(s.getRenderJob))
 
 	// Mint a signed URL for an image blob. Project-scoped so the ownership gate
 	// above enforces per-user access; the {id} is the blob's own id.
@@ -132,6 +148,15 @@ func (s *Server) Router() http.Handler {
 	// so private bytes are never served by blob UUID alone.
 	if s.serveBlobsLocally {
 		mux.HandleFunc("GET /api/images/{id}", s.handle(s.getImage))
+	}
+
+	// The worker route Cloud Tasks calls (see render.go's handleRenderTask):
+	// not under /api, never routed through Firebase Hosting, and registered
+	// only when the queue backend is actually cloudtasks - in "inline" mode
+	// (local dev/tests) nothing ever calls it, and it would otherwise be a
+	// route with no real OIDC token to check against.
+	if s.cfg.Jobs.Queue == "cloudtasks" {
+		mux.HandleFunc("POST /internal/render-tasks", s.handle(s.handleRenderTask))
 	}
 
 	return withCORS(mux)

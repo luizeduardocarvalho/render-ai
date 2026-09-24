@@ -255,6 +255,73 @@ func (r *Render) clone() *Render {
 	return &clone
 }
 
+// RenderJobStatus is the lifecycle state of a RenderJob or one of its
+// variations.
+type RenderJobStatus string
+
+const (
+	RenderJobQueued  RenderJobStatus = "queued"
+	RenderJobRunning RenderJobStatus = "running"
+	RenderJobDone    RenderJobStatus = "done"
+	RenderJobFailed  RenderJobStatus = "failed"
+)
+
+// RenderJobRequest is the render request a RenderJob was created from -
+// unchanged from the old synchronous POST body (see API_CONTRACT.md).
+type RenderJobRequest struct {
+	Model             ModelChoice `json:"model"`
+	Resolution        Resolution  `json:"resolution"`
+	PreservationCheck bool        `json:"preservationCheck"`
+	Variations        int         `json:"variations"`
+}
+
+// RenderJobVariation tracks one Cloud Task's progress: one independent
+// sample of the job's request. RunningAt is set when the worker claims the
+// variation (queued -> running) and is used only to detect a variation stuck
+// in "running" because its worker died without ever marking it terminal
+// (see the stale-running rule in API_CONTRACT.md) - it is never surfaced to
+// the frontend.
+type RenderJobVariation struct {
+	Status    RenderJobStatus `json:"status"`
+	RenderID  *string         `json:"renderId,omitempty"`
+	Error     *string         `json:"error,omitempty"`
+	RunningAt *time.Time      `json:"-"`
+}
+
+// RenderJob is one POST .../render request turned into a job: one Cloud
+// Task (or, in "inline" queue mode, one goroutine) per variation. Its
+// derived JSON fields - overall status, the first failure's error, and the
+// full Render objects for finished variations - are computed by the API
+// layer (see internal/api/render.go), not stored here; see
+// API_CONTRACT.md's RenderJob shape and its status-derivation rules.
+type RenderJob struct {
+	ID         string               `json:"id"`
+	ViewID     string               `json:"viewId"`
+	CreatedAt  time.Time            `json:"createdAt"`
+	UpdatedAt  time.Time            `json:"updatedAt"`
+	Request    RenderJobRequest     `json:"request"`
+	Variations []RenderJobVariation `json:"variations"`
+}
+
+// clone returns a deep copy of the job, so callers can freely read or
+// mutate it after the store's lock has been released.
+func (j *RenderJob) clone() *RenderJob {
+	out := *j
+	out.Variations = make([]RenderJobVariation, len(j.Variations))
+	for i, v := range j.Variations {
+		out.Variations[i] = v.clone()
+	}
+	return &out
+}
+
+func (v RenderJobVariation) clone() RenderJobVariation {
+	out := v
+	out.RenderID = clonePtr(v.RenderID)
+	out.Error = clonePtr(v.Error)
+	out.RunningAt = clonePtr(v.RunningAt)
+	return out
+}
+
 // cloneStrings copies a slice while preserving its nil-vs-empty distinction
 // (unlike append([]string(nil), s...), which collapses an empty slice to nil).
 func cloneStrings(s []string) []string {

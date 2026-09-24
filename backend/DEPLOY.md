@@ -65,6 +65,37 @@ they're read by `internal/config/config.go`):
 Cloud Run injects `PORT`; the server binds to it automatically (see
 `internal/config/config.go`), defaulting to 8080 only when `PORT` is unset.
 
+Render-job queue env vars (also set by Terraform - `infra/terraform/tasks.tf`
+and `cloudrun.tf`; see `internal/config/config.go` and `internal/jobs`):
+
+- `RENDER_QUEUE=cloudtasks` selects the Cloud Tasks queue (the default,
+  `inline`, runs each render variation in a goroutine in-process - local dev
+  only, and only correct with `STORAGE=memory` / a single instance). This is
+  what makes renders async instead of running inside the request - see
+  `API_CONTRACT.md`'s Render section for why.
+- `RENDER_TASKS_QUEUE` is the full Cloud Tasks queue resource name
+  (`projects/P/locations/L/queues/render-jobs`). Required when
+  `RENDER_QUEUE=cloudtasks`.
+- `RENDER_WORKER_URL` is this service's own base URL - its `run.app` URL,
+  **never** the Firebase Hosting domain (Hosting's ~60s cutoff is exactly
+  what this whole design routes around). Cloud Tasks POSTs to
+  `{RENDER_WORKER_URL}/internal/render-tasks`. Required when
+  `RENDER_QUEUE=cloudtasks`. Terraform computes this deterministically from
+  the project number, since a Cloud Run service can't reference its own
+  `uri` from its own revision template.
+- `RENDER_WORKER_AUDIENCE` is the OIDC audience the worker route validates
+  incoming tokens against. Optional - defaults to `RENDER_WORKER_URL`.
+- `RENDER_TASKS_INVOKER_SA` is the service account email Cloud Tasks mints
+  the worker's OIDC token as (`render-tasks-invoker@P.iam.gserviceaccount.com`,
+  created by Terraform); the worker route requires the verified token's
+  `email` claim to match this exactly and `email_verified` to be true.
+  Required when `RENDER_QUEUE=cloudtasks`.
+
+`POST /internal/render-tasks` (the worker route Cloud Tasks calls) is only
+registered when `RENDER_QUEUE=cloudtasks`, is not under `/api`, and is never
+reachable through Firebase Hosting - only directly against the `run.app`
+URL.
+
 ## Instance scaling
 
 With `STORAGE=firestore`, state lives in Firestore + GCS, not in the process,
@@ -77,10 +108,12 @@ Two things to keep in mind when choosing those values:
 
 - **Cold starts** include opening the Firestore and GCS clients. That's fast,
   but scaling to zero adds first-request latency.
-- A render is a synchronous, long request (10-60s per variation). Keep the
-  Cloud Run timeout generous (300s, set in `infra/terraform/cloudrun.tf`) and
-  consider a small `cloud_run_min_instances` if you want to avoid cold starts
-  on the render path.
+- Each render-job variation is still a long request from the *worker's* side
+  (10-60s per variation, POST /internal/render-tasks) even though the
+  frontend-facing POST .../render now returns immediately. Keep the Cloud Run
+  timeout generous (300s, set in `infra/terraform/cloudrun.tf`) and consider
+  a small `cloud_run_min_instances` if you want to avoid cold starts on the
+  render path.
 
 If you use `STORAGE=memory` (not recommended in production), the old caveat
 applies: pin `min_instances=1, max_instances=1`, because in-memory state is

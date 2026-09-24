@@ -17,6 +17,7 @@ import (
 //	projects/{pid}                         core doc + inline assets[]
 //	projects/{pid}/views/{vid}             one doc per view + inline masks[]
 //	projects/{pid}/views/{vid}/renders/{rid}
+//	projects/{pid}/renderJobs/{jid}        one doc per async render job
 //
 // The project doc denormalizes viewCount, renderCount and a thumbnail blob ID
 // so ListProjects is a single indexed query with no subcollection reads. A
@@ -826,4 +827,147 @@ func (f *FirestoreStore) FindRender(pid, renderID string) (*Render, error) {
 		}
 	}
 	return nil, ErrNotFound
+}
+
+// --- Render jobs -------------------------------------------------------------
+
+type renderJobDoc struct {
+	ViewID     string               `firestore:"viewId"`
+	CreatedAt  time.Time            `firestore:"createdAt"`
+	UpdatedAt  time.Time            `firestore:"updatedAt"`
+	Request    RenderJobRequest     `firestore:"request"`
+	Variations []RenderJobVariation `firestore:"variations"`
+}
+
+func renderJobDocFrom(j *RenderJob) renderJobDoc {
+	return renderJobDoc{
+		ViewID:     j.ViewID,
+		CreatedAt:  j.CreatedAt,
+		UpdatedAt:  j.UpdatedAt,
+		Request:    j.Request,
+		Variations: j.Variations,
+	}
+}
+
+func (jd *renderJobDoc) toRenderJob(id string) *RenderJob {
+	return (&RenderJob{
+		ID:         id,
+		ViewID:     jd.ViewID,
+		CreatedAt:  jd.CreatedAt,
+		UpdatedAt:  jd.UpdatedAt,
+		Request:    jd.Request,
+		Variations: jd.Variations,
+	}).clone()
+}
+
+func (f *FirestoreStore) renderJobs(pid string) *firestore.CollectionRef {
+	return f.projects().Doc(pid).Collection("renderJobs")
+}
+
+// projectAlive checks the project's core doc exists and is not soft-deleted,
+// without loading its views/renders - the cheap existence check every
+// render-job method needs before touching the renderJobs subcollection.
+func (f *FirestoreStore) projectAlive(ctx context.Context, pref *firestore.DocumentRef) error {
+	psnap, err := pref.Get(ctx)
+	if isNotFound(err) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	_, err = projectDocFromSnap(psnap)
+	return err
+}
+
+// CreateRenderJob stores job (whose ID and Variations are already set by the
+// caller) under the project.
+func (f *FirestoreStore) CreateRenderJob(pid string, job *RenderJob) (*RenderJob, error) {
+	ctx := context.Background()
+	pref := f.projects().Doc(pid)
+	jref := f.renderJobs(pid).Doc(job.ID)
+	doc := renderJobDocFrom(job)
+	err := f.client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		if err := f.projectAliveTx(tx, pref); err != nil {
+			return err
+		}
+		return tx.Set(jref, &doc)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return doc.toRenderJob(job.ID), nil
+}
+
+// projectAliveTx is projectAlive's transaction-bound counterpart (tx.Get
+// reads must go through the transaction, not the client, inside
+// RunTransaction).
+func (f *FirestoreStore) projectAliveTx(tx *firestore.Transaction, pref *firestore.DocumentRef) error {
+	psnap, err := tx.Get(pref)
+	if isNotFound(err) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	_, err = projectDocFromSnap(psnap)
+	return err
+}
+
+// GetRenderJob returns one render job.
+func (f *FirestoreStore) GetRenderJob(pid, jid string) (*RenderJob, error) {
+	ctx := context.Background()
+	pref := f.projects().Doc(pid)
+	if err := f.projectAlive(ctx, pref); err != nil {
+		return nil, err
+	}
+	jsnap, err := f.renderJobs(pid).Doc(jid).Get(ctx)
+	if isNotFound(err) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	var jd renderJobDoc
+	if err := jsnap.DataTo(&jd); err != nil {
+		return nil, err
+	}
+	return jd.toRenderJob(jid), nil
+}
+
+// UpdateRenderJob runs fn against the job inside a Firestore transaction and
+// writes back the result. Returns ErrNotFound if the project or job doesn't
+// exist.
+func (f *FirestoreStore) UpdateRenderJob(pid, jid string, fn func(j *RenderJob) error) (*RenderJob, error) {
+	ctx := context.Background()
+	pref := f.projects().Doc(pid)
+	jref := f.renderJobs(pid).Doc(jid)
+	var result *RenderJob
+	err := f.client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		if err := f.projectAliveTx(tx, pref); err != nil {
+			return err
+		}
+		jsnap, err := tx.Get(jref)
+		if isNotFound(err) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		var jd renderJobDoc
+		if err := jsnap.DataTo(&jd); err != nil {
+			return err
+		}
+		job := jd.toRenderJob(jid)
+		if err := fn(job); err != nil {
+			return err
+		}
+		job.UpdatedAt = time.Now().UTC()
+		result = job
+		newDoc := renderJobDocFrom(job)
+		return tx.Set(jref, &newDoc)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.clone(), nil
 }

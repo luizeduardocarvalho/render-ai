@@ -16,6 +16,7 @@ import (
 	"render-ai/backend/internal/api"
 	"render-ai/backend/internal/config"
 	"render-ai/backend/internal/inventory"
+	"render-ai/backend/internal/jobs"
 	"render-ai/backend/internal/render"
 	"render-ai/backend/internal/store"
 
@@ -90,7 +91,17 @@ func run() error {
 			cfg.Vertex.Project, cfg.Vertex.Location, cfg.Vertex.TextLocation, cfg.Models.ProImage, cfg.Models.Text)
 	}
 
-	srv := api.NewServer(repo, blobs, renderer, textModel, cfg, promptPath)
+	queue, inlineQueue, err := buildQueue(context.Background(), cfg)
+	if err != nil {
+		return fmt.Errorf("initializing render job queue: %w", err)
+	}
+
+	srv := api.NewServer(repo, blobs, renderer, textModel, cfg, promptPath, queue)
+	if inlineQueue != nil {
+		// The inline queue's handler is a bound method on srv, so it can only
+		// be wired up after srv exists - see jobs.Inline's doc comment.
+		inlineQueue.SetHandler(srv.RunRenderVariation)
+	}
 
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	timeout := time.Duration(cfg.Server.RenderTimeoutSec+30) * time.Second
@@ -140,6 +151,33 @@ func buildStorage(ctx context.Context, cfg *config.Config) (store.Repository, st
 		return repo, blobs, nil
 	default:
 		return nil, nil, fmt.Errorf("unknown storage backend %q (want \"memory\" or \"firestore\")", cfg.Storage.Backend)
+	}
+}
+
+// buildQueue constructs the render-job queue from cfg.Jobs.Queue ("inline"
+// or "cloudtasks" - config.Load already validated the value and, for
+// cloudtasks, that the required fields are present). The returned
+// *jobs.Inline is non-nil only in inline mode, so the caller can wire its
+// handler up once the Server (which owns RunRenderVariation) exists.
+func buildQueue(ctx context.Context, cfg *config.Config) (jobs.Queue, *jobs.Inline, error) {
+	switch cfg.Jobs.Queue {
+	case "cloudtasks":
+		ct, err := jobs.NewCloudTasks(ctx, cfg.Jobs.TasksQueue, cfg.Jobs.WorkerURL, cfg.Jobs.InvokerServiceAccount, cfg.Jobs.WorkerAudience, cfg.Server.RenderTimeoutSec)
+		if err != nil {
+			return nil, nil, fmt.Errorf("cloud tasks queue: %w", err)
+		}
+		log.Printf("server: jobs.queue=cloudtasks tasksQueue=%s workerUrl=%s", cfg.Jobs.TasksQueue, cfg.Jobs.WorkerURL)
+		return ct, nil, nil
+	default: // "inline", already validated by config.Load
+		log.Println("server: jobs.queue=inline (render-job variations run in-process)")
+		// Cloud Run sets K_SERVICE. There, inline renders run after the 202 is
+		// sent, when Cloud Run throttles the instance's CPU - they crawl or die.
+		// This means the image shipped before `terraform apply` set RENDER_QUEUE.
+		if os.Getenv("K_SERVICE") != "" {
+			log.Println("server: WARNING jobs.queue=inline on Cloud Run - set RENDER_QUEUE=cloudtasks (run terraform apply); renders will be unreliable")
+		}
+		inlineQueue := jobs.NewInline()
+		return inlineQueue, inlineQueue, nil
 	}
 }
 
