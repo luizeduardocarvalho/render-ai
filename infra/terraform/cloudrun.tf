@@ -60,6 +60,26 @@ resource "google_cloud_run_v2_service" "render_api" {
           }
         }
       }
+      env {
+        name  = "RENDER_QUEUE"
+        value = "cloudtasks"
+      }
+      env {
+        name  = "RENDER_TASKS_QUEUE"
+        value = "projects/${var.app_project_id}/locations/${var.region}/queues/${google_cloud_tasks_queue.render.name}"
+      }
+      env {
+        # The service can't reference its own `uri` in its own template (a
+        # dependency cycle), so this is the same deterministic run.app URL
+        # Cloud Run would otherwise generate, built from the project number.
+        # RENDER_WORKER_AUDIENCE is left unset - it defaults to this URL.
+        name  = "RENDER_WORKER_URL"
+        value = "https://render-ai-api-${data.google_project.app.number}.${var.region}.run.app"
+      }
+      env {
+        name  = "RENDER_TASKS_INVOKER_SA"
+        value = google_service_account.render_tasks_invoker.email
+      }
     }
   }
 
@@ -67,6 +87,8 @@ resource "google_cloud_run_v2_service" "render_api" {
     google_project_service.app,
     google_project_iam_member.render_api_vertex_user,
     google_secret_manager_secret_iam_member.render_api_secret_accessor,
+    google_cloud_tasks_queue_iam_member.render_api_enqueuer,
+    google_service_account_iam_member.render_api_invoker_sa_user,
   ]
 
   lifecycle {

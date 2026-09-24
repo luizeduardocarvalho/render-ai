@@ -29,3 +29,5 @@ backup_retention_days = 0 # 0 = no GCS retention policy on the backup bucket (se
 
 cloud_run_min_instances = 0
 cloud_run_max_instances = 4
+
+render_queue_max_concurrent = 4 # Cloud Tasks queue rate_limits.max_concurrent_dispatches for render-jobs

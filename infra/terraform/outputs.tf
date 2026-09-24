@@ -43,6 +43,16 @@ output "deployer_service_account_email" {
   description = "Service account the deploy workflow impersonates. Set as GCP_DEPLOYER_SA in the GitHub production environment."
 }
 
+output "render_tasks_queue" {
+  value       = google_cloud_tasks_queue.render.id
+  description = "Full Cloud Tasks queue id (projects/P/locations/L/queues/Q), set as RENDER_TASKS_QUEUE on the Cloud Run service."
+}
+
+output "render_tasks_invoker_service_account_email" {
+  value       = google_service_account.render_tasks_invoker.email
+  description = "Service account Cloud Tasks uses to mint the OIDC token it presents to /internal/render-tasks."
+}
+
 output "artifact_registry_repository" {
   value       = "${google_artifact_registry_repository.app.location}-docker.pkg.dev/${google_artifact_registry_repository.app.project}/${google_artifact_registry_repository.app.repository_id}"
   description = "Docker repository for backend images. Set as GCP_ARTIFACT_REPO in the GitHub production environment."

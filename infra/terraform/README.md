@@ -14,6 +14,13 @@ can be recreated in new GCP projects by changing variables:
   - `iam.tf`, `secrets.tf`, `cloudrun.tf`: the `render-ai-api` service
     account and roles (including Vertex AI on `vertex_project_id`), the
     `CLERK_SECRET_KEY` container, and the Cloud Run service's settings.
+  - `tasks.tf`: the `render-jobs` Cloud Tasks queue (one task per render
+    variation, `max_attempts = 1` because renders are billed) and the
+    dedicated `render-tasks-invoker` service account Cloud Tasks uses to call
+    the service's `/internal/render-tasks` worker route. `cloudrun.tf` wires
+    the queue and invoker into the Cloud Run service via the `RENDER_QUEUE`,
+    `RENDER_TASKS_QUEUE`, `RENDER_WORKER_URL` and `RENDER_TASKS_INVOKER_SA`
+    env vars.
   - `backup.tf`, `export.tf`: the Coldline backup bucket in the backup
     project, the daily Storage Transfer copy that never deletes, and the
     weekly Firestore export.
@@ -100,6 +107,17 @@ terraform init -backend-config="bucket=render-ai-tfstate" -backend-config="prefi
    ```
 2. Deploy: GitHub → Actions → **Deploy** → Run workflow → `both`. If
    `github_deploy_reviewers` is set, approve the run.
+
+   **`terraform apply` must run before this the first time the render queue
+   changes** (a fresh setup, or after editing `tasks.tf`/`cloudrun.tf`): the
+   Deploy workflow only swaps the container image, it never sets environment
+   variables - `RENDER_QUEUE`, `RENDER_TASKS_QUEUE`, `RENDER_WORKER_URL` and
+   `RENDER_TASKS_INVOKER_SA` all come from this Terraform config. Order:
+   `terraform apply` (creates/updates the queue, the invoker SA and its IAM,
+   and the Cloud Run env vars) **then** run the Deploy workflow (ships the
+   backend image that actually reads those env vars). Deploying the image
+   first is harmless but the worker route won't have a queue to serve until
+   Terraform has applied.
 3. The **Backup check** workflow runs daily by itself once Terraform has set
    its variables. For 8 days after setup, a backup that doesn't exist yet
    (the Firestore export is weekly) is only a warning; after that, a missing,
