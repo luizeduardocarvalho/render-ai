@@ -48,22 +48,48 @@ func (s *Server) deleteAsset(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// uploadAssetReference takes the photo either as a multipart "file" field
+// or, for a direct upload (see uploads.go), as JSON {"uploadId"}.
 func (s *Server) uploadAssetReference(w http.ResponseWriter, r *http.Request) error {
 	pid, aid := r.PathValue("pid"), r.PathValue("aid")
 
-	data, _, err := readMultipartFile(r, "file")
-	if err != nil {
-		return err
-	}
-	_, format, decErr := decodeImageConfig(data)
-	if decErr != nil {
-		return badRequest("invalid reference image: %v", decErr)
+	var imageID string
+	if isJSONRequest(r) {
+		var body struct {
+			UploadID string `json:"uploadId"`
+		}
+		if err := readJSON(r, &body); err != nil {
+			return err
+		}
+		// Check the asset before claiming, so a bad aid doesn't consume the
+		// upload and leave an orphaned blob.
+		project, err := s.repo.GetProject(pid)
+		if err != nil {
+			return mapStoreErr(err, "project %s not found", pid)
+		}
+		if findAssetIn(project, aid) == nil {
+			return notFoundErr("asset %s not found", aid)
+		}
+		id, _, _, err := s.claimUpload(body.UploadID, "reference image")
+		if err != nil {
+			return err
+		}
+		imageID = id
+	} else {
+		data, _, err := readMultipartFile(r, "file")
+		if err != nil {
+			return err
+		}
+		_, format, decErr := decodeImageConfig(data)
+		if decErr != nil {
+			return badRequest("invalid reference image: %v", decErr)
+		}
+		imageID, err = s.blobs.PutBlob(data, contentTypeForFormat(format))
+		if err != nil {
+			return badGateway("storing reference image: %v", err)
+		}
 	}
 
-	imageID, err := s.blobs.PutBlob(data, contentTypeForFormat(format))
-	if err != nil {
-		return badGateway("storing reference image: %v", err)
-	}
 	a, err := s.repo.SetAssetReference(pid, aid, imageID)
 	if err != nil {
 		return mapStoreErr(err, "asset %s not found", aid)

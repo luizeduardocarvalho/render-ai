@@ -199,22 +199,122 @@ export function deleteAsset(pid: string, aid: string): Promise<void> {
   return request<void>(`/api/projects/${pid}/assets/${aid}`, { method: "DELETE" });
 }
 
-export function uploadAssetReference(pid: string, aid: string, file: File): Promise<Asset> {
+export function uploadAssetReference(
+  pid: string,
+  aid: string,
+  file: File,
+  opts?: UploadOptions,
+): Promise<Asset> {
+  return uploadImage(pid, file, opts, {
+    path: `/api/projects/${pid}/assets/${aid}/reference`,
+    fields: {},
+  });
+}
+
+// ---- Direct uploads ----
+//
+// Images go straight from the browser to the storage bucket through a
+// short-lived signed URL, then the API gets just the resulting uploadId. A
+// large screenshot through Firebase Hosting would otherwise run into its 60s
+// cutoff for requests to Cloud Run (and this module's own 30s default).
+// Local dev (in-memory blob store) answers 501, and we fall back to posting
+// the file as multipart form data.
+
+export interface UploadOptions {
+  /** Upload progress as a fraction from 0 to 1 (direct uploads only). */
+  onProgress?: (fraction: number) => void;
+}
+
+interface UploadTicket {
+  uploadId: string;
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+}
+
+// Match the backend's accepted types (backend internal/api/uploads.go);
+// anything else goes multipart so it gets the backend's usual validation error.
+const DIRECT_UPLOAD_TYPES = new Set(["image/png", "image/jpeg"]);
+
+// Generous: this only bounds a stalled upload, not a slow-but-moving one.
+const DIRECT_UPLOAD_TIMEOUT_MS = 10 * 60_000;
+
+// Multipart fallback still passes through Hosting (60s cutoff); give it
+// that much rather than the 30s default.
+const MULTIPART_UPLOAD_TIMEOUT_MS = 60_000;
+
+const NETWORK_ERROR = "Upload failed: network error";
+
+function putToSignedUrl(ticket: UploadTicket, file: File, onProgress?: (f: number) => void): Promise<void> {
+  // XHR rather than fetch: fetch can't report upload progress.
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(ticket.method, ticket.url);
+    for (const [k, v] of Object.entries(ticket.headers)) xhr.setRequestHeader(k, v);
+    xhr.timeout = DIRECT_UPLOAD_TIMEOUT_MS;
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(e.loaded / e.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new ApiError(xhr.status, `Upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new ApiError(0, NETWORK_ERROR));
+    xhr.ontimeout = () => reject(new ApiError(0, "Upload timed out. Please try again."));
+    xhr.send(file);
+  });
+}
+
+/** Returns the uploadId, or null when the backend can't take direct uploads. */
+async function directUpload(pid: string, file: File, onProgress?: (f: number) => void): Promise<string | null> {
+  if (!DIRECT_UPLOAD_TYPES.has(file.type)) return null;
+  let ticket: UploadTicket;
+  try {
+    ticket = await request<UploadTicket>(`/api/projects/${pid}/uploads`, json({ contentType: file.type }));
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 501) return null;
+    throw err;
+  }
+  try {
+    await putToSignedUrl(ticket, file, onProgress);
+  } catch (err) {
+    // A network-level failure is what a bucket without PUT in its CORS config
+    // looks like (e.g. the app deployed before `terraform apply`). Fall back
+    // to multipart rather than failing every upload; small files still work.
+    if (err instanceof ApiError && err.status === 0 && err.message === NETWORK_ERROR) {
+      console.warn("Direct upload failed, falling back to multipart upload");
+      return null;
+    }
+    throw err;
+  }
+  return ticket.uploadId;
+}
+
+/**
+ * Uploads an image for `target.path`: direct to storage when possible, then a
+ * JSON POST of {...fields, uploadId}; otherwise a multipart POST of
+ * {...fields, file}.
+ */
+async function uploadImage<T>(
+  pid: string,
+  file: File,
+  opts: UploadOptions | undefined,
+  target: { path: string; fields: Record<string, string> },
+): Promise<T> {
+  const uploadId = await directUpload(pid, file, opts?.onProgress);
+  if (uploadId) {
+    return request<T>(target.path, json({ ...target.fields, uploadId }), MULTIPART_UPLOAD_TIMEOUT_MS);
+  }
   const form = new FormData();
   form.append("file", file);
-  return request<Asset>(`/api/projects/${pid}/assets/${aid}/reference`, {
-    method: "POST",
-    body: form,
-  });
+  for (const [k, v] of Object.entries(target.fields)) form.append(k, v);
+  return request<T>(target.path, { method: "POST", body: form }, MULTIPART_UPLOAD_TIMEOUT_MS);
 }
 
 // ---- Views ----
 
-export function createView(pid: string, name: string, file: File): Promise<View> {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("name", name);
-  return request<View>(`/api/projects/${pid}/views`, { method: "POST", body: form });
+export function createView(pid: string, name: string, file: File, opts?: UploadOptions): Promise<View> {
+  return uploadImage(pid, file, opts, { path: `/api/projects/${pid}/views`, fields: { name } });
 }
 
 export function getView(pid: string, vid: string): Promise<View> {

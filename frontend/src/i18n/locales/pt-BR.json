@@ -252,6 +252,7 @@
     "namePlaceholder": "Nome da vista",
     "cancel": "Cancelar",
     "upload": "Enviar",
+    "uploading": "Enviando {{percent}}%",
     "deleteTitle": "Excluir vista",
     "deleteConfirm": "Excluir a vista \"{{name}}\"? Todas as máscaras e renderizações dela serão perdidas.",
     "meta_one": "{{width}}x{{height}} - {{count}} renderização",

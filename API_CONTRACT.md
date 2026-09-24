@@ -216,14 +216,28 @@ returns 404. A scheduled purge job to hard-delete projects 30+ days past
 `deletedAt` (doc + views/renders + blobs) is not implemented yet - see
 `PERSISTENCE_HANDOFF.md`.
 
+### Direct uploads
+Images (screenshots, asset reference photos) are uploaded by the browser
+straight to the storage bucket, so large files never pass through Firebase
+Hosting (60s cutoff) or the API:
+1. `POST /api/projects/{pid}/uploads` `{ contentType: "image/png" | "image/jpeg" }`
+   -> `{ uploadId, url, method: "PUT", headers }`. `501` when the blob store
+   can't take direct uploads (in-memory store, local dev): use multipart instead.
+2. `PUT url` with the file as the body and exactly `headers` (they are signed).
+   The URL is valid for 15 minutes and creates the object once.
+3. Pass `uploadId` to the endpoint that uses the image (JSON body, below). The
+   server validates the image (PNG/JPEG, at most 50 MB) and stores it as a new
+   blob; an `uploadId` can be used only once. Unused uploads are deleted
+   after a day.
+
 ### Assets
 - `POST   /api/projects/{pid}/assets` `{ name, description, color }` -> `Asset`
 - `PUT    /api/projects/{pid}/assets/{aid}` `{ name, description, color }` -> `Asset`
 - `DELETE /api/projects/{pid}/assets/{aid}` -> `204`
-- `POST   /api/projects/{pid}/assets/{aid}/reference` multipart `file` -> `Asset`
+- `POST   /api/projects/{pid}/assets/{aid}/reference` multipart `file`, or JSON `{ uploadId }` -> `Asset`
 
 ### Views
-- `POST   /api/projects/{pid}/views` multipart `file` (+ form field `name`) -> `View`
+- `POST   /api/projects/{pid}/views` multipart `file` (+ form field `name`), or JSON `{ name, uploadId }` -> `View`
       (server reads width/height from the screenshot)
 - `GET    /api/projects/{pid}/views/{vid}` -> `View`
 - `DELETE /api/projects/{pid}/views/{vid}` -> `204`

@@ -19,6 +19,9 @@ export function ViewsBar() {
   const [name, setName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Upload progress (0-1) while the file goes to storage; null when unknown
+  // (multipart fallback) or not uploading.
+  const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -35,8 +38,9 @@ export function ViewsBar() {
     if (!file || !name.trim()) return;
     setSubmitting(true);
     setError(null);
+    setProgress(null);
     try {
-      await createView(name.trim(), file);
+      await createView(name.trim(), file, { onProgress: setProgress });
       setAdding(false);
       setFile(null);
       setName("");
@@ -44,6 +48,7 @@ export function ViewsBar() {
       setError(err instanceof ApiError ? err.message : t("viewsBar.error"));
     } finally {
       setSubmitting(false);
+      setProgress(null);
     }
   }
 
@@ -120,7 +125,9 @@ export function ViewsBar() {
           </button>
           <button type="submit" className="btn btn-primary btn-sm" disabled={submitting || !name.trim()}>
             {submitting ? <span className="spinner" /> : null}
-            {t("viewsBar.upload")}
+            {submitting && progress !== null
+              ? t("viewsBar.uploading", { percent: Math.round(progress * 100) })
+              : t("viewsBar.upload")}
           </button>
         </form>
       )}
