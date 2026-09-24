@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ApiError } from "../api";
 import { useProject } from "../state/ProjectContext";
-import { LIGHTING_PRESETS, type StyleSettings } from "../types";
+import { INTERIOR_LIGHTS_OPTIONS, LIGHTING_PRESETS, type StyleSettings } from "../types";
 
 export function StylePanel() {
   const { project, updateStyle } = useProject();
@@ -102,6 +102,31 @@ export function StylePanel() {
             value={draft.lightDirection}
             onChange={(e) => set("lightDirection", e.target.value)}
           />
+        </div>
+
+        <div className="field">
+          <span className="field-label" id="interior-lights-label">
+            Artificial lights
+          </span>
+          <div className="segmented" role="radiogroup" aria-labelledby="interior-lights-label">
+            {INTERIOR_LIGHTS_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                role="radio"
+                aria-checked={draft.interiorLights === o.value}
+                title={o.hint}
+                className={`segmented-btn ${draft.interiorLights === o.value ? "segmented-btn-active" : ""}`}
+                onClick={() => set("interiorLights", o.value)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <span className="field-hint">
+            {INTERIOR_LIGHTS_OPTIONS.find((o) => o.value === draft.interiorLights)?.hint ??
+              "Not set - the model decides whether lights are on"}
+          </span>
         </div>
 
         <div className="field">

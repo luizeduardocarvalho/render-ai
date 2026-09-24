@@ -52,6 +52,9 @@ func (s *Server) updateStyle(w http.ResponseWriter, r *http.Request) error {
 	if err := readJSON(r, &style); err != nil {
 		return err
 	}
+	if !style.InteriorLights.Valid() {
+		return badRequest("interiorLights must be one of off, 3000k, 4000k, 6000k")
+	}
 	p, err := s.repo.UpdateStyle(pid, style)
 	if err != nil {
 		return mapStoreErr(err, "project %s not found", pid)

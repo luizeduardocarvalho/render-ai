@@ -40,7 +40,17 @@ IMAGE 1: The original SketchUp screenshot. This defines the scene: camera, frami
 - Scene type: {{ .Scene }}
 - Lighting preset: {{ .Lighting }}
 - Main light direction: {{ .LightDirection }}
-- Materials: {{ .MaterialNotes }}
+{{ if .InteriorLightsOff }}- Artificial lights: ALL OFF. Every artificial light fixture in the scene (ceiling lights,
+  pendants, spotlights, lamps, sconces, LED strips) is switched off: no glowing bulbs or
+  diffusers, no light pools or hotspots cast by fixtures. The scene is lit only by natural
+  light. This overrides the lighting preset and the style anchor if they suggest otherwise.
+{{ else if .InteriorLightsKelvin }}- Artificial lights: ALL ON at {{ .InteriorLightsKelvin }} ({{ .InteriorLightsTone }}). Every artificial light
+  fixture in the scene (ceiling lights, pendants, spotlights, lamps, sconces, LED strips) is
+  switched on and visibly emitting {{ .InteriorLightsKelvin }} {{ .InteriorLightsTone }} light, with a soft glow at
+  the fixture and realistic light falloff on nearby surfaces. All fixtures share this same
+  color temperature. Do not add fixtures that are not in IMAGE 1. This overrides the
+  lighting preset and the style anchor if they suggest otherwise.
+{{ end }}- Materials: {{ .MaterialNotes }}
 {{ if .ExtraInstructions }}- Additional instructions: {{ .ExtraInstructions }}
 {{ end }}{{ if .HasAnchor }}- A style anchor is provided: match its material palette, color temperature, lighting mood
   and color grading so this looks like a photo of the same space on the same day.
