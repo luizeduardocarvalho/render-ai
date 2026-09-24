@@ -2,28 +2,53 @@ package api
 
 import "net/http"
 
+// createView takes the screenshot either as a multipart "file" field or, for
+// a direct upload (see uploads.go), as JSON {"name", "uploadId"}.
 func (s *Server) createView(w http.ResponseWriter, r *http.Request) error {
 	pid := r.PathValue("pid")
 
-	data, _, err := readMultipartFile(r, "file")
-	if err != nil {
-		return err
+	var name, imageID string
+	var width, height int
+	if isJSONRequest(r) {
+		var body struct {
+			Name     string `json:"name"`
+			UploadID string `json:"uploadId"`
+		}
+		if err := readJSON(r, &body); err != nil {
+			return err
+		}
+		// Check the project before claiming, so a bad pid doesn't consume
+		// the upload.
+		if _, err := s.repo.ProjectOwner(pid); err != nil {
+			return mapStoreErr(err, "project %s not found", pid)
+		}
+		id, wd, ht, err := s.claimUpload(body.UploadID, "screenshot")
+		if err != nil {
+			return err
+		}
+		name, imageID, width, height = body.Name, id, wd, ht
+	} else {
+		data, _, err := readMultipartFile(r, "file")
+		if err != nil {
+			return err
+		}
+		name = r.FormValue("name")
+
+		cfg, format, decErr := decodeImageConfig(data)
+		if decErr != nil {
+			return badRequest("invalid screenshot image: %v", decErr)
+		}
+		imageID, err = s.blobs.PutBlob(data, contentTypeForFormat(format))
+		if err != nil {
+			return badGateway("storing screenshot: %v", err)
+		}
+		width, height = cfg.Width, cfg.Height
 	}
-	name := r.FormValue("name")
 	if name == "" {
 		name = "Untitled view"
 	}
 
-	cfg, format, decErr := decodeImageConfig(data)
-	if decErr != nil {
-		return badRequest("invalid screenshot image: %v", decErr)
-	}
-
-	imageID, err := s.blobs.PutBlob(data, contentTypeForFormat(format))
-	if err != nil {
-		return badGateway("storing screenshot: %v", err)
-	}
-	v, err := s.repo.CreateView(pid, name, imageID, cfg.Width, cfg.Height)
+	v, err := s.repo.CreateView(pid, name, imageID, width, height)
 	if err != nil {
 		return mapStoreErr(err, "project %s not found", pid)
 	}

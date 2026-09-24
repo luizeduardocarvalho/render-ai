@@ -250,3 +250,65 @@ func (g *GCSStore) signBytes(b []byte) ([]byte, error) {
 	}
 	return base64.StdEncoding.DecodeString(resp.SignedBlob)
 }
+
+var _ DirectUploads = (*GCSStore)(nil)
+
+// uploadPrefix is where direct browser uploads are staged, apart from real
+// blobs. A bucket lifecycle rule (infra/terraform/storage.tf) deletes anything
+// left there by an upload that was never finalized.
+const uploadPrefix = "uploads/"
+
+// UploadURL returns a V4 signed PUT URL for staging an upload. The content
+// type and an if-generation-match:0 precondition are signed in, so the browser
+// must send exactly those headers: the URL can only create the object once,
+// with the declared type, and never overwrite it.
+func (g *GCSStore) UploadURL(uploadID, contentType string, ttl time.Duration) (SignedUpload, error) {
+	const precondition = "x-goog-if-generation-match"
+	url, err := storage.SignedURL(g.bucket, uploadPrefix+uploadID, &storage.SignedURLOptions{
+		Scheme:         storage.SigningSchemeV4,
+		Method:         "PUT",
+		GoogleAccessID: g.signerEmail,
+		Expires:        time.Now().Add(ttl),
+		SignBytes:      g.signBytes,
+		ContentType:    contentType,
+		Headers:        []string{precondition + ":0"},
+	})
+	if err != nil {
+		return SignedUpload{}, fmt.Errorf("signing upload url for %s: %w", uploadID, err)
+	}
+	return SignedUpload{
+		URL:     url,
+		Headers: map[string]string{"Content-Type": contentType, precondition: "0"},
+	}, nil
+}
+
+// ReadUpload reads a staged upload, checking its size before reading it.
+func (g *GCSStore) ReadUpload(uploadID string, maxBytes int64) (Blob, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	rc, err := g.object(uploadPrefix + uploadID).NewReader(ctx)
+	if errors.Is(err, storage.ErrObjectNotExist) {
+		return Blob{}, ErrNotFound
+	}
+	if err != nil {
+		return Blob{}, fmt.Errorf("opening upload %s: %w", uploadID, err)
+	}
+	defer rc.Close()
+	if rc.Attrs.Size > maxBytes {
+		return Blob{}, ErrUploadTooLarge
+	}
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return Blob{}, fmt.Errorf("reading upload %s: %w", uploadID, err)
+	}
+	return Blob{Data: data, ContentType: rc.Attrs.ContentType}, nil
+}
+
+// DeleteUpload removes a staged upload.
+func (g *GCSStore) DeleteUpload(uploadID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := g.object(uploadPrefix + uploadID).Delete(ctx); err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
+		logStoreErr("gcs: deleting upload %s: %v", uploadID, err)
+	}
+}

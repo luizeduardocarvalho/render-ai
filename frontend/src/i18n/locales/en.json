@@ -252,6 +252,7 @@
     "namePlaceholder": "View name",
     "cancel": "Cancel",
     "upload": "Upload",
+    "uploading": "Uploading {{percent}}%",
     "deleteTitle": "Delete view",
     "deleteConfirm": "Delete view \"{{name}}\"? All its masks and renders will be lost.",
     "meta_one": "{{width}}x{{height}} - {{count}} render",

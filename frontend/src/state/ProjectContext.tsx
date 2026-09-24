@@ -49,9 +49,9 @@ interface ProjectContextValue {
     data: { name: string; description: string; color: string },
   ) => Promise<Asset>;
   deleteAsset: (aid: string) => Promise<void>;
-  uploadAssetReference: (aid: string, file: File) => Promise<Asset>;
+  uploadAssetReference: (aid: string, file: File, opts?: api.UploadOptions) => Promise<Asset>;
 
-  createView: (name: string, file: File) => Promise<View>;
+  createView: (name: string, file: File, opts?: api.UploadOptions) => Promise<View>;
   deleteView: (vid: string) => Promise<void>;
   updateInventory: (vid: string, inventory: string) => Promise<void>;
   generateInventory: (vid: string) => Promise<string>;
@@ -242,9 +242,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   );
 
   const uploadAssetReferenceFn = useCallback(
-    async (aid: string, file: File) => {
+    async (aid: string, file: File, opts?: api.UploadOptions) => {
       const p = requireProject();
-      const asset = await api.uploadAssetReference(p.id, aid, file);
+      const asset = await api.uploadAssetReference(p.id, aid, file, opts);
       setProject((prev) =>
         prev
           ? { ...prev, assets: prev.assets.map((a) => (a.id === aid ? asset : a)) }
@@ -256,9 +256,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   );
 
   const createViewFn = useCallback(
-    async (name: string, file: File) => {
+    async (name: string, file: File, opts?: api.UploadOptions) => {
       const p = requireProject();
-      const view = await api.createView(p.id, name, file);
+      const view = await api.createView(p.id, name, file, opts);
       setProject((prev) => (prev ? { ...prev, views: [...prev.views, view] } : prev));
       setSelectedViewId(view.id);
       return view;

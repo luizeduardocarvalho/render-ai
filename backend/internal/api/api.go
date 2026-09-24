@@ -118,6 +118,9 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("DELETE /api/projects/{pid}/assets/{aid}", owned(s.deleteAsset))
 	mux.HandleFunc("POST /api/projects/{pid}/assets/{aid}/reference", owned(s.uploadAssetReference))
 
+	// Signed URL for a direct browser-to-bucket image upload (see uploads.go).
+	mux.HandleFunc("POST /api/projects/{pid}/uploads", owned(s.createUpload))
+
 	mux.HandleFunc("POST /api/projects/{pid}/views", owned(s.createView))
 	mux.HandleFunc("GET /api/projects/{pid}/views/{vid}", owned(s.getView))
 	mux.HandleFunc("DELETE /api/projects/{pid}/views/{vid}", owned(s.deleteView))
