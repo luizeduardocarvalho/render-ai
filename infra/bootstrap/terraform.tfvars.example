@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+billing_account   = "XXXXXX-XXXXXX-XXXXXX" # gcloud billing accounts list
+app_project_id    = "render-ai-studio"
+backup_project_id = "render-ai-backups"
+state_bucket_name = "render-ai-tfstate"
+# org_id    = "123456789012" # only if the account has an organization

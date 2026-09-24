@@ -37,3 +37,13 @@ output "cloud_run_url" {
   value       = google_cloud_run_v2_service.render_api.uri
   description = "Public URL of the render-ai-api Cloud Run service."
 }
+
+output "deployer_service_account_email" {
+  value       = google_service_account.deployer.email
+  description = "Service account the deploy workflow impersonates. Set as GCP_DEPLOYER_SA in the GitHub production environment."
+}
+
+output "artifact_registry_repository" {
+  value       = "${google_artifact_registry_repository.app.location}-docker.pkg.dev/${google_artifact_registry_repository.app.project}/${google_artifact_registry_repository.app.repository_id}"
+  description = "Docker repository for backend images. Set as GCP_ARTIFACT_REPO in the GitHub production environment."
+}

@@ -119,3 +119,20 @@ import {
 #   include it above once you've confirmed provider support with
 #   `terraform import` (some Cloud Run v2 IAM resources lag the REST API in
 #   provider support; a plain `terraform apply` after import fine).
+
+# --- Firebase (already set up by hand in render-ai-studio) ---
+
+import {
+  to = google_firebase_project.app
+  id = "projects/render-ai-studio"
+}
+
+import {
+  to = google_firebase_hosting_site.landing
+  id = "projects/render-ai-studio/sites/render-ai-studio"
+}
+
+import {
+  to = google_firebase_hosting_site.app
+  id = "projects/render-ai-studio/sites/render-ai-studio-app"
+}
