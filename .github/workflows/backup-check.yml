@@ -12,7 +12,7 @@ name: Backup check
 #   GCP_APP_PROJECT         - app project id (Firestore + Cloud Scheduler live here)
 #   GCP_BACKUP_PROJECT      - backup project id (Storage Transfer job lives here)
 #   GCP_TRANSFER_JOB        - Storage Transfer job name (transferJobs/...)
-#   GCP_BACKUP_BUCKET       - backup bucket name (Firestore exports land under gs://<this>/firestore-exports)
+#   GCP_BACKUP_BUCKET       - backup bucket name (each Firestore export lands in its own gs://<this>/<timestamp>/ folder)
 #   GCP_FIRESTORE_LOCATION  - optional, defaults to nam5
 
 on:
@@ -105,13 +105,16 @@ jobs:
           echo "OK: newest Firestore backup is READY, from $BACKUP_TIME."
 
           echo "== 3. Weekly Firestore export =="
+          # Each export is a timestamped folder at the bucket root holding a
+          # <timestamp>.overall_export_metadata file. The "20*" prefix skips
+          # the blobs/ copy so this doesn't walk every backed-up image.
           LATEST_EXPORT_TIME=$(gcloud storage objects list \
-            "gs://${BACKUP_BUCKET}/firestore-exports/**" \
+            "gs://${BACKUP_BUCKET}/20*/*.overall_export_metadata" \
             --format=json | jq -r '
-              map(.updated // .timeCreated // empty) | sort | last // empty')
+              map(.creation_time // .timeCreated // .updated // empty) | sort | last // empty' || true)
 
-          [ -n "$LATEST_EXPORT_TIME" ] || fail "No objects found under gs://${BACKUP_BUCKET}/firestore-exports/ - has the weekly export ever run?"
-          age_ok "$LATEST_EXPORT_TIME" "$MAX_AGE_WEEKLY_SEC" || fail "Newest object under gs://${BACKUP_BUCKET}/firestore-exports/ is from $LATEST_EXPORT_TIME, which is older than 8 days."
+          [ -n "$LATEST_EXPORT_TIME" ] || fail "No Firestore export found in gs://${BACKUP_BUCKET}/ - has the weekly export ever run?"
+          age_ok "$LATEST_EXPORT_TIME" "$MAX_AGE_WEEKLY_SEC" || fail "Newest Firestore export in gs://${BACKUP_BUCKET}/ is from $LATEST_EXPORT_TIME, which is older than 8 days."
           echo "OK: newest Firestore export object is from $LATEST_EXPORT_TIME."
 
           echo "All backup checks passed."

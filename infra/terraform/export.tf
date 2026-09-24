@@ -51,8 +51,12 @@ resource "google_cloud_scheduler_job" "firestore_export" {
     http_method = "POST"
     uri         = "https://firestore.googleapis.com/v1/projects/${var.app_project_id}/databases/(default):exportDocuments"
 
+    # Bucket root on purpose: with a bucket-only prefix Firestore writes each
+    # export to its own timestamped folder (e.g. 2026-09-27T06:00:00_12345/).
+    # A fixed sub-path would make every export reuse the same folder, which
+    # needs overwrite (delete) access the service agent deliberately lacks.
     body = base64encode(jsonencode({
-      outputUriPrefix = "gs://${google_storage_bucket.backup.name}/firestore-exports"
+      outputUriPrefix = "gs://${google_storage_bucket.backup.name}"
     }))
 
     oauth_token {
