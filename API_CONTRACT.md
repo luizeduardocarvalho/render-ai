@@ -20,6 +20,7 @@ type ScenePreset = "interior" | "exterior";
 type LightingPreset =
   | "morning_sun" | "overcast" | "golden_hour"
   | "evening_interior_lights" | "night_exterior";
+type InteriorLights = "off" | "3000k" | "4000k" | "6000k" | "";  // "" = never set (older projects)
 type ModelChoice = "pro" | "flash";      // pro = gemini-3-pro-image, flash = gemini-3.1-flash-image
 type Resolution  = "1K" | "2K" | "4K";   // flash supports 1K only
 
@@ -93,6 +94,7 @@ interface StyleSettings {
   scene: ScenePreset;
   lighting: LightingPreset;
   lightDirection: string;  // free text
+  interiorLights: InteriorLights; // artificial lights off, or on at a color temperature; new projects default to "off"
   materialNotes: string;   // free text
   extraInstructions: string;
 }

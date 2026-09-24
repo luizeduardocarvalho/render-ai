@@ -9,6 +9,10 @@ export type LightingPreset =
   | "evening_interior_lights"
   | "night_exterior";
 
+// Artificial lights: switched off, or on at a color temperature. Empty on
+// projects created before the setting existed (the prompt then omits it).
+export type InteriorLights = "off" | "3000k" | "4000k" | "6000k" | "";
+
 export type ModelChoice = "pro" | "flash"; // pro = gemini-3-pro-image, flash = gemini-3.1-flash-image
 
 export type Resolution = "1K" | "2K" | "4K"; // flash supports 1K only
@@ -83,6 +87,7 @@ export interface StyleSettings {
   scene: ScenePreset;
   lighting: LightingPreset;
   lightDirection: string;
+  interiorLights: InteriorLights;
   materialNotes: string;
   extraInstructions: string;
 }
@@ -127,4 +132,11 @@ export const LIGHTING_PRESETS: { value: LightingPreset; label: string }[] = [
   { value: "golden_hour", label: "Golden hour" },
   { value: "evening_interior_lights", label: "Evening interior lights" },
   { value: "night_exterior", label: "Night exterior" },
+];
+
+export const INTERIOR_LIGHTS_OPTIONS: { value: Exclude<InteriorLights, "">; label: string; hint: string }[] = [
+  { value: "off", label: "Off", hint: "All artificial lights switched off" },
+  { value: "3000k", label: "3000K", hint: "Lights on, warm white" },
+  { value: "4000k", label: "4000K", hint: "Lights on, neutral white" },
+  { value: "6000k", label: "6000K", hint: "Lights on, cool daylight white" },
 ];

@@ -12,6 +12,10 @@ type ScenePreset string
 // LightingPreset is a canned lighting mood for the render prompt.
 type LightingPreset string
 
+// InteriorLights says whether the scene's artificial lights are switched on
+// and, if so, at which color temperature.
+type InteriorLights string
+
 // ModelChoice selects which Gemini image model a render uses.
 type ModelChoice string
 
@@ -30,6 +34,11 @@ const (
 	LightingGoldenHour            LightingPreset = "golden_hour"
 	LightingEveningInteriorLights LightingPreset = "evening_interior_lights"
 	LightingNightExterior         LightingPreset = "night_exterior"
+
+	InteriorLightsOff   InteriorLights = "off"
+	InteriorLights3000K InteriorLights = "3000k"
+	InteriorLights4000K InteriorLights = "4000k"
+	InteriorLights6000K InteriorLights = "6000k"
 
 	ModelPro   ModelChoice = "pro"
 	ModelFlash ModelChoice = "flash"
@@ -117,9 +126,12 @@ type View struct {
 
 // StyleSettings are the project-wide render style controls.
 type StyleSettings struct {
-	Scene             ScenePreset    `json:"scene"`
-	Lighting          LightingPreset `json:"lighting"`
-	LightDirection    string         `json:"lightDirection"`
+	Scene          ScenePreset    `json:"scene"`
+	Lighting       LightingPreset `json:"lighting"`
+	LightDirection string         `json:"lightDirection"`
+	// InteriorLights is empty on projects created before the field existed;
+	// the prompt then says nothing about artificial lights.
+	InteriorLights    InteriorLights `json:"interiorLights"`
 	MaterialNotes     string         `json:"materialNotes"`
 	ExtraInstructions string         `json:"extraInstructions"`
 }
@@ -143,10 +155,21 @@ type Project struct {
 	StyleAnchorRenderID *string       `json:"styleAnchorRenderId"`
 }
 
+// Valid reports whether l is one of the known values. Empty is valid: it
+// means the setting was never chosen.
+func (l InteriorLights) Valid() bool {
+	switch l {
+	case "", InteriorLightsOff, InteriorLights3000K, InteriorLights4000K, InteriorLights6000K:
+		return true
+	}
+	return false
+}
+
 func defaultStyle() StyleSettings {
 	return StyleSettings{
-		Scene:    SceneInterior,
-		Lighting: LightingMorningSun,
+		Scene:          SceneInterior,
+		Lighting:       LightingMorningSun,
+		InteriorLights: InteriorLightsOff,
 	}
 }
 

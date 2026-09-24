@@ -148,6 +148,7 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 		ExtraInstructions: project.Style.ExtraInstructions,
 		Inventory:         inventoryOrPlaceholder(view.Inventory),
 	}
+	promptData.InteriorLights(string(project.Style.InteriorLights))
 	prompt, err := renderpkg.RenderPrompt(s.promptPath, promptData)
 	if err != nil {
 		return internalErr("building prompt: %v", err)
