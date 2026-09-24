@@ -1,3 +1,32 @@
+locals {
+  backend_memory = "512Mi"
+
+  # Cloud Tasks POSTs render tasks here. Built from the project number
+  # because the worker can't reference its own `uri` in its own template (a
+  # dependency cycle); it's the same run.app URL Cloud Run generates.
+  render_worker_url = "https://render-ai-worker-${data.google_project.app.number}.${var.region}.run.app"
+
+  # Both services run the same image with the same config; the worker only
+  # ever receives /internal/render-tasks. RENDER_WORKER_AUDIENCE is left
+  # unset - it defaults to RENDER_WORKER_URL.
+  backend_env = [
+    { name = "GOOGLE_CLOUD_PROJECT", value = local.vertex_project_id },
+    { name = "GOOGLE_CLOUD_LOCATION", value = "global" },
+    { name = "GOOGLE_CLOUD_TEXT_LOCATION", value = "us-central1" },
+    { name = "STORAGE", value = "firestore" },
+    { name = "BLOB_BUCKET", value = google_storage_bucket.blob.name },
+    { name = "STORAGE_PROJECT", value = var.app_project_id },
+    { name = "RENDER_QUEUE", value = "cloudtasks" },
+    { name = "RENDER_TASKS_QUEUE", value = "projects/${var.app_project_id}/locations/${var.region}/queues/${google_cloud_tasks_queue.render.name}" },
+    { name = "RENDER_WORKER_URL", value = local.render_worker_url },
+    { name = "RENDER_TASKS_INVOKER_SA", value = google_service_account.render_tasks_invoker.email },
+    # Makes the Go GC work harder near the container limit instead of letting
+    # the heap grow to ~2x live data and getting OOM-killed. Keep it ~100Mi
+    # below backend_memory for non-heap memory.
+    { name = "GOMEMLIMIT", value = "400MiB" },
+  ]
+}
+
 resource "google_cloud_run_v2_service" "render_api" {
   project  = var.app_project_id
   name     = "render-ai-api"
@@ -27,29 +56,21 @@ resource "google_cloud_run_v2_service" "render_api" {
       # lifecycle.ignore_changes below).
       image = "us-docker.pkg.dev/cloudrun/container/hello"
 
-      env {
-        name  = "GOOGLE_CLOUD_PROJECT"
-        value = local.vertex_project_id
+      resources {
+        limits = {
+          cpu    = "1000m"
+          memory = local.backend_memory
+        }
+        cpu_idle          = true
+        startup_cpu_boost = true
       }
-      env {
-        name  = "GOOGLE_CLOUD_LOCATION"
-        value = "global"
-      }
-      env {
-        name  = "GOOGLE_CLOUD_TEXT_LOCATION"
-        value = "us-central1"
-      }
-      env {
-        name  = "STORAGE"
-        value = "firestore"
-      }
-      env {
-        name  = "BLOB_BUCKET"
-        value = google_storage_bucket.blob.name
-      }
-      env {
-        name  = "STORAGE_PROJECT"
-        value = var.app_project_id
+
+      dynamic "env" {
+        for_each = local.backend_env
+        content {
+          name  = env.value.name
+          value = env.value.value
+        }
       }
       env {
         name = "CLERK_SECRET_KEY"
@@ -60,26 +81,6 @@ resource "google_cloud_run_v2_service" "render_api" {
           }
         }
       }
-      env {
-        name  = "RENDER_QUEUE"
-        value = "cloudtasks"
-      }
-      env {
-        name  = "RENDER_TASKS_QUEUE"
-        value = "projects/${var.app_project_id}/locations/${var.region}/queues/${google_cloud_tasks_queue.render.name}"
-      }
-      env {
-        # The service can't reference its own `uri` in its own template (a
-        # dependency cycle), so this is the same deterministic run.app URL
-        # Cloud Run would otherwise generate, built from the project number.
-        # RENDER_WORKER_AUDIENCE is left unset - it defaults to this URL.
-        name  = "RENDER_WORKER_URL"
-        value = "https://render-ai-api-${data.google_project.app.number}.${var.region}.run.app"
-      }
-      env {
-        name  = "RENDER_TASKS_INVOKER_SA"
-        value = google_service_account.render_tasks_invoker.email
-      }
     }
   }
 
@@ -89,6 +90,9 @@ resource "google_cloud_run_v2_service" "render_api" {
     google_secret_manager_secret_iam_member.render_api_secret_accessor,
     google_cloud_tasks_queue_iam_member.render_api_enqueuer,
     google_service_account_iam_member.render_api_invoker_sa_user,
+    # RENDER_WORKER_URL must point at a live, invokable worker before the API
+    # starts enqueueing to it - a task that can't be delivered is dropped.
+    google_cloud_run_v2_service_iam_member.render_tasks_invoker,
   ]
 
   lifecycle {
@@ -111,4 +115,82 @@ resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
 
   role   = "roles/run.invoker"
   member = "allUsers"
+}
+
+# The API image currently deployed, so the worker is created running real
+# code instead of the placeholder (which would answer every task with 200 and
+# silently drop it).
+data "google_cloud_run_v2_service" "render_api_deployed" {
+  project  = var.app_project_id
+  name     = "render-ai-api"
+  location = var.region
+}
+
+# Runs render tasks only, one per instance, so a render's memory never adds
+# up with other renders or with API traffic on the same instance. Not public:
+# only the render-tasks-invoker service account can call it (tasks.tf).
+resource "google_cloud_run_v2_service" "render_worker" {
+  project  = var.app_project_id
+  name     = "render-ai-worker"
+  location = var.region
+  ingress  = "INGRESS_TRAFFIC_ALL"
+
+  template {
+    service_account = google_service_account.render_api.email
+    # At least the Cloud Tasks dispatch deadline (renderTimeoutSec + 120s).
+    timeout                          = "300s"
+    max_instance_request_concurrency = 1
+
+    scaling {
+      min_instance_count = 0
+      # Every task the queue dispatches must find a free instance: a request
+      # Cloud Run rejects for lack of capacity is dropped (max_attempts = 1).
+      max_instance_count = var.render_queue_max_concurrent
+    }
+
+    containers {
+      image = data.google_cloud_run_v2_service.render_api_deployed.template[0].containers[0].image
+
+      resources {
+        limits = {
+          cpu    = "1000m"
+          memory = local.backend_memory
+        }
+        cpu_idle          = true
+        startup_cpu_boost = true
+      }
+
+      dynamic "env" {
+        for_each = local.backend_env
+        content {
+          name  = env.value.name
+          value = env.value.value
+        }
+      }
+      # Same binary, so its /api routes exist too; keep them authenticated.
+      env {
+        name = "CLERK_SECRET_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.clerk_secret_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    google_project_service.app,
+    google_project_iam_member.render_api_vertex_user,
+    google_secret_manager_secret_iam_member.render_api_secret_accessor,
+  ]
+
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
 }

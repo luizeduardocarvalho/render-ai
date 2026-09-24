@@ -76,13 +76,15 @@ and `cloudrun.tf`; see `internal/config/config.go` and `internal/jobs`):
 - `RENDER_TASKS_QUEUE` is the full Cloud Tasks queue resource name
   (`projects/P/locations/L/queues/render-jobs`). Required when
   `RENDER_QUEUE=cloudtasks`.
-- `RENDER_WORKER_URL` is this service's own base URL - its `run.app` URL,
+- `RENDER_WORKER_URL` is the `render-ai-worker` service's `run.app` URL,
   **never** the Firebase Hosting domain (Hosting's ~60s cutoff is exactly
   what this whole design routes around). Cloud Tasks POSTs to
   `{RENDER_WORKER_URL}/internal/render-tasks`. Required when
-  `RENDER_QUEUE=cloudtasks`. Terraform computes this deterministically from
-  the project number, since a Cloud Run service can't reference its own
-  `uri` from its own revision template.
+  `RENDER_QUEUE=cloudtasks`, and set to the same value on both services
+  (the API enqueues to it, the worker validates tokens against it).
+  Terraform computes it deterministically from the project number, since a
+  Cloud Run service can't reference its own `uri` from its own revision
+  template.
 - `RENDER_WORKER_AUDIENCE` is the OIDC audience the worker route validates
   incoming tokens against. Optional - defaults to `RENDER_WORKER_URL`.
 - `RENDER_TASKS_INVOKER_SA` is the service account email Cloud Tasks mints
@@ -110,10 +112,15 @@ Two things to keep in mind when choosing those values:
   but scaling to zero adds first-request latency.
 - Each render-job variation is still a long request from the *worker's* side
   (10-60s per variation, POST /internal/render-tasks) even though the
-  frontend-facing POST .../render now returns immediately. Keep the Cloud Run
-  timeout generous (300s, set in `infra/terraform/cloudrun.tf`) and consider
-  a small `cloud_run_min_instances` if you want to avoid cold starts on the
-  render path.
+  frontend-facing POST .../render now returns immediately. Those requests go
+  to a separate, non-public `render-ai-worker` service (same image, same
+  512Mi instances) that takes one render per instance, so renders never
+  share memory with each other or with API traffic - several renders on one
+  instance used to exceed 512Mi and get it OOM-killed, dropping every render
+  on it. Its max instance count is tied to `render_queue_max_concurrent`, so
+  every task the queue dispatches finds a free instance; raise that one
+  variable to run more renders at once. Keep the Cloud Run timeout generous
+  (300s, set in `infra/terraform/cloudrun.tf`).
 
 If you use `STORAGE=memory` (not recommended in production), the old caveat
 applies: pin `min_instances=1, max_instances=1`, because in-memory state is
