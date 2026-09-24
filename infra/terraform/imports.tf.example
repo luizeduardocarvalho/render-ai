@@ -1,0 +1,121 @@
+# Import blocks for the resources that ALREADY EXIST in render-ai-studio /
+# labflux-project from the manual gcloud setup described in
+# backend/DEPLOY.md's git history.
+#
+# Usage: `cp imports.tf.example imports.tf`, fill in the placeholders you
+# haven't already (most map 1:1 onto terraform.tfvars), then run
+#   terraform plan -generate-config-out=generated.tf
+# to see what Terraform infers, reconcile it with the *.tf files in this
+# directory (the resources here were written by hand to match the existing
+# setup already, so `terraform plan` after `terraform apply` should mostly
+# show no diff), then `terraform apply`. Once every resource below shows as
+# imported (not created) in `terraform state list`, delete imports.tf - it
+# has done its job and a second `terraform apply` with it present would
+# re-attempt no-op imports every time.
+#
+# A resource with no import block here either doesn't exist yet (backup
+# project + everything under it, the GitHub WIF pool/provider, the
+# backup-checker SA, the Firestore export scheduler job/SA) and will be
+# created fresh by `terraform apply`, or can't be imported cleanly - see the
+# comments below.
+
+import {
+  to = google_firestore_database.default
+  id = "projects/render-ai-studio/databases/(default)"
+}
+
+import {
+  to = google_storage_bucket.blob
+  id = "render-ai-studio-images"
+}
+
+import {
+  to = google_service_account.render_api
+  id = "projects/render-ai-studio/serviceAccounts/render-ai-api@render-ai-studio.iam.gserviceaccount.com"
+}
+
+import {
+  to = google_secret_manager_secret.clerk_secret_key
+  id = "projects/render-ai-studio/secrets/CLERK_SECRET_KEY"
+}
+
+import {
+  to = google_cloud_run_v2_service.render_api
+  id = "projects/render-ai-studio/locations/us-central1/services/render-ai-api"
+}
+
+# --- IAM bindings ---
+#
+# google_project_iam_member / google_storage_bucket_iam_member /
+# google_service_account_iam_member / google_secret_manager_secret_iam_member
+# are importable, but their import ID encodes the exact role + member string,
+# which must match this configuration's `member` values EXACTLY (including
+# the `serviceAccount:` prefix) or the import fails. Two of these bindings
+# are cross-project (the Vertex AI grant lives on labflux-project's IAM
+# policy, not render-ai-studio's), which is fine for import - just make sure
+# `terraform import`/import blocks target the project the binding actually
+# lives on, not the provider's default project.
+
+import {
+  to = google_project_iam_member.render_api_datastore_user
+  id = "render-ai-studio roles/datastore.user serviceAccount:render-ai-api@render-ai-studio.iam.gserviceaccount.com"
+}
+
+import {
+  to = google_storage_bucket_iam_member.render_api_blob_object_admin
+  id = "b/render-ai-studio-images roles/storage.objectAdmin serviceAccount:render-ai-api@render-ai-studio.iam.gserviceaccount.com"
+}
+
+import {
+  to = google_service_account_iam_member.render_api_token_creator
+  id = "projects/render-ai-studio/serviceAccounts/render-ai-api@render-ai-studio.iam.gserviceaccount.com roles/iam.serviceAccountTokenCreator serviceAccount:render-ai-api@render-ai-studio.iam.gserviceaccount.com"
+}
+
+# Cross-project: lives on labflux-project, not render-ai-studio.
+import {
+  to = google_project_iam_member.render_api_vertex_user
+  id = "labflux-project roles/aiplatform.user serviceAccount:render-ai-api@render-ai-studio.iam.gserviceaccount.com"
+}
+
+import {
+  to = google_secret_manager_secret_iam_member.render_api_secret_accessor
+  id = "projects/render-ai-studio/secrets/CLERK_SECRET_KEY roles/secretmanager.secretAccessor serviceAccount:render-ai-api@render-ai-studio.iam.gserviceaccount.com"
+}
+
+# --- Enabled APIs ---
+#
+# google_project_service is importable as "<project>/<service>", but
+# importing every one is mostly busywork - Terraform will just show them as
+# already-enabled (a no-op apply) whether imported or freshly "created"
+# against an already-enabled API. Import them only if you want a completely
+# clean `terraform state list` with nothing left un-adopted; otherwise skip
+# this block and let the first `terraform apply` create these resources
+# against APIs that are already on - it's harmless (disable_on_destroy =
+# false means a later `terraform destroy` won't disable them either).
+#
+# import {
+#   to = google_project_service.app["run.googleapis.com"]
+#   id = "render-ai-studio/run.googleapis.com"
+# }
+# ... one per service in local.app_project_services, plus
+#     google_project_service.app_aiplatform[0] for aiplatform.googleapis.com
+#     (enabled on render-ai-studio today, NOT cross-project, since Vertex AI
+#     access there predates this Terraform and the binding is what matters).
+
+# --- What does NOT import cleanly / does not exist yet ---
+#
+# - google_firestore_backup_schedule.daily / .weekly: no schedules exist yet
+#   in the real project (backend/DEPLOY.md's manual steps were never run for
+#   this). `terraform apply` creates them fresh - nothing to import.
+# - The entire backup project (backup.tf) and export scheduler (export.tf):
+#   none of it exists yet. Create backup_project_id for real first (gcloud
+#   projects create, or via your org's project-creation process - Terraform
+#   here does not create projects, only configures resources inside them),
+#   then `terraform apply` creates everything under it.
+# - github.tf (WIF pool/provider, backup-checker SA): new, nothing to import.
+# - google_cloud_run_v2_service_iam_member.public_invoker: Cloud Run v2 IAM
+#   bindings are importable in principle, but the ID format is
+#   "projects/{{project}}/locations/{{location}}/services/{{name}} roles/run.invoker allUsers" -
+#   include it above once you've confirmed provider support with
+#   `terraform import` (some Cloud Run v2 IAM resources lag the REST API in
+#   provider support; a plain `terraform apply` after import fine).

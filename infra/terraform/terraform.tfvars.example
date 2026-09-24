@@ -1,0 +1,25 @@
+# Copy to terraform.tfvars and fill in for your project. terraform.tfvars is
+# gitignored (it's local plan input, not shared) - see infra/terraform/README.md
+# for how state itself is stored/shared.
+
+app_project_id    = "render-ai-studio"
+vertex_project_id = "labflux-project" # cross-project Vertex AI; omit/null to run Vertex AI in app_project_id itself
+backup_project_id = "render-ai-backups" # placeholder - create this project first, see README.md
+
+region             = "us-central1"
+firestore_location = "nam5"
+
+blob_bucket_name   = "render-ai-studio-images"
+backup_bucket_name = "render-ai-backups-blobs" # placeholder - must be globally unique
+
+app_cors_origins = [
+  "https://render-ai-studio-app.web.app", # the `app` Hosting site (.firebaserc targets.render-ai-studio.hosting.app)
+  "http://localhost:5173",
+]
+
+github_repository = "luizeduardocarvalho/render-ai"
+
+backup_retention_days = 0 # 0 = no GCS retention policy on the backup bucket (see the variable's description before setting this)
+
+cloud_run_min_instances = 0
+cloud_run_max_instances = 4
