@@ -20,7 +20,7 @@ app_cors_origins = [
 github_repository       = "luizeduardocarvalho/render-ai"
 github_deploy_reviewers = ["luizeduardocarvalho"] # must approve each production deploy; [] for none
 
-clerk_publishable_key = "pk_live_..." # Clerk dashboard -> API keys (publishable, not secret)
+clerk_publishable_key = "REPLACE_ME" # Clerk dashboard -> API keys -> Publishable key (pk_live_...); Terraform rejects anything else
 
 firebase_landing_site_id = "render-ai-studio"     # .firebaserc target `landing`
 firebase_app_site_id     = "render-ai-studio-app" # .firebaserc target `app`
