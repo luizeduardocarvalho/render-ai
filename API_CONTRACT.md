@@ -404,8 +404,9 @@ can itself be edited. See `CONTEXT.md` for the vocabulary.
   model+resolution (`unitsPerVariation`), debited up front, `402` on too
   little balance, refunded exactly once if the variation fails - the whole
   "Credits" section applies unchanged.
-  **How it works.** The model gets the source render and a copy of it with the
-  regions filled in distinct colors, plus a prompt listing each color's
+  **How it works.** The model gets the source render, a copy of it with the
+  regions filled in distinct colors, and the view's original screenshot as the
+  ground truth for what the room holds, plus a prompt listing each color's
   instruction (`backend/prompts/edit.tmpl`); no style settings, asset photos or
   preservation check are sent. The answer is scaled to the source's size and
   blended over the source through the union of the regions, grown by
