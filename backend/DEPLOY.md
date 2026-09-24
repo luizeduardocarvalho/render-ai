@@ -368,7 +368,7 @@ Do **not** grant `render-ai-api@__GCP_PROJECT_ID__.iam.gserviceaccount.com`,
 or any other production principal, any role on `__BACKUP_PROJECT_ID__` or
 `gs://__BACKUP_BUCKET__` - IAM is deny-by-default, so simply never adding a
 binding is the control. Only the Storage Transfer Service agent (step 4) and
-the Firestore export service account (step 5) get write access, and both are
+the Firestore service agent used for exports (step 5) get write access, and both are
 scoped to this one bucket. Spot-check the bucket's policy periodically:
 
 ```bash
@@ -468,11 +468,23 @@ gcloud projects add-iam-policy-binding __GCP_PROJECT_ID__ \
   --member="serviceAccount:${EXPORT_SA}" \
   --role="roles/datastore.importExportAdmin"
 
-# Write access to the backup bucket only (nothing else in that project).
+# The export itself writes to the bucket as the production project's
+# Firestore service agent, not as EXPORT_SA. Give that agent create + list on
+# the backup bucket only - no delete, so it can't remove older exports.
+PROD_NUMBER=$(gcloud projects describe __GCP_PROJECT_ID__ --format='value(projectNumber)')
+FS_AGENT="service-${PROD_NUMBER}@gcp-sa-firestore.iam.gserviceaccount.com"
 gcloud storage buckets add-iam-policy-binding gs://__BACKUP_BUCKET__ \
   --project=__BACKUP_PROJECT_ID__ \
-  --member="serviceAccount:${EXPORT_SA}" \
+  --member="serviceAccount:${FS_AGENT}" \
   --role="roles/storage.objectCreator"
+gcloud storage buckets add-iam-policy-binding gs://__BACKUP_BUCKET__ \
+  --project=__BACKUP_PROJECT_ID__ \
+  --member="serviceAccount:${FS_AGENT}" \
+  --role="roles/storage.legacyBucketReader"
+# Run the job once by hand (gcloud scheduler jobs run render-ai-firestore-export
+# --location=us-central1) and check the export lands; if it fails with a
+# permission error, the Firestore docs on exporting to another project's
+# bucket list the current required role.
 
 gcloud scheduler jobs create http render-ai-firestore-export \
   --project=__GCP_PROJECT_ID__ \
