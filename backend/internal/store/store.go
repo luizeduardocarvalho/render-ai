@@ -36,21 +36,25 @@ func newID() string { return uuid.NewString() }
 
 // --- Blobs -----------------------------------------------------------------
 
-// PutBlob stores data under a new random ID and returns it.
-func (s *MemoryStore) PutBlob(data []byte, contentType string) string {
+// PutBlob stores data under a new random ID and returns it. It never fails -
+// the map write cannot error - but returns an error to satisfy BlobStore
+// alongside GCSStore, whose writes can.
+func (s *MemoryStore) PutBlob(data []byte, contentType string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	id := newID()
 	s.blobs[id] = Blob{Data: data, ContentType: contentType}
-	return id
+	return id, nil
 }
 
 // PutBlobAt stores data under a caller-chosen ID, overwriting any existing
-// blob there. Used for mask bitmaps, whose image ID is the mask's own ID.
-func (s *MemoryStore) PutBlobAt(id string, data []byte, contentType string) {
+// blob there. Used for mask bitmaps, whose image ID is the mask's own ID. It
+// never fails; see PutBlob.
+func (s *MemoryStore) PutBlobAt(id string, data []byte, contentType string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.blobs[id] = Blob{Data: data, ContentType: contentType}
+	return nil
 }
 
 // GetBlob fetches a stored blob by ID.

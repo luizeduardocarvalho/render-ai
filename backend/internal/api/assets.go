@@ -60,7 +60,10 @@ func (s *Server) uploadAssetReference(w http.ResponseWriter, r *http.Request) er
 		return badRequest("invalid reference image: %v", decErr)
 	}
 
-	imageID := s.blobs.PutBlob(data, contentTypeForFormat(format))
+	imageID, err := s.blobs.PutBlob(data, contentTypeForFormat(format))
+	if err != nil {
+		return badGateway("storing reference image: %v", err)
+	}
 	a, err := s.repo.SetAssetReference(pid, aid, imageID)
 	if err != nil {
 		return mapStoreErr(err, "asset %s not found", aid)

@@ -205,7 +205,20 @@ func (s *Server) renderView(w http.ResponseWriter, r *http.Request) error {
 		if mimeType == "" {
 			mimeType = "image/png"
 		}
-		resultImageID := s.blobs.PutBlob(result.ImageData, mimeType)
+		resultImageID, err := s.blobs.PutBlob(result.ImageData, mimeType)
+		if err != nil {
+			// A model call was already paid for and returned a usable image -
+			// losing it here (unstored) is exactly the failure worth treating
+			// like a failed variation, not silently dropping it: if nothing has
+			// been saved yet this whole request fails, otherwise we stop early
+			// and hand back the variations that did make it to storage.
+			if len(created) == 0 {
+				return badGateway("storing render result: %v", err)
+			}
+			log.Printf("render: view=%s variation=%d/%d failed to store result after %d succeeded, stopping early: %v",
+				vid, i+1, variations, len(created), err)
+			break
+		}
 
 		promptTokens, outputTokens := result.PromptTokens, result.OutputTokens
 

@@ -81,11 +81,16 @@ type Repository interface {
 // has two implementations: MemoryStore (in-process map) and GCSStore (a Google
 // Cloud Storage bucket).
 type BlobStore interface {
-	// PutBlob stores data under a new random ID and returns it.
-	PutBlob(data []byte, contentType string) string
+	// PutBlob stores data under a new random ID and returns it. An error means
+	// the data was not durably stored - callers must not record a reference to
+	// the returned ID (there won't be one) or otherwise proceed as if the
+	// write succeeded.
+	PutBlob(data []byte, contentType string) (string, error)
 	// PutBlobAt stores data under a caller-chosen ID, overwriting any existing
-	// blob there. Used for mask bitmaps, whose blob ID is the mask's own ID.
-	PutBlobAt(id string, data []byte, contentType string)
+	// blob there. Used for mask bitmaps, whose blob ID is the mask's own ID. An
+	// error means the write did not durably succeed - callers must not record a
+	// reference to id as if it now holds this data.
+	PutBlobAt(id string, data []byte, contentType string) error
 	// GetBlob fetches a stored blob by ID.
 	GetBlob(id string) (Blob, bool)
 	// DeleteBlob removes a blob by ID. Missing blobs are not an error.
