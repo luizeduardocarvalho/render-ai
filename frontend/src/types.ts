@@ -147,17 +147,29 @@ export interface RenderRequest {
   variations?: number; // 1-4, defaults to 1 server-side
 }
 
-export const LIGHTING_PRESETS: { value: LightingPreset; label: string }[] = [
-  { value: "morning_sun", label: "Morning sun" },
-  { value: "overcast", label: "Overcast" },
-  { value: "golden_hour", label: "Golden hour" },
-  { value: "evening_interior_lights", label: "Evening interior lights" },
-  { value: "night_exterior", label: "Night exterior" },
+// Labels/hints for these constants live in the translation files (see
+// src/i18n/locales/*.json under style.lightingPresets / style.interiorLights)
+// rather than as literal strings here - `value` is the token the API expects
+// (unchanged), `labelKey`/`hintKey` are i18next keys resolved with t() at
+// render time.
+
+export const LIGHTING_PRESETS: { value: LightingPreset; labelKey: `style.lightingPresets.${LightingPreset}` }[] = [
+  { value: "morning_sun", labelKey: "style.lightingPresets.morning_sun" },
+  { value: "overcast", labelKey: "style.lightingPresets.overcast" },
+  { value: "golden_hour", labelKey: "style.lightingPresets.golden_hour" },
+  { value: "evening_interior_lights", labelKey: "style.lightingPresets.evening_interior_lights" },
+  { value: "night_exterior", labelKey: "style.lightingPresets.night_exterior" },
 ];
 
-export const INTERIOR_LIGHTS_OPTIONS: { value: Exclude<InteriorLights, "">; label: string; hint: string }[] = [
-  { value: "off", label: "Off", hint: "All artificial lights switched off" },
-  { value: "3000k", label: "3000K", hint: "Lights on, warm white" },
-  { value: "4000k", label: "4000K", hint: "Lights on, neutral white" },
-  { value: "6000k", label: "6000K", hint: "Lights on, cool daylight white" },
+type InteriorLightsValue = Exclude<InteriorLights, "">;
+
+export const INTERIOR_LIGHTS_OPTIONS: {
+  value: InteriorLightsValue;
+  labelKey: `style.interiorLights.options.${InteriorLightsValue}.label`;
+  hintKey: `style.interiorLights.options.${InteriorLightsValue}.hint`;
+}[] = [
+  { value: "off", labelKey: "style.interiorLights.options.off.label", hintKey: "style.interiorLights.options.off.hint" },
+  { value: "3000k", labelKey: "style.interiorLights.options.3000k.label", hintKey: "style.interiorLights.options.3000k.hint" },
+  { value: "4000k", labelKey: "style.interiorLights.options.4000k.label", hintKey: "style.interiorLights.options.4000k.hint" },
+  { value: "6000k", labelKey: "style.interiorLights.options.6000k.label", hintKey: "style.interiorLights.options.6000k.hint" },
 ];

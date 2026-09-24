@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ApiError } from "../api";
 import { useProject } from "../state/ProjectContext";
 import { INTERIOR_LIGHTS_OPTIONS, LIGHTING_PRESETS, type StyleSettings } from "../types";
 
 export function StylePanel() {
+  const { t } = useTranslation();
   const { project, updateStyle } = useProject();
   const style = project?.style ?? null;
 
@@ -37,45 +39,47 @@ export function StylePanel() {
       await updateStyle(draft);
       setSavedTick((n) => n + 1);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save style");
+      setError(err instanceof ApiError ? err.message : t("style.error"));
     } finally {
       setSaving(false);
     }
   }
 
+  const activeHint = INTERIOR_LIGHTS_OPTIONS.find((o) => o.value === draft.interiorLights);
+
   return (
     <section className="panel">
       <div className="panel-header">
         <div>
-          <div className="panel-title">Style</div>
-          <div className="panel-subtitle">Applied to every render in this project</div>
+          <div className="panel-title">{t("style.title")}</div>
+          <div className="panel-subtitle">{t("style.subtitle")}</div>
         </div>
-        {!dirty && savedTick > 0 && <span className="badge badge-success">Saved</span>}
+        {!dirty && savedTick > 0 && <span className="badge badge-success">{t("style.saved")}</span>}
       </div>
       <div className="panel-body">
         <div className="field">
-          <span className="field-label">Scene</span>
+          <span className="field-label">{t("style.scene.label")}</span>
           <div className="segmented">
             <button
               type="button"
               className={`segmented-btn ${draft.scene === "interior" ? "segmented-btn-active" : ""}`}
               onClick={() => set("scene", "interior")}
             >
-              Interior
+              {t("style.scene.interior")}
             </button>
             <button
               type="button"
               className={`segmented-btn ${draft.scene === "exterior" ? "segmented-btn-active" : ""}`}
               onClick={() => set("scene", "exterior")}
             >
-              Exterior
+              {t("style.scene.exterior")}
             </button>
           </div>
         </div>
 
         <div className="field">
           <label className="field-label" htmlFor="lighting">
-            Lighting preset
+            {t("style.lighting.label")}
           </label>
           <select
             id="lighting"
@@ -85,7 +89,7 @@ export function StylePanel() {
           >
             {LIGHTING_PRESETS.map((p) => (
               <option key={p.value} value={p.value}>
-                {p.label}
+                {t(p.labelKey)}
               </option>
             ))}
           </select>
@@ -93,12 +97,12 @@ export function StylePanel() {
 
         <div className="field">
           <label className="field-label" htmlFor="light-direction">
-            Light direction
+            {t("style.lightDirection.label")}
           </label>
           <input
             id="light-direction"
             className="input"
-            placeholder="e.g. low sun from the west"
+            placeholder={t("style.lightDirection.placeholder")}
             value={draft.lightDirection}
             onChange={(e) => set("lightDirection", e.target.value)}
           />
@@ -106,7 +110,7 @@ export function StylePanel() {
 
         <div className="field">
           <span className="field-label" id="interior-lights-label">
-            Artificial lights
+            {t("style.interiorLights.label")}
           </span>
           <div className="segmented" role="radiogroup" aria-labelledby="interior-lights-label">
             {INTERIOR_LIGHTS_OPTIONS.map((o) => (
@@ -115,29 +119,26 @@ export function StylePanel() {
                 type="button"
                 role="radio"
                 aria-checked={draft.interiorLights === o.value}
-                title={o.hint}
+                title={t(o.hintKey)}
                 className={`segmented-btn ${draft.interiorLights === o.value ? "segmented-btn-active" : ""}`}
                 onClick={() => set("interiorLights", o.value)}
               >
-                {o.label}
+                {t(o.labelKey)}
               </button>
             ))}
           </div>
-          <span className="field-hint">
-            {INTERIOR_LIGHTS_OPTIONS.find((o) => o.value === draft.interiorLights)?.hint ??
-              "Not set - the model decides whether lights are on"}
-          </span>
+          <span className="field-hint">{activeHint ? t(activeHint.hintKey) : t("style.interiorLights.notSet")}</span>
         </div>
 
         <div className="field">
           <label className="field-label" htmlFor="material-notes">
-            Material notes
+            {t("style.materialNotes.label")}
           </label>
           <textarea
             id="material-notes"
             className="textarea"
             rows={3}
-            placeholder="e.g. white oak flooring, matte black fixtures"
+            placeholder={t("style.materialNotes.placeholder")}
             value={draft.materialNotes}
             onChange={(e) => set("materialNotes", e.target.value)}
           />
@@ -145,13 +146,13 @@ export function StylePanel() {
 
         <div className="field">
           <label className="field-label" htmlFor="extra-instructions">
-            Extra instructions
+            {t("style.extraInstructions.label")}
           </label>
           <textarea
             id="extra-instructions"
             className="textarea"
             rows={3}
-            placeholder="Anything else the model should know"
+            placeholder={t("style.extraInstructions.placeholder")}
             value={draft.extraInstructions}
             onChange={(e) => set("extraInstructions", e.target.value)}
           />
@@ -166,7 +167,7 @@ export function StylePanel() {
           disabled={!dirty || saving}
         >
           {saving ? <span className="spinner" /> : null}
-          {dirty ? "Save style" : "Saved"}
+          {dirty ? t("style.save") : t("style.saved")}
         </button>
       </div>
     </section>

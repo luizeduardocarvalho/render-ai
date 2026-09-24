@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ApiError } from "../api";
 import { useProject } from "../state/ProjectContext";
 import type { View } from "../types";
 
 export function InventoryPanel({ view }: { view: View }) {
+  const { t } = useTranslation();
   const { updateInventory, generateInventory } = useProject();
   const [text, setText] = useState(view.inventory);
   const [generating, setGenerating] = useState(false);
@@ -28,7 +30,7 @@ export function InventoryPanel({ view }: { view: View }) {
       const inventory = await generateInventory(view.id);
       setText(inventory);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to generate inventory");
+      setError(err instanceof ApiError ? err.message : t("inventory.errors.generate"));
     } finally {
       setGenerating(false);
     }
@@ -40,7 +42,7 @@ export function InventoryPanel({ view }: { view: View }) {
     try {
       await updateInventory(view.id, text);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save inventory");
+      setError(err instanceof ApiError ? err.message : t("inventory.errors.save"));
     } finally {
       setSaving(false);
     }
@@ -50,26 +52,26 @@ export function InventoryPanel({ view }: { view: View }) {
     <section className="panel">
       <div className="panel-header">
         <div>
-          <div className="panel-title">Object inventory</div>
-          <div className="panel-subtitle">Used to check what the render preserves</div>
+          <div className="panel-title">{t("inventory.title")}</div>
+          <div className="panel-subtitle">{t("inventory.subtitle")}</div>
         </div>
         <button type="button" className="btn btn-sm" onClick={handleGenerate} disabled={generating}>
           {generating ? <span className="spinner" /> : null}
-          Generate from screenshot
+          {t("inventory.generate")}
         </button>
       </div>
       <div className="panel-body">
         <textarea
           className="textarea inventory-textarea"
           rows={8}
-          placeholder="No inventory yet. Generate one from the screenshot, or write it yourself."
+          placeholder={t("inventory.placeholder")}
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
         {error && <div className="error-banner">{error}</div>}
         <button type="button" className="btn btn-primary" onClick={handleSave} disabled={!dirty || saving}>
           {saving ? <span className="spinner" /> : null}
-          {dirty ? "Save inventory" : "Saved"}
+          {dirty ? t("inventory.save") : t("inventory.saved")}
         </button>
       </div>
     </section>

@@ -1,6 +1,7 @@
 import Konva from "konva";
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Circle, Image as KonvaImage, Layer, Stage } from "react-konva";
+import { useTranslation } from "react-i18next";
 import { fetchSignedImageUrl } from "../../api";
 import { useImage } from "../../hooks/useImage";
 import { useSignedImageUrl } from "../../hooks/useSignedImageUrl";
@@ -35,6 +36,7 @@ function clamp(n: number, min: number, max: number): number {
 }
 
 export function MaskEditor({ view }: { view: View }) {
+  const { t } = useTranslation();
   const { project, createMask, updateMask, deleteMask, uploadMaskBitmap } = useProject();
   const assets = project?.assets ?? [];
 
@@ -137,7 +139,7 @@ export function MaskEditor({ view }: { view: View }) {
         img.onerror = () => {
           const e = store.get(mask.id);
           if (e) e.bitmapState = "none";
-          setEditorError("Failed to load a mask bitmap from the server.");
+          setEditorError(t("maskEditor.errors.bitmapLoad"));
         };
         // Resolve a signed URL for the mask's bitmap blob, then load it. crossOrigin
         // is already set so the loaded image can be read back into a canvas.
@@ -149,7 +151,7 @@ export function MaskEditor({ view }: { view: View }) {
             .catch(() => {
               const e = store.get(mask.id);
               if (e) e.bitmapState = "none";
-              setEditorError("Failed to load a mask bitmap from the server.");
+              setEditorError(t("maskEditor.errors.bitmapLoad"));
             });
         }
       } else if (entry.lastColor !== color) {
@@ -227,7 +229,7 @@ export function MaskEditor({ view }: { view: View }) {
       setSaveStatus((prev) => ({ ...prev, [maskId]: "saved" }));
     } catch (err) {
       setSaveStatus((prev) => ({ ...prev, [maskId]: "error" }));
-      setEditorError(err instanceof Error ? err.message : "Failed to save mask");
+      setEditorError(err instanceof Error ? err.message : t("maskEditor.errors.saveMask"));
     }
   }
 
@@ -238,7 +240,7 @@ export function MaskEditor({ view }: { view: View }) {
       const mask = await createMask(view.id);
       setSelectedMaskId(mask.id);
     } catch (err) {
-      setEditorError(err instanceof Error ? err.message : "Failed to add mask");
+      setEditorError(err instanceof Error ? err.message : t("maskEditor.errors.addMask"));
     } finally {
       setAddingMask(false);
     }
@@ -248,7 +250,7 @@ export function MaskEditor({ view }: { view: View }) {
     try {
       await updateMask(view.id, mask.id, { hidden: !mask.hidden });
     } catch (err) {
-      setEditorError(err instanceof Error ? err.message : "Failed to update mask");
+      setEditorError(err instanceof Error ? err.message : t("maskEditor.errors.updateMask"));
     }
   }
 
@@ -256,17 +258,17 @@ export function MaskEditor({ view }: { view: View }) {
     try {
       await updateMask(view.id, mask.id, { assetId });
     } catch (err) {
-      setEditorError(err instanceof Error ? err.message : "Failed to assign asset");
+      setEditorError(err instanceof Error ? err.message : t("maskEditor.errors.assignAsset"));
     }
   }
 
   async function handleDeleteMask(mask: Mask) {
-    if (!window.confirm("Delete this mask? This cannot be undone.")) return;
+    if (!window.confirm(t("maskEditor.deleteConfirm"))) return;
     try {
       await deleteMask(view.id, mask.id);
       canvasStore.current.delete(mask.id);
     } catch (err) {
-      setEditorError(err instanceof Error ? err.message : "Failed to delete mask");
+      setEditorError(err instanceof Error ? err.message : t("maskEditor.errors.deleteMask"));
     }
   }
 
@@ -278,9 +280,9 @@ export function MaskEditor({ view }: { view: View }) {
     <section className="panel mask-editor">
       <div className="panel-header">
         <div>
-          <div className="panel-title">Mask editor</div>
+          <div className="panel-title">{t("maskEditor.title")}</div>
           <div className="panel-subtitle">
-            {view.width} x {view.height}px original resolution
+            {t("maskEditor.subtitle", { width: view.width, height: view.height })}
           </div>
         </div>
       </div>
@@ -304,7 +306,7 @@ export function MaskEditor({ view }: { view: View }) {
         <div className="error-banner mask-editor-error">
           <span>{editorError}</span>
           <button className="btn btn-ghost btn-sm" onClick={() => setEditorError(null)}>
-            Dismiss
+            {t("common.dismiss")}
           </button>
         </div>
       )}
@@ -314,12 +316,12 @@ export function MaskEditor({ view }: { view: View }) {
           <div className="mask-canvas-viewport" ref={containerRef}>
             {screenshotLoading && (
               <div className="mask-canvas-status">
-                <span className="spinner" /> Loading screenshot...
+                <span className="spinner" /> {t("maskEditor.loadingScreenshot")}
               </div>
             )}
             {screenshotError && (
               <div className="mask-canvas-status mask-canvas-status-error">
-                Could not load the screenshot image.
+                {t("maskEditor.loadError")}
               </div>
             )}
             {screenshotImg && (
@@ -378,10 +380,10 @@ export function MaskEditor({ view }: { view: View }) {
             )}
           </div>
           {!selectedMaskId && view.masks.length > 0 && (
-            <p className="field-hint mask-editor-hint">Select a mask on the right to start painting.</p>
+            <p className="field-hint mask-editor-hint">{t("maskEditor.selectHint")}</p>
           )}
           {view.masks.length === 0 && (
-            <p className="field-hint mask-editor-hint">Add a mask to start painting a region.</p>
+            <p className="field-hint mask-editor-hint">{t("maskEditor.addHint")}</p>
           )}
         </div>
 
