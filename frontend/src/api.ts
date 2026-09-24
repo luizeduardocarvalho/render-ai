@@ -6,6 +6,7 @@ import type {
   Project,
   ProjectSummary,
   Render,
+  RenderJob,
   RenderRequest,
   StyleSettings,
   View,
@@ -279,15 +280,86 @@ export function deleteMask(pid: string, vid: string, mid: string): Promise<void>
 
 // ---- Render ----
 
-export function renderView(pid: string, vid: string, req: RenderRequest): Promise<Render[]> {
-  // Rendering is slow (10-60s per variation, server timeout ~180s for the
-  // whole request); give it a generous client timeout too. The response is
-  // always an array, one Render per requested (successful) variation.
-  return request<Render[]>(
-    `/api/projects/${pid}/views/${vid}/render`,
-    json(req),
-    180_000,
-  );
+// Renders now run as an async job: the POST enqueues one Cloud Task per
+// variation and returns 202 with a RenderJob immediately, and the caller
+// polls GET .../render-jobs/{jid} until the job reaches a terminal status.
+
+function startRender(pid: string, vid: string, req: RenderRequest): Promise<RenderJob> {
+  return request<RenderJob>(`/api/projects/${pid}/views/${vid}/render`, json(req));
+}
+
+function getRenderJob(pid: string, jid: string): Promise<RenderJob> {
+  return request<RenderJob>(`/api/projects/${pid}/render-jobs/${jid}`);
+}
+
+const POLL_INTERVAL_MS = 3_000;
+const POLL_TIMEOUT_MS = 15 * 60_000;
+const MAX_CONSECUTIVE_POLL_FAILURES = 3;
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new ApiError(0, "Render cancelled."));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(new ApiError(0, "Render cancelled."));
+      },
+      { once: true },
+    );
+  });
+}
+
+export interface RenderViewOptions {
+  onProgress?: (job: RenderJob) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * Starts a render job and polls it to completion, resolving to the finished
+ * variations' Render[] (same shape callers got back when the endpoint was
+ * synchronous). Polls every ~3s, tolerating a handful of consecutive
+ * transient failures (network errors or 5xx) before giving up; a 4xx from a
+ * poll is treated as fatal right away. Gives up after ~15 minutes overall.
+ */
+export async function renderView(
+  pid: string,
+  vid: string,
+  req: RenderRequest,
+  opts?: RenderViewOptions,
+): Promise<Render[]> {
+  const job = await startRender(pid, vid, req);
+  opts?.onProgress?.(job);
+  if (job.status === "done") return job.renders;
+  if (job.status === "failed") throw new ApiError(502, job.error ?? "Render failed.");
+
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  let consecutiveFailures = 0;
+  while (true) {
+    await sleep(POLL_INTERVAL_MS, opts?.signal);
+    if (Date.now() > deadline) {
+      throw new ApiError(0, "Render is taking too long. Please check back later.");
+    }
+
+    let polled: RenderJob;
+    try {
+      polled = await getRenderJob(pid, job.id);
+    } catch (err) {
+      if (err instanceof ApiError && err.status >= 400 && err.status < 500) throw err;
+      consecutiveFailures++;
+      if (consecutiveFailures > MAX_CONSECUTIVE_POLL_FAILURES) throw err;
+      continue;
+    }
+    consecutiveFailures = 0;
+    opts?.onProgress?.(polled);
+
+    if (polled.status === "done") return polled.renders;
+    if (polled.status === "failed") throw new ApiError(502, polled.error ?? "Render failed.");
+  }
 }
 
 // ---- Pricing ----

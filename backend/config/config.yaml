@@ -48,3 +48,19 @@ preservation:
   edgeScoreFlagThreshold: 0.55
   # Dilation (px) applied before computing edge overlap, to tolerate sub-pixel drift.
   edgeDilationPx: 2
+
+# How render-job variations are dispatched to the worker
+# (POST /internal/render-tasks). "inline" (default) runs each variation in a
+# goroutine in-process - no external queue, matches the "memory" storage
+# backend for local dev. "cloudtasks" enqueues one Cloud Tasks HTTP task per
+# variation instead, so the deployed service is never held to Firebase
+# Hosting's 60s request cutoff. See infra/terraform/tasks.tf for how the
+# cloudtasks fields below are populated in production (also settable via
+# RENDER_QUEUE / RENDER_TASKS_QUEUE / RENDER_WORKER_URL /
+# RENDER_WORKER_AUDIENCE / RENDER_TASKS_INVOKER_SA).
+jobs:
+  queue: "inline"
+  # tasksQueue: "projects/P/locations/L/queues/render-jobs"
+  # workerUrl: "https://render-ai-api-xxx.a.run.app" # this service's own run.app URL, never the Hosting domain
+  # workerAudience: ""                               # defaults to workerUrl
+  # invokerServiceAccount: "render-tasks-invoker@P.iam.gserviceaccount.com"

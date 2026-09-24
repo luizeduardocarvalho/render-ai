@@ -65,6 +65,12 @@ variable "cloud_run_max_instances" {
   description = "Maximum Cloud Run instance count for render-ai-api."
 }
 
+variable "render_queue_max_concurrent" {
+  type        = number
+  default     = 4
+  description = "Max concurrent dispatches for the render-jobs Cloud Tasks queue (rate_limits.max_concurrent_dispatches)."
+}
+
 variable "github_deploy_environment" {
   type        = string
   default     = "production"

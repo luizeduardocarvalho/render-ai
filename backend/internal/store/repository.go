@@ -82,6 +82,18 @@ type Repository interface {
 	// Renders.
 	AddRender(pid, vid string, r *Render) (*Render, error)
 	FindRender(pid, renderID string) (*Render, error)
+
+	// Render jobs (async render queue - see internal/jobs and
+	// internal/api/render.go). CreateRenderJob takes a job with its ID and
+	// Variations already populated by the caller, mirroring AddRender.
+	// UpdateRenderJob is an atomic read-modify-write: fn runs against the
+	// live job (a Firestore transaction; MemoryStore under its lock) and its
+	// return value is persisted iff fn succeeds. All three return
+	// ErrNotFound if the project or job doesn't exist (soft-deleted project
+	// included).
+	CreateRenderJob(pid string, job *RenderJob) (*RenderJob, error)
+	GetRenderJob(pid, jid string) (*RenderJob, error)
+	UpdateRenderJob(pid, jid string, fn func(j *RenderJob) error) (*RenderJob, error)
 }
 
 // BlobStore is the binary-object store for image bytes, keyed by blob ID. It

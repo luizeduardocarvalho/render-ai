@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"render-ai/backend/internal/config"
+	"render-ai/backend/internal/jobs"
 	"render-ai/backend/internal/store"
 )
 
@@ -19,7 +20,7 @@ func authedConfig() *config.Config {
 
 func newTestServer() (*Server, *store.MemoryStore) {
 	st := store.NewMemory()
-	return NewServer(st, st, nil, nil, authedConfig(), ""), st
+	return NewServer(st, st, nil, nil, authedConfig(), "", jobs.NewInline()), st
 }
 
 // call invokes the requireOwner-wrapped handler for pid as user, returning
@@ -120,7 +121,7 @@ func TestRequireOwnerDisabledWhenAuthOff(t *testing.T) {
 	st := store.NewMemory()
 	p := st.CreateProject("user-a", "P")
 	// No CLERK_SECRET_KEY -> auth disabled -> ownership check skipped entirely.
-	s := NewServer(st, st, nil, nil, &config.Config{}, "")
+	s := NewServer(st, st, nil, nil, &config.Config{}, "", jobs.NewInline())
 
 	called, status := call(s, p.ID, "anyone")
 	if !called || status != http.StatusOK {

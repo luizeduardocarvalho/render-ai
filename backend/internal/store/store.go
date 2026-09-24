@@ -13,9 +13,10 @@ import (
 // for local dev when Firestore/GCS are not configured. The deployed backend
 // uses FirestoreStore + GCSStore instead.
 type MemoryStore struct {
-	mu       sync.Mutex
-	projects map[string]*Project
-	blobs    map[string]Blob
+	mu         sync.Mutex
+	projects   map[string]*Project
+	blobs      map[string]Blob
+	renderJobs map[string]*RenderJob // keyed by jobKey(pid, jid)
 }
 
 // Compile-time checks that MemoryStore satisfies both storage interfaces.
@@ -27,10 +28,15 @@ var (
 // NewMemory creates an empty in-memory store.
 func NewMemory() *MemoryStore {
 	return &MemoryStore{
-		projects: make(map[string]*Project),
-		blobs:    make(map[string]Blob),
+		projects:   make(map[string]*Project),
+		blobs:      make(map[string]Blob),
+		renderJobs: make(map[string]*RenderJob),
 	}
 }
+
+// jobKey is the MemoryStore's renderJobs map key: jobs are scoped to a
+// project, so the same job id could otherwise collide across projects.
+func jobKey(pid, jid string) string { return pid + "/" + jid }
 
 func newID() string { return uuid.NewString() }
 
@@ -553,4 +559,57 @@ func (s *MemoryStore) FindRender(pid, renderID string) (*Render, error) {
 		}
 	}
 	return nil, ErrNotFound
+}
+
+// --- Render jobs -------------------------------------------------------------
+
+// CreateRenderJob stores job (whose ID and Variations are already set by the
+// caller) under the project. Returns ErrNotFound if pid doesn't exist or is
+// soft-deleted.
+func (s *MemoryStore) CreateRenderJob(pid string, job *RenderJob) (*RenderJob, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.liveProject(pid); err != nil {
+		return nil, err
+	}
+	s.renderJobs[jobKey(pid, job.ID)] = job.clone()
+	return job.clone(), nil
+}
+
+// GetRenderJob returns a deep copy of one render job.
+func (s *MemoryStore) GetRenderJob(pid, jid string) (*RenderJob, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.liveProject(pid); err != nil {
+		return nil, err
+	}
+	j, ok := s.renderJobs[jobKey(pid, jid)]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return j.clone(), nil
+}
+
+// UpdateRenderJob runs fn against a private clone of the job under the
+// store lock (so concurrent worker claims of different variations serialize
+// cleanly), and only writes it back - bumping UpdatedAt - if fn returns
+// nil. A failing fn therefore leaves the stored job untouched, mirroring
+// FirestoreStore's transaction rollback on error.
+func (s *MemoryStore) UpdateRenderJob(pid, jid string, fn func(j *RenderJob) error) (*RenderJob, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.liveProject(pid); err != nil {
+		return nil, err
+	}
+	j, ok := s.renderJobs[jobKey(pid, jid)]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	working := j.clone()
+	if err := fn(working); err != nil {
+		return nil, err
+	}
+	working.UpdatedAt = time.Now().UTC()
+	s.renderJobs[jobKey(pid, jid)] = working
+	return working.clone(), nil
 }

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError, getPricing } from "../api";
 import { useProject } from "../state/ProjectContext";
-import type { ModelChoice, PricingResponse, Render, Resolution, View } from "../types";
+import type { ModelChoice, PricingResponse, Render, RenderJob, Resolution, View } from "../types";
 
 interface RenderControlsProps {
   view: View;
@@ -19,6 +19,16 @@ export function RenderControls({ view, onRendered }: RenderControlsProps) {
   const [rendering, setRendering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pricing, setPricing] = useState<PricingResponse | null>(null);
+  const [progressJob, setProgressJob] = useState<RenderJob | null>(null);
+  // Aborts the in-flight render's polling loop if the component unmounts
+  // (e.g. the user navigates away) while a job is still running.
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const brlFormatter = useMemo(
     () => new Intl.NumberFormat(i18n.language, { style: "currency", currency: "BRL" }),
@@ -52,15 +62,31 @@ export function RenderControls({ view, onRendered }: RenderControlsProps) {
   async function handleRender() {
     setRendering(true);
     setError(null);
+    setProgressJob(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const renders = await renderView(view.id, { model, resolution, preservationCheck, variations });
+      const renders = await renderView(
+        view.id,
+        { model, resolution, preservationCheck, variations },
+        { onProgress: setProgressJob, signal: controller.signal },
+      );
       onRendered(renders);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("renderControls.error"));
     } finally {
+      abortRef.current = null;
       setRendering(false);
+      setProgressJob(null);
     }
   }
+
+  const doneCount = progressJob?.variations.filter((v) => v.status === "done" || v.status === "failed").length ?? 0;
+  const totalCount = progressJob?.variations.length ?? variations;
+  const renderingLabel =
+    progressJob && totalCount > 1
+      ? t("renderControls.renderingProgress", { done: doneCount, count: totalCount })
+      : t("renderControls.rendering");
 
   const activeMaskCount = view.masks.filter((m) => !m.hidden && m.assetId).length;
 
@@ -140,7 +166,7 @@ export function RenderControls({ view, onRendered }: RenderControlsProps) {
 
         <button type="button" className="btn btn-primary btn-block" onClick={handleRender} disabled={rendering}>
           {rendering ? <span className="spinner" /> : null}
-          {rendering ? t("renderControls.rendering") : t("renderControls.renderButton", { count: variations })}
+          {rendering ? renderingLabel : t("renderControls.renderButton", { count: variations })}
         </button>
         {!rendering && estimatedTotalBrl !== undefined && (
           <div className="field-hint render-cost-preview">

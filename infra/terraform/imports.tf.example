@@ -104,6 +104,9 @@ import {
 
 # --- What does NOT import cleanly / does not exist yet ---
 #
+# - tasks.tf (the render-jobs Cloud Tasks queue, render-tasks-invoker SA and
+#   its IAM bindings): new, nothing to import - `terraform apply` creates it
+#   all fresh.
 # - google_firestore_backup_schedule.daily / .weekly: no schedules exist yet
 #   in the real project (backend/DEPLOY.md's manual steps were never run for
 #   this). `terraform apply` creates them fresh - nothing to import.

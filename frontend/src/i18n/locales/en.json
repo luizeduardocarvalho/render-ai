@@ -182,6 +182,7 @@
     "renderButton_one": "Generate render",
     "renderButton_other": "Generate render ({{count}} variations)",
     "rendering": "Rendering... this can take up to a minute",
+    "renderingProgress": "Rendering... {{done}} of {{count}} done",
     "costPreview_one": "≈ {{cost}}",
     "costPreview_other": "≈ {{cost}} for {{count}} variations",
     "error": "Render failed. Please try again."

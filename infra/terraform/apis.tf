@@ -12,6 +12,7 @@ locals {
     "secretmanager.googleapis.com",
     "cloudscheduler.googleapis.com",
     "sts.googleapis.com",
+    "cloudtasks.googleapis.com",
   ]
 
   # Only enabled separately when Vertex AI lives in its own project (the

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"render-ai/backend/internal/config"
+	"render-ai/backend/internal/jobs"
 	"render-ai/backend/internal/store"
 )
 
@@ -76,7 +77,7 @@ func TestUploadAssetReferenceFailsLoudlyOnBlobWriteError(t *testing.T) {
 		t.Fatalf("creating asset: %v", err)
 	}
 
-	s := NewServer(repo, &failingBlobStore{BlobStore: repo}, nil, nil, &config.Config{}, "")
+	s := NewServer(repo, &failingBlobStore{BlobStore: repo}, nil, nil, &config.Config{}, "", jobs.NewInline())
 
 	r := multipartFileRequest(t, http.MethodPost, "/", testPNG(t))
 	r.SetPathValue("pid", p.ID)
@@ -110,7 +111,7 @@ func TestCreateViewFailsLoudlyOnBlobWriteError(t *testing.T) {
 	repo := store.NewMemory()
 	p := repo.CreateProject("owner-1", "P")
 
-	s := NewServer(repo, &failingBlobStore{BlobStore: repo}, nil, nil, &config.Config{}, "")
+	s := NewServer(repo, &failingBlobStore{BlobStore: repo}, nil, nil, &config.Config{}, "", jobs.NewInline())
 
 	r := multipartFileRequest(t, http.MethodPost, "/", testPNG(t))
 	r.SetPathValue("pid", p.ID)
@@ -153,7 +154,7 @@ func TestUploadMaskBitmapFailsLoudlyOnBlobWriteError(t *testing.T) {
 		t.Fatalf("creating mask: %v", err)
 	}
 
-	s := NewServer(repo, &failingBlobStore{BlobStore: repo}, nil, nil, &config.Config{}, "")
+	s := NewServer(repo, &failingBlobStore{BlobStore: repo}, nil, nil, &config.Config{}, "", jobs.NewInline())
 
 	r := multipartFileRequest(t, http.MethodPut, "/", png)
 	r.SetPathValue("pid", p.ID)

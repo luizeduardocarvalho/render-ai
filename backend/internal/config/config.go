@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -18,6 +19,35 @@ type Config struct {
 	Preservation PreservationConfig `yaml:"preservation"`
 	Auth         AuthConfig         `yaml:"auth"`
 	Storage      StorageConfig      `yaml:"storage"`
+	Jobs         JobsConfig         `yaml:"jobs"`
+}
+
+// JobsConfig selects and configures how render-job variations are
+// dispatched to the worker (POST /internal/render-tasks) - see
+// internal/jobs and internal/api/render.go.
+//
+// Queue is "inline" (default - runs the worker func in a goroutine,
+// in-process; used with memory storage and local dev) or "cloudtasks"
+// (creates one Cloud Tasks HTTP task per variation, calling this same
+// service's own run.app URL directly so Firebase Hosting's 60s cutoff never
+// applies). The remaining fields are only
+// meaningful (and required) in "cloudtasks" mode.
+type JobsConfig struct {
+	Queue string `yaml:"queue"`
+	// TasksQueue is the full Cloud Tasks queue resource name:
+	// projects/P/locations/L/queues/Q.
+	TasksQueue string `yaml:"tasksQueue"`
+	// WorkerURL is this service's own base URL (its run.app URL, never the
+	// Firebase Hosting domain), e.g. https://render-ai-api-xxx.a.run.app.
+	// Cloud Tasks POSTs to WorkerURL + "/internal/render-tasks".
+	WorkerURL string `yaml:"workerUrl"`
+	// WorkerAudience is the OIDC audience the worker route validates
+	// incoming tokens against. Empty defaults to WorkerURL.
+	WorkerAudience string `yaml:"workerAudience"`
+	// InvokerServiceAccount is the service account Cloud Tasks mints the
+	// worker's OIDC token as; the worker route requires the verified
+	// token's email claim to match this exactly.
+	InvokerServiceAccount string `yaml:"invokerServiceAccount"`
 }
 
 // StorageConfig selects and configures where projects and image blobs are
@@ -162,6 +192,47 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Storage.Backend == "" {
 		cfg.Storage.Backend = "memory"
+	}
+
+	if v := os.Getenv("RENDER_QUEUE"); v != "" {
+		cfg.Jobs.Queue = v
+	}
+	if v := os.Getenv("RENDER_TASKS_QUEUE"); v != "" {
+		cfg.Jobs.TasksQueue = v
+	}
+	if v := os.Getenv("RENDER_WORKER_URL"); v != "" {
+		cfg.Jobs.WorkerURL = v
+	}
+	if v := os.Getenv("RENDER_WORKER_AUDIENCE"); v != "" {
+		cfg.Jobs.WorkerAudience = v
+	}
+	if v := os.Getenv("RENDER_TASKS_INVOKER_SA"); v != "" {
+		cfg.Jobs.InvokerServiceAccount = v
+	}
+	if cfg.Jobs.Queue == "" {
+		cfg.Jobs.Queue = "inline"
+	}
+	if cfg.Jobs.WorkerAudience == "" {
+		cfg.Jobs.WorkerAudience = cfg.Jobs.WorkerURL
+	}
+	switch cfg.Jobs.Queue {
+	case "inline":
+	case "cloudtasks":
+		var missing []string
+		if cfg.Jobs.TasksQueue == "" {
+			missing = append(missing, "jobs.tasksQueue / RENDER_TASKS_QUEUE")
+		}
+		if cfg.Jobs.WorkerURL == "" {
+			missing = append(missing, "jobs.workerUrl / RENDER_WORKER_URL")
+		}
+		if cfg.Jobs.InvokerServiceAccount == "" {
+			missing = append(missing, "jobs.invokerServiceAccount / RENDER_TASKS_INVOKER_SA")
+		}
+		if len(missing) > 0 {
+			return nil, fmt.Errorf("jobs.queue=cloudtasks requires %s", strings.Join(missing, ", "))
+		}
+	default:
+		return nil, fmt.Errorf("unknown jobs.queue %q (want \"inline\" or \"cloudtasks\")", cfg.Jobs.Queue)
 	}
 
 	// Cloud Run (and most PaaS platforms) inject PORT and require the server to

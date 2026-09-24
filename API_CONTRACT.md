@@ -145,6 +145,31 @@ interface PricingResponse {
     costBrl: number;
   }[];
 }
+
+// A render request turned into a job: POST .../render returns 202 with one
+// of these instead of running the render synchronously, and the frontend
+// polls GET .../render-jobs/{jid} until status is "done" or "failed". See
+// the Render endpoint section below.
+interface RenderJob {
+  id: string;
+  viewId: string;
+  status: "queued" | "running" | "done" | "failed";
+  createdAt: string;       // ISO
+  updatedAt: string;       // ISO
+  request: {
+    model: ModelChoice;
+    resolution: Resolution;
+    preservationCheck: boolean;
+    variations: number;
+  };
+  variations: {
+    status: "queued" | "running" | "done" | "failed";
+    renderId?: string;     // set once this variation's status is "done"
+    error?: string;        // set once this variation's status is "failed"
+  }[];
+  renders: Render[];       // full Render objects for "done" variations, in variation order
+  error?: string;          // set iff status == "failed": the first variation's error
+}
 ```
 
 ## Image/blob transport
@@ -213,6 +238,16 @@ returns 404. A scheduled purge job to hard-delete projects 30+ days past
 - `DELETE /api/projects/{pid}/views/{vid}/masks/{mid}` -> `204`
 
 ### Render
+
+Rendering is **async**: the POST below validates the request and returns a
+job immediately, and the caller polls a second endpoint until it's terminal.
+This exists because the app is served through Firebase Hosting, which cuts a
+proxied request off at ~60s - too short for a slow render (Pro / 2K-4K /
+several variations) even though the backend itself allows up to ~300s. Behind
+the scenes, one Cloud Task is enqueued per variation and a worker route
+(`POST /internal/render-tasks`, not part of this frontend-facing contract -
+see `backend/DEPLOY.md`) does the actual Vertex AI call for each.
+
 - `POST   /api/projects/{pid}/views/{vid}/render`
   ```json
   { "model": "pro", "resolution": "2K", "preservationCheck": true, "variations": 2 }
@@ -221,16 +256,33 @@ returns 404. A scheduled purge job to hard-delete projects 30+ days past
   (values outside that range are a 400). Each variation is an independent
   sample from the model (no seed is exposed, so repeated calls already
   differ) and becomes its own `Render` record, appended to the view's
-  `renders` list.
-  -> `Render[]` (synchronous; may take 10-60s per variation; backend timeout
-  generous ~180s for the whole request). Length equals the number of
-  variations that succeeded: normally `variations`, but if a later variation
-  fails after at least one earlier one succeeded, the response contains only
-  the successes gathered so far (the failure is logged server-side, not
-  raised as an error).
-  Errors return `{ "error": "message" }` with a 4xx/5xx and a clear message for:
-  refusal, no image returned, timeout, invalid resolution for model - but only
-  when the *first* variation fails (no successes yet to return instead).
+  `renders` list once its task completes.
+  Synchronous checks are unchanged from before: 400 for a bad model/
+  resolution/variations count or flash+non-1K, 404 if the project or view
+  doesn't exist, 400 if the view has no screenshot, 500 if the renderer isn't
+  configured (missing Vertex AI credentials).
+  -> **`202 Accepted`** with a `RenderJob` (its `variations` all start
+  `"queued"`; `renders` is `[]`). If enqueueing a task fails, the job (and
+  every not-yet-enqueued variation) is marked `"failed"` and the handler
+  returns `502 { "error": "queueing render: ..." }` instead.
+
+- `GET    /api/projects/{pid}/render-jobs/{jid}` -> `200` with the current
+  `RenderJob`, or `404` if it doesn't exist (or belongs to another project).
+  Poll this every ~3s until `status` is `"done"` or `"failed"`; a generous
+  overall cap (~15 minutes) protects against a poll loop that never sees a
+  terminal status. `status` is derived from `variations`:
+  - any variation `"queued"`/`"running"` -> `"running"` if at least one has
+    started or finished, otherwise `"queued"`.
+  - every variation terminal and at least one `"done"` -> `"done"` (this is
+    also the *partial-success* case: some variations may still be `"failed"`,
+    each with its own `error`, but as long as one render came back the job as
+    a whole is `"done"` and `renders` holds whatever succeeded).
+  - every variation terminal and none `"done"` -> `"failed"`, and the job's
+    top-level `error` is the *first* variation's error message.
+  A variation stuck `"running"` for longer than the render timeout (its
+  worker died mid-render - a killed instance, a crash) is reported as
+  `"failed"` with `error: "render worker did not finish"` once enough time
+  has passed - this is computed each time the job is read, not written back.
 
 ### Pricing
 - `GET /api/pricing` -> `PricingResponse`. Requires only a signed-in user (like
