@@ -79,7 +79,12 @@ variable "github_deploy_reviewers" {
 
 variable "clerk_publishable_key" {
   type        = string
-  description = "Clerk publishable key (pk_...), baked into the frontend build. Public by design - not the secret key."
+  description = "Clerk publishable key (pk_live_... or pk_test_...), baked into the frontend build. Public by design - not the secret key."
+
+  validation {
+    condition     = can(regex("^pk_(live|test)_[A-Za-z0-9+/=_-]{16,}$", var.clerk_publishable_key))
+    error_message = "clerk_publishable_key must be the real publishable key from the Clerk dashboard (API keys), not a placeholder."
+  }
 }
 
 variable "firebase_landing_site_id" {

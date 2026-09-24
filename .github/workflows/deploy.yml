@@ -106,8 +106,11 @@ jobs:
           VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.VITE_CLERK_PUBLISHABLE_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "$VITE_CLERK_PUBLISHABLE_KEY" ]; then
-            echo "::error::VITE_CLERK_PUBLISHABLE_KEY is not set in the production environment."
+          # A real key is pk_live_/pk_test_ followed by base64. Refuse
+          # placeholders like "pk_live_...", which build fine but break
+          # sign-in for everyone.
+          if ! [[ "$VITE_CLERK_PUBLISHABLE_KEY" =~ ^pk_(live|test)_[A-Za-z0-9+/=_-]{16,}$ ]]; then
+            echo "::error::VITE_CLERK_PUBLISHABLE_KEY in the production environment is missing or not a real Clerk publishable key. Set clerk_publishable_key in infra/terraform/terraform.tfvars and run terraform apply."
             exit 1
           fi
           pnpm install --frozen-lockfile
