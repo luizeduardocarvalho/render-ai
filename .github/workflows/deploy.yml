@@ -13,14 +13,9 @@ name: Deploy
 # Identity Federation as the deployer service account (infra/terraform/
 # deploy.tf) - no keys are stored in GitHub.
 #
-# Variables (Settings -> Environments -> production -> Environment variables),
-# values from `terraform output` - see infra/terraform/README.md:
-#   GCP_WIF_PROVIDER            workload_identity_provider
-#   GCP_DEPLOYER_SA             deployer_service_account_email
-#   GCP_ARTIFACT_REPO           artifact_registry_repository
-#   GCP_PROJECT                 app project id (render-ai-studio)
-#   GCP_REGION                  us-central1
-#   VITE_CLERK_PUBLISHABLE_KEY  Clerk publishable key (not a secret)
+# Variables of the `production` environment, all set by Terraform
+# (infra/terraform/github_actions.tf): GCP_WIF_PROVIDER, GCP_DEPLOYER_SA,
+# GCP_ARTIFACT_REPO, GCP_PROJECT, GCP_REGION, VITE_CLERK_PUBLISHABLE_KEY.
 
 on:
   workflow_dispatch:

@@ -10,8 +10,8 @@
 
 # Terraform local state/cache and per-checkout variables (.terraform.lock.hcl
 # IS committed - see infra/terraform/README.md)
-infra/terraform/.terraform/
-infra/terraform/*.tfstate
-infra/terraform/*.tfstate.*
-infra/terraform/terraform.tfvars
-infra/terraform/imports.tf
+infra/*/.terraform/
+infra/*/*.tfstate
+infra/*/*.tfstate.*
+infra/*/terraform.tfvars
+infra/*/imports.tf

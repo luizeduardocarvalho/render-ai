@@ -70,3 +70,24 @@ variable "github_deploy_environment" {
   default     = "production"
   description = "GitHub Actions environment whose jobs may impersonate the deployer service account (.github/workflows/deploy.yml)."
 }
+
+variable "github_deploy_reviewers" {
+  type        = list(string)
+  default     = []
+  description = "GitHub usernames who must approve each production deploy. Empty means deploys start without approval."
+}
+
+variable "clerk_publishable_key" {
+  type        = string
+  description = "Clerk publishable key (pk_...), baked into the frontend build. Public by design - not the secret key."
+}
+
+variable "firebase_landing_site_id" {
+  type        = string
+  description = "Firebase Hosting site id for the landing page (.firebaserc target `landing`)."
+}
+
+variable "firebase_app_site_id" {
+  type        = string
+  description = "Firebase Hosting site id for the app (.firebaserc target `app`)."
+}

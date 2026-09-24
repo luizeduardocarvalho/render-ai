@@ -4,9 +4,9 @@ name: Backup check
 # firestore.tf, export.tf) actually ran recently. Fails loudly if any of them
 # is stale or missing, instead of silently rotting.
 #
-# Required repo variables (Settings > Secrets and variables > Actions >
-# Variables) - see infra/terraform/README.md for how to get each value from
-# `terraform output`:
+# Repo variables, all set by Terraform (infra/terraform/github_actions.tf).
+# Until they exist the job is skipped, so the daily schedule is harmless
+# before `terraform apply`:
 #   GCP_WIF_PROVIDER        - Workload Identity Federation provider resource name
 #   GCP_BACKUP_CHECKER_SA   - read-only service account email to impersonate
 #   GCP_APP_PROJECT         - app project id (Firestore + Cloud Scheduler live here)
@@ -14,13 +14,12 @@ name: Backup check
 #   GCP_TRANSFER_JOB        - Storage Transfer job name (transferJobs/...)
 #   GCP_BACKUP_BUCKET       - backup bucket name (each Firestore export lands in its own gs://<this>/<timestamp>/ folder)
 #   GCP_FIRESTORE_LOCATION  - optional, defaults to nam5
+#   BACKUP_CHECK_SINCE      - when the backup jobs were created; a backup that
+#                             doesn't exist yet only warns for 8 days after it
 
 on:
-  # The daily schedule is off until the backups exist: after `terraform apply`
-  # and setting the repo variables (infra/terraform/README.md), run this once
-  # by hand, then uncomment the schedule. Until then it would fail every day.
-  # schedule:
-  #   - cron: "0 9 * * *" # daily, 09:00 UTC
+  schedule:
+    - cron: "0 9 * * *" # daily, 09:00 UTC
   workflow_dispatch: {}
 
 permissions:
@@ -29,6 +28,8 @@ permissions:
 
 jobs:
   check:
+    # Skipped until Terraform has set the repo variables.
+    if: vars.GCP_BACKUP_BUCKET != ''
     runs-on: ubuntu-latest
     steps:
       - name: Authenticate to Google Cloud
@@ -73,6 +74,22 @@ jobs:
             [ "$age" -le "$max" ]
           }
 
+          # Right after setup some backups don't exist yet (the Firestore
+          # export is weekly). Until 8 days after BACKUP_CHECK_SINCE, a
+          # missing backup is a warning; a stale or failed one still fails.
+          SINCE="${{ vars.BACKUP_CHECK_SINCE }}"
+          IN_GRACE=false
+          if [ -n "$SINCE" ] && age_ok "$SINCE" "$MAX_AGE_WEEKLY_SEC"; then
+            IN_GRACE=true
+          fi
+          missing() {
+            if [ "$IN_GRACE" = true ]; then
+              echo "::warning::$1 (setup was less than 8 days ago)"
+            else
+              fail "$1"
+            fi
+          }
+
           echo "== 1. Daily blob backup (Storage Transfer job) =="
           LATEST_OP=$(gcloud transfer operations list \
             --project="$BACKUP_PROJECT" \
@@ -80,15 +97,17 @@ jobs:
             --format=json | jq -c '
               sort_by(.metadata.endTime // "") | last // empty')
 
-          [ -n "$LATEST_OP" ] || fail "No Storage Transfer operations found for job $TRANSFER_JOB in $BACKUP_PROJECT."
+          if [ -z "$LATEST_OP" ]; then
+            missing "No Storage Transfer operations found for job $TRANSFER_JOB in $BACKUP_PROJECT."
+          else
+            OP_STATUS=$(echo "$LATEST_OP" | jq -r '.metadata.status // "UNKNOWN"')
+            OP_END=$(echo "$LATEST_OP" | jq -r '.metadata.endTime // empty')
 
-          OP_STATUS=$(echo "$LATEST_OP" | jq -r '.metadata.status // "UNKNOWN"')
-          OP_END=$(echo "$LATEST_OP" | jq -r '.metadata.endTime // empty')
-
-          [ "$OP_STATUS" = "SUCCESS" ] || fail "Latest blob backup transfer operation status is '$OP_STATUS', not SUCCESS (endTime=$OP_END)."
-          [ -n "$OP_END" ] || fail "Latest blob backup transfer operation has no endTime."
-          age_ok "$OP_END" "$MAX_AGE_DAILY_SEC" || fail "Latest successful blob backup transfer finished at $OP_END, which is older than 26h."
-          echo "OK: blob backup transfer succeeded at $OP_END."
+            [ "$OP_STATUS" = "SUCCESS" ] || fail "Latest blob backup transfer operation status is '$OP_STATUS', not SUCCESS (endTime=$OP_END)."
+            [ -n "$OP_END" ] || fail "Latest blob backup transfer operation has no endTime."
+            age_ok "$OP_END" "$MAX_AGE_DAILY_SEC" || fail "Latest successful blob backup transfer finished at $OP_END, which is older than 26h."
+            echo "OK: blob backup transfer succeeded at $OP_END."
+          fi
 
           echo "== 2. Firestore backup schedule =="
           LATEST_BACKUP=$(gcloud firestore backups list \
@@ -97,15 +116,17 @@ jobs:
             --format=json | jq -c '
               sort_by(.snapshotTime // "") | last // empty')
 
-          [ -n "$LATEST_BACKUP" ] || fail "No Firestore backups found in $APP_PROJECT/$FIRESTORE_LOCATION."
+          if [ -z "$LATEST_BACKUP" ]; then
+            missing "No Firestore backups found in $APP_PROJECT/$FIRESTORE_LOCATION."
+          else
+            BACKUP_STATE=$(echo "$LATEST_BACKUP" | jq -r '.state // "UNKNOWN"')
+            BACKUP_TIME=$(echo "$LATEST_BACKUP" | jq -r '.snapshotTime // empty')
 
-          BACKUP_STATE=$(echo "$LATEST_BACKUP" | jq -r '.state // "UNKNOWN"')
-          BACKUP_TIME=$(echo "$LATEST_BACKUP" | jq -r '.snapshotTime // empty')
-
-          [ "$BACKUP_STATE" = "READY" ] || fail "Newest Firestore backup state is '$BACKUP_STATE', not READY (snapshotTime=$BACKUP_TIME)."
-          [ -n "$BACKUP_TIME" ] || fail "Newest Firestore backup has no snapshotTime."
-          age_ok "$BACKUP_TIME" "$MAX_AGE_DAILY_SEC" || fail "Newest Firestore backup snapshot is from $BACKUP_TIME, which is older than 26h."
-          echo "OK: newest Firestore backup is READY, from $BACKUP_TIME."
+            [ "$BACKUP_STATE" = "READY" ] || fail "Newest Firestore backup state is '$BACKUP_STATE', not READY (snapshotTime=$BACKUP_TIME)."
+            [ -n "$BACKUP_TIME" ] || fail "Newest Firestore backup has no snapshotTime."
+            age_ok "$BACKUP_TIME" "$MAX_AGE_DAILY_SEC" || fail "Newest Firestore backup snapshot is from $BACKUP_TIME, which is older than 26h."
+            echo "OK: newest Firestore backup is READY, from $BACKUP_TIME."
+          fi
 
           echo "== 3. Weekly Firestore export =="
           # Each export is a timestamped folder at the bucket root holding a
@@ -116,8 +137,11 @@ jobs:
             --format=json | jq -r '
               map(.creation_time // .timeCreated // .updated // empty) | sort | last // empty' || true)
 
-          [ -n "$LATEST_EXPORT_TIME" ] || fail "No Firestore export found in gs://${BACKUP_BUCKET}/ - has the weekly export ever run?"
-          age_ok "$LATEST_EXPORT_TIME" "$MAX_AGE_WEEKLY_SEC" || fail "Newest Firestore export in gs://${BACKUP_BUCKET}/ is from $LATEST_EXPORT_TIME, which is older than 8 days."
-          echo "OK: newest Firestore export object is from $LATEST_EXPORT_TIME."
+          if [ -z "$LATEST_EXPORT_TIME" ]; then
+            missing "No Firestore export found in gs://${BACKUP_BUCKET}/ - has the weekly export ever run?"
+          else
+            age_ok "$LATEST_EXPORT_TIME" "$MAX_AGE_WEEKLY_SEC" || fail "Newest Firestore export in gs://${BACKUP_BUCKET}/ is from $LATEST_EXPORT_TIME, which is older than 8 days."
+            echo "OK: newest Firestore export object is from $LATEST_EXPORT_TIME."
+          fi
 
-          echo "All backup checks passed."
+          echo "Backup check finished."

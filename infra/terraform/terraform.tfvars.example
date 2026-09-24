@@ -4,7 +4,7 @@
 
 app_project_id    = "render-ai-studio"
 vertex_project_id = "labflux-project" # cross-project Vertex AI; omit/null to run Vertex AI in app_project_id itself
-backup_project_id = "render-ai-backups" # placeholder - create this project first, see README.md
+backup_project_id = "render-ai-backups" # created by infra/bootstrap
 
 region             = "us-central1"
 firestore_location = "nam5"
@@ -17,7 +17,13 @@ app_cors_origins = [
   "http://localhost:5173",
 ]
 
-github_repository = "luizeduardocarvalho/render-ai"
+github_repository       = "luizeduardocarvalho/render-ai"
+github_deploy_reviewers = ["luizeduardocarvalho"] # must approve each production deploy; [] for none
+
+clerk_publishable_key = "pk_live_..." # Clerk dashboard -> API keys (publishable, not secret)
+
+firebase_landing_site_id = "render-ai-studio"     # .firebaserc target `landing`
+firebase_app_site_id     = "render-ai-studio-app" # .firebaserc target `app`
 
 backup_retention_days = 0 # 0 = no GCS retention policy on the backup bucket (see the variable's description before setting this)
 
