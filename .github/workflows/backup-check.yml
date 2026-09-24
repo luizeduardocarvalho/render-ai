@@ -16,8 +16,11 @@ name: Backup check
 #   GCP_FIRESTORE_LOCATION  - optional, defaults to nam5
 
 on:
-  schedule:
-    - cron: "0 9 * * *" # daily, 09:00 UTC
+  # The daily schedule is off until the backups exist: after `terraform apply`
+  # and setting the repo variables (infra/terraform/README.md), run this once
+  # by hand, then uncomment the schedule. Until then it would fail every day.
+  # schedule:
+  #   - cron: "0 9 * * *" # daily, 09:00 UTC
   workflow_dispatch: {}
 
 permissions:
