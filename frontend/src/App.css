@@ -253,6 +253,72 @@
   padding: 0 var(--space-3);
 }
 
+/* A segmented control that must fit a narrow column (e.g. the sidebar) rather
+   than size to its labels - buttons grow from their label width to fill the
+   row (so a longer label like "Desligadas" keeps its room) and shrink their
+   padding/text instead of overflowing it. */
+.segmented-fluid {
+  display: flex;
+  width: 100%;
+}
+
+.segmented-fluid .segmented-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 var(--space-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Credits                                                                */
+/* ---------------------------------------------------------------------- */
+
+.credits-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  height: 30px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.credits-chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+}
+
+.credits-chip-value {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.credits-chip-label {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.credits-ledger-balance {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.credits-ledger-body {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.render-cost-preview-insufficient {
+  color: var(--danger);
+}
+
 /* ---------------------------------------------------------------------- */
 /* Color input                                                            */
 /* ---------------------------------------------------------------------- */

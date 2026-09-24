@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchSignedImageUrl } from "../api";
+import { fetchAssetReferenceUrl, fetchSignedImageUrl } from "../api";
 import { useProject } from "../state/ProjectContext";
 
 interface Options {
@@ -42,6 +42,35 @@ export function useSignedImageUrl(
       active = false;
     };
   }, [pid, imageId, nonce]);
+
+  return url;
+}
+
+/**
+ * Resolves a loadable URL for a library asset's reference image, for screens
+ * with no open project (e.g. the project picker's asset library tab). Returns
+ * undefined while resolving, when the asset has no reference image, or on error.
+ */
+export function useAssetReferenceUrl(assetId: string | null, hasReferenceImage: boolean): string | undefined {
+  const [url, setUrl] = useState<string>();
+
+  useEffect(() => {
+    if (!assetId || !hasReferenceImage) {
+      setUrl(undefined);
+      return;
+    }
+    let active = true;
+    fetchAssetReferenceUrl(assetId)
+      .then((u) => {
+        if (active) setUrl(u);
+      })
+      .catch(() => {
+        if (active) setUrl(undefined);
+      });
+    return () => {
+      active = false;
+    };
+  }, [assetId, hasReferenceImage]);
 
   return url;
 }

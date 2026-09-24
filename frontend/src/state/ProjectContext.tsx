@@ -12,6 +12,7 @@ import * as api from "../api";
 import type {
   Asset,
   Mask,
+  Me,
   Project,
   ProjectSummary,
   Render,
@@ -26,6 +27,13 @@ const LAST_PROJECT_KEY = "render-ai:lastProjectId";
 interface ProjectContextValue {
   project: Project | null;
 
+  // The signed-in user's identity + credit balance (GET /api/me). Fetched
+  // once on mount and refreshed after anything that can change the balance
+  // (renders, 402s, admin grants elsewhere).
+  me: Me | null;
+  meLoading: boolean;
+  refreshMe: () => Promise<void>;
+
   // Project selection (the picker).
   projects: ProjectSummary[] | null;
   projectsLoading: boolean;
@@ -34,6 +42,22 @@ interface ProjectContextValue {
   selectProject: (id: string) => Promise<void>;
   closeProject: () => void;
   deleteProject: (id: string) => Promise<void>;
+
+  // Per-user asset library, shown on the project list screen (no project
+  // open). Independent of `project.assets`, which the in-editor sidebar
+  // keeps using via the project-scoped routes - both talk to the same
+  // underlying per-user store on the backend.
+  libraryAssets: Asset[] | null;
+  libraryAssetsLoading: boolean;
+  libraryAssetsError: string | null;
+  refreshLibraryAssets: () => Promise<void>;
+  createLibraryAsset: (data: { name: string; description: string; color: string }) => Promise<Asset>;
+  updateLibraryAsset: (
+    aid: string,
+    data: { name: string; description: string; color: string },
+  ) => Promise<Asset>;
+  deleteLibraryAsset: (aid: string) => Promise<void>;
+  uploadLibraryAssetReference: (aid: string, file: File, opts?: api.UploadOptions) => Promise<Asset>;
 
   selectedViewId: string | null;
   selectedView: View | null;
@@ -90,10 +114,76 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [projectsError, setProjectsError] = useState<string | null>(null);
 
+  const [me, setMe] = useState<Me | null>(null);
+  const [meLoading, setMeLoading] = useState(true);
+
+  const [libraryAssets, setLibraryAssets] = useState<Asset[] | null>(null);
+  const [libraryAssetsLoading, setLibraryAssetsLoading] = useState(false);
+  const [libraryAssetsError, setLibraryAssetsError] = useState<string | null>(null);
+
   const requireProject = useCallback(() => {
     if (!project) throw new Error("No active project");
     return project;
   }, [project]);
+
+  const refreshMeFn = useCallback(async () => {
+    setMeLoading(true);
+    try {
+      setMe(await api.getMe());
+    } catch {
+      // Balance chip / admin link just stay hidden - not worth a banner for this.
+    } finally {
+      setMeLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshMeFn();
+  }, [refreshMeFn]);
+
+  const refreshLibraryAssetsFn = useCallback(async () => {
+    setLibraryAssetsLoading(true);
+    setLibraryAssetsError(null);
+    try {
+      setLibraryAssets(await api.listAssets());
+    } catch (err) {
+      setLibraryAssetsError(err instanceof Error ? err.message : t("library.errors.loadFailed"));
+    } finally {
+      setLibraryAssetsLoading(false);
+    }
+  }, [t]);
+
+  const createLibraryAssetFn = useCallback(
+    async (data: { name: string; description: string; color: string }) => {
+      const asset = await api.createLibraryAsset(data);
+      setLibraryAssets((prev) => (prev ? [asset, ...prev] : [asset]));
+      return asset;
+    },
+    [],
+  );
+
+  const updateLibraryAssetFn = useCallback(
+    async (aid: string, data: { name: string; description: string; color: string }) => {
+      const asset = await api.updateLibraryAsset(aid, data);
+      setLibraryAssets((prev) => (prev ? prev.map((a) => (a.id === aid ? asset : a)) : prev));
+      return asset;
+    },
+    [],
+  );
+
+  const deleteLibraryAssetFn = useCallback(async (aid: string) => {
+    await api.deleteLibraryAsset(aid);
+    setLibraryAssets((prev) => (prev ? prev.filter((a) => a.id !== aid) : prev));
+  }, []);
+
+  const uploadLibraryAssetReferenceFn = useCallback(
+    async (aid: string, file: File, opts?: api.UploadOptions) => {
+      const asset = await api.uploadLibraryAssetReference(aid, file, opts);
+      setLibraryAssets((prev) => (prev ? prev.map((a) => (a.id === aid ? asset : a)) : prev));
+      return asset;
+    },
+    [],
+  );
 
   const refreshProjectsFn = useCallback(async () => {
     setProjectsLoading(true);
@@ -383,6 +473,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const value: ProjectContextValue = {
     project,
+    me,
+    meLoading,
+    refreshMe: refreshMeFn,
     projects,
     projectsLoading,
     projectsError,
@@ -390,6 +483,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     selectProject: selectProjectFn,
     closeProject: closeProjectFn,
     deleteProject: deleteProjectFn,
+    libraryAssets,
+    libraryAssetsLoading,
+    libraryAssetsError,
+    refreshLibraryAssets: refreshLibraryAssetsFn,
+    createLibraryAsset: createLibraryAssetFn,
+    updateLibraryAsset: updateLibraryAssetFn,
+    deleteLibraryAsset: deleteLibraryAssetFn,
+    uploadLibraryAssetReference: uploadLibraryAssetReferenceFn,
     selectedViewId,
     selectedView,
     setSelectedViewId,

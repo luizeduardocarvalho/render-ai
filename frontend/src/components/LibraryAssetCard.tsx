@@ -1,36 +1,36 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError } from "../api";
-import { useSignedImageUrl } from "../hooks/useSignedImageUrl";
+import { useAssetReferenceUrl } from "../hooks/useSignedImageUrl";
 import { useProject } from "../state/ProjectContext";
 import type { Asset } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 
-interface AssetCardProps {
-  asset: Asset;
-}
-
-export function AssetCard({ asset }: AssetCardProps) {
+/**
+ * Library-screen counterpart to AssetCard: same look, but talks to the
+ * per-user library routes (no project id in scope) via ProjectContext.
+ */
+export function LibraryAssetCard({ asset }: { asset: Asset }) {
   const { t } = useTranslation();
-  const { updateAsset, deleteAsset, uploadAssetReference } = useProject();
+  const { updateLibraryAsset, deleteLibraryAsset, uploadLibraryAssetReference } = useProject();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(asset.name);
   const [description, setDescription] = useState(asset.description);
   const [color, setColor] = useState(asset.color);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const referenceUrl = useSignedImageUrl(asset.hasReferenceImage ? asset.referenceImageId : null);
+  const referenceUrl = useAssetReferenceUrl(asset.id, asset.hasReferenceImage);
 
   async function handleSave() {
     if (!name.trim()) return;
     setSaving(true);
     setError(null);
     try {
-      await updateAsset(asset.id, { name: name.trim(), description, color });
+      await updateLibraryAsset(asset.id, { name: name.trim(), description, color });
       setEditing(false);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("assetCard.errors.update"));
@@ -43,8 +43,7 @@ export function AssetCard({ asset }: AssetCardProps) {
     setDeleting(true);
     setError(null);
     try {
-      await deleteAsset(asset.id);
-      setConfirmingDelete(false);
+      await deleteLibraryAsset(asset.id);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : t("assetCard.errors.delete");
       setError(message);
@@ -59,7 +58,7 @@ export function AssetCard({ asset }: AssetCardProps) {
     setUploading(true);
     setError(null);
     try {
-      await uploadAssetReference(asset.id, file);
+      await uploadLibraryAssetReference(asset.id, file);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("assetCard.errors.upload"));
     } finally {
@@ -89,11 +88,11 @@ export function AssetCard({ asset }: AssetCardProps) {
           />
         </div>
         <div className="field asset-color-field">
-          <label className="field-label" htmlFor={`color-${asset.id}`}>
+          <label className="field-label" htmlFor={`library-color-${asset.id}`}>
             {t("assetCard.colorLabel")}
           </label>
           <input
-            id={`color-${asset.id}`}
+            id={`library-color-${asset.id}`}
             type="color"
             className="color-input"
             value={color}

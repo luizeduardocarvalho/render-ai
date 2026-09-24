@@ -1,41 +1,25 @@
-import { RedirectToSignIn, SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
+import { RedirectToSignIn, SignedIn, SignedOut } from "@clerk/clerk-react";
 import App from "../App";
-import { NotAuthorized } from "./NotAuthorized";
 import { ProjectProvider } from "../state/ProjectContext";
 
 /**
- * Renders the real app for signed-in admins, a "not approved" screen for
- * signed-in non-admins, and bounces everyone else to /sign-in.
- *
- * This is a UX-only gate - the backend independently enforces admin access
- * (403s non-admin requests) - but a non-admin who signs in should see a
- * clean message here, never the app shell itself.
+ * Renders the real app for every signed-in user, and bounces everyone else
+ * to /sign-in. There is no more admin-only gate here - any verified Clerk
+ * session gets the app (rendering is metered by credits instead; see
+ * CreditsChip / RenderControls). Only the separate /admin route stays
+ * restricted, gated on isAdmin from GET /api/me (see AdminGate).
  */
 export function GatedApp() {
   return (
     <>
       <SignedIn>
-        <SignedInGate />
+        <ProjectProvider>
+          <App />
+        </ProjectProvider>
       </SignedIn>
       <SignedOut>
         <RedirectToSignIn />
       </SignedOut>
     </>
-  );
-}
-
-/** Split out so useUser() (a hook) is only called while actually signed in. */
-function SignedInGate() {
-  const { user } = useUser();
-  const isAdmin = user?.publicMetadata?.role === "admin";
-
-  if (!isAdmin) {
-    return <NotAuthorized />;
-  }
-
-  return (
-    <ProjectProvider>
-      <App />
-    </ProjectProvider>
   );
 }

@@ -1,0 +1,56 @@
+.admin-search {
+  display: flex;
+  gap: var(--space-2);
+  max-width: 420px;
+}
+
+.admin-table-body {
+  padding: 0;
+  overflow-x: auto;
+}
+
+.admin-users-table td,
+.admin-users-table th {
+  white-space: nowrap;
+}
+
+.admin-user-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: normal;
+}
+
+.admin-user-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.admin-user-email {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.admin-row-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.admin-pagination-buttons {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.admin-grant-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
