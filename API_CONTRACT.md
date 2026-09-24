@@ -62,8 +62,17 @@ interface RenderMetrics {
   anchorUsed: boolean;
   imageCallMs: number;     // latency of the image generation call only
   totalMs: number;         // includes inventory/check calls done for this render
+  // promptTokens/outputTokens/thoughtsTokens are summed across every model
+  // call this render made: the image generation call, plus the text-model
+  // preservation check if it ran. outputTokens is TEXT output only - it
+  // never includes the image call's own generated-image tokens, which are
+  // priced per-image (see PricingResponse) rather than per-token, to avoid
+  // double-counting them at the text/thinking output rate. thoughtsTokens is
+  // the thinking-token portion, broken out for visibility; it's already
+  // included in whatever estimatedCostUsd charges at the output rate.
   promptTokens?: number;
   outputTokens?: number;
+  thoughtsTokens?: number;
   estimatedCostUsd?: number;
 }
 
@@ -124,6 +133,17 @@ interface ProjectSummary {
   viewCount: number;
   renderCount: number;
   thumbnailImageId?: string; // first view's screenshot blob id, if any
+}
+
+// Returned by GET /api/pricing - see the Pricing endpoint below.
+interface PricingResponse {
+  usdToBrl: number;
+  estimates: {
+    model: ModelChoice;
+    resolution: Resolution;
+    costUsd: number;
+    costBrl: number;
+  }[];
 }
 ```
 
@@ -211,6 +231,17 @@ returns 404. A scheduled purge job to hard-delete projects 30+ days past
   Errors return `{ "error": "message" }` with a 4xx/5xx and a clear message for:
   refusal, no image returned, timeout, invalid resolution for model - but only
   when the *first* variation fails (no successes yet to return instead).
+
+### Pricing
+- `GET /api/pricing` -> `PricingResponse`. Requires only a signed-in user (like
+  `/api/me`), not project ownership - it's a static price list, not project
+  data. For every model+resolution combination the UI offers, `costUsd`/
+  `costBrl` estimate the cost of one render: the per-image price plus an
+  assumed typical request (6,000 input tokens, 500 thinking/text output
+  tokens) at that model's own rates - see `ImageCallCost` in
+  `backend/internal/render/pricing.go`. It does not reflect the actual tokens
+  of any render that has run; `Render.metrics.estimatedCostUsd` is the real
+  figure for a given render.
 
 ### Images
 - `GET /api/images/{imageId}` -> raw bytes

@@ -69,6 +69,15 @@ type Mask struct {
 }
 
 // RenderMetrics captures cost/latency/token accounting for one render.
+//
+// PromptTokens/OutputTokens/ThoughtsTokens are summed across every model call
+// this render made: the image generation call, plus the text-model
+// preservation check if it ran. OutputTokens is TEXT output only - it never
+// includes the image call's own generated-image tokens, which are priced
+// per-image (see internal/render/pricing.go) rather than per-token, to avoid
+// double-counting them at the text/thinking output rate. ThoughtsTokens is
+// the thinking-token portion, broken out for visibility; it's already
+// included in whatever EstimatedCostUsd charges at the output rate.
 type RenderMetrics struct {
 	Model            string     `json:"model"`
 	Resolution       Resolution `json:"resolution"`
@@ -78,6 +87,7 @@ type RenderMetrics struct {
 	TotalMs          int64      `json:"totalMs"`
 	PromptTokens     *int32     `json:"promptTokens,omitempty"`
 	OutputTokens     *int32     `json:"outputTokens,omitempty"`
+	ThoughtsTokens   *int32     `json:"thoughtsTokens,omitempty"`
 	EstimatedCostUsd *float64   `json:"estimatedCostUsd,omitempty"`
 }
 
@@ -233,6 +243,7 @@ func (r *Render) clone() *Render {
 	clone.Metrics = r.Metrics
 	clone.Metrics.PromptTokens = clonePtr(r.Metrics.PromptTokens)
 	clone.Metrics.OutputTokens = clonePtr(r.Metrics.OutputTokens)
+	clone.Metrics.ThoughtsTokens = clonePtr(r.Metrics.ThoughtsTokens)
 	clone.Metrics.EstimatedCostUsd = clonePtr(r.Metrics.EstimatedCostUsd)
 	if r.Preservation != nil {
 		p := *r.Preservation

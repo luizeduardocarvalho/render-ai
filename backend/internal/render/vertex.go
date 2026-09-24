@@ -60,6 +60,11 @@ func (r *VertexRenderer) Render(ctx context.Context, req RenderRequest) (RenderR
 	return extractResult(resp)
 }
 
+// extractResult reads the image (if any) and usage metadata out of resp. It
+// always populates the token fields of its returned RenderResult, even when
+// it also returns an error for "no image" - a refusal or safety block still
+// bills input (and sometimes thinking) tokens, so the caller can still
+// estimate and log that cost instead of losing it silently.
 func extractResult(resp *genai.GenerateContentResponse) (RenderResult, error) {
 	var result RenderResult
 	var notes strings.Builder
@@ -82,6 +87,27 @@ func extractResult(resp *genai.GenerateContentResponse) (RenderResult, error) {
 		}
 	}
 
+	if resp.UsageMetadata != nil {
+		um := resp.UsageMetadata
+		result.PromptTokens = um.PromptTokenCount
+		result.ThoughtsTokens = um.ThoughtsTokenCount
+		// CandidatesTokenCount lumps the output image's own tokens together
+		// with any text/thinking output, which would double-bill the image
+		// (already priced per-image) at the text output rate. Split by
+		// modality and keep only TEXT - fall back to the lumped total when
+		// the API doesn't return the breakdown, so cost accounting degrades
+		// gracefully instead of silently going to zero.
+		if len(um.CandidatesTokensDetails) > 0 {
+			for _, d := range um.CandidatesTokensDetails {
+				if d.Modality == genai.MediaModalityText {
+					result.TextOutputTokens += d.TokenCount
+				}
+			}
+		} else {
+			result.TextOutputTokens = um.CandidatesTokenCount
+		}
+	}
+
 	if result.ImageData == nil {
 		msg := "model returned no image"
 		switch {
@@ -90,12 +116,7 @@ func extractResult(resp *genai.GenerateContentResponse) (RenderResult, error) {
 		case len(resp.Candidates) > 0 && resp.Candidates[0].FinishReason != "":
 			msg = fmt.Sprintf("model returned no image (finish reason: %s)", resp.Candidates[0].FinishReason)
 		}
-		return RenderResult{}, errors.New(msg)
-	}
-
-	if resp.UsageMetadata != nil {
-		result.PromptTokens = resp.UsageMetadata.PromptTokenCount
-		result.OutputTokens = resp.UsageMetadata.CandidatesTokenCount
+		return result, errors.New(msg)
 	}
 
 	return result, nil

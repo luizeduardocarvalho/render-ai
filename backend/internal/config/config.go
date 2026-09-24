@@ -73,16 +73,27 @@ type ModelsConfig struct {
 	Text       string `yaml:"text"`
 }
 
-// PricingConfig holds cost-estimation prices for the metrics panel.
+// PricingConfig holds cost-estimation prices for the metrics panel and the
+// GET /api/pricing preview. Each model gets its own token rates, since the
+// two image models and the text model are priced independently by Vertex.
 type PricingConfig struct {
-	Image ImagePricing `yaml:"image"`
-	Text  TextPricing  `yaml:"text"`
+	ProImage   ImageModelPricing `yaml:"proImage"`
+	FlashImage ImageModelPricing `yaml:"flashImage"`
+	Text       TextPricing       `yaml:"text"`
+	// UsdToBrl is the USD->BRL rate used to show a BRL estimate alongside the
+	// USD one. Fill with a current rate; it's a display convenience only, not
+	// itself billed.
+	UsdToBrl float64 `yaml:"usdToBrl"`
 }
 
-// ImagePricing holds per-image prices for each model and resolution.
-type ImagePricing struct {
-	Pro   map[string]float64 `yaml:"pro"`
-	Flash map[string]float64 `yaml:"flash"`
+// ImageModelPricing holds an image model's per-image prices (by resolution)
+// plus its own input/output token rates. The output-image tokens themselves
+// are never billed separately - PerImage already covers them - so
+// OutputPerMTok only prices TEXT (and thinking) tokens in the response.
+type ImageModelPricing struct {
+	PerImage      map[string]float64 `yaml:"perImage"`
+	InputPerMTok  float64            `yaml:"inputPerMTok"`
+	OutputPerMTok float64            `yaml:"outputPerMTok"`
 }
 
 // TextPricing holds per-token prices for the text model.

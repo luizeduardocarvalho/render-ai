@@ -1,18 +1,39 @@
+import { useEffect, useState } from "react";
+import { getPricing } from "../../api";
 import type { Render } from "../../types";
+
+const brlFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 function fmtMs(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-function fmtCost(usd: number | undefined): string {
+function fmtCost(usd: number | undefined, usdToBrl: number | undefined): string {
   if (usd === undefined) return "n/a";
-  return `$${usd.toFixed(usd < 0.01 ? 4 : 2)}`;
+  const usdPart = `$${usd.toFixed(usd < 0.01 ? 4 : 2)}`;
+  if (usdToBrl === undefined) return usdPart;
+  return `${usdPart} (≈ ${brlFormatter.format(usd * usdToBrl)})`;
 }
 
 export function MetricsPanel({ render }: { render: Render }) {
   const m = render.metrics;
   const preservation = render.preservation;
+  const [usdToBrl, setUsdToBrl] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    getPricing()
+      .then((p) => {
+        if (!cancelled) setUsdToBrl(p.usdToBrl);
+      })
+      .catch(() => {
+        // BRL conversion is a nice-to-have - fall back to USD-only below.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="metrics-panel">
@@ -26,7 +47,7 @@ export function MetricsPanel({ render }: { render: Render }) {
         <Metric label="Total latency" value={fmtMs(m.totalMs)} />
         <Metric label="Prompt tokens" value={m.promptTokens !== undefined ? String(m.promptTokens) : "n/a"} />
         <Metric label="Output tokens" value={m.outputTokens !== undefined ? String(m.outputTokens) : "n/a"} />
-        <Metric label="Estimated cost" value={fmtCost(m.estimatedCostUsd)} />
+        <Metric label="Estimated cost" value={fmtCost(m.estimatedCostUsd, usdToBrl)} />
       </dl>
 
       {preservation && (
