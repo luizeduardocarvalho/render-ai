@@ -88,6 +88,9 @@ export interface Render {
   // made from, and what each edited region was asked to become.
   sourceRenderId?: string;
   editInstructions?: string[];
+  // Set when this render is an Upscale: the render (in the same view) it is a
+  // 4K version of. Never set together with sourceRenderId.
+  upscaledFromRenderId?: string;
 }
 
 export interface View {

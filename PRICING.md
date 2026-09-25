@@ -41,6 +41,7 @@ Plans and packs count **2K images**:
 - 1 image at 2K = 1 image
 - 1 image at 4K = 2 images
 - 4 drafts (1K, Flash) = 1 image
+- An upscale of a render to 4K is one 4K render = 2 images, whatever the render was made with
 
 ## Assumptions behind the margins
 

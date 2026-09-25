@@ -106,6 +106,11 @@ interface ProjectContextValue {
     regions: EditRegionRequest[],
     opts?: { onProgress?: (job: RenderJob) => void; signal?: AbortSignal },
   ) => Promise<Render[]>;
+  upscaleRender: (
+    vid: string,
+    rid: string,
+    opts?: { onProgress?: (job: RenderJob) => void; signal?: AbortSignal },
+  ) => Promise<Render[]>;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -501,6 +506,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [requireProject],
   );
 
+  const upscaleRenderFn = useCallback(
+    async (
+      vid: string,
+      rid: string,
+      opts?: { onProgress?: (job: RenderJob) => void; signal?: AbortSignal },
+    ) => {
+      const p = requireProject();
+      const renders = await api.upscaleRender(p.id, vid, rid, opts);
+      setProject((prev) =>
+        prev
+          ? replaceView(prev, vid, (v) => ({ ...v, renders: [...v.renders, ...renders] }))
+          : prev,
+      );
+      return renders;
+    },
+    [requireProject],
+  );
+
   const selectedView = useMemo(
     () => project?.views.find((v) => v.id === selectedViewId) ?? null,
     [project, selectedViewId],
@@ -547,6 +570,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     deleteMask: deleteMaskFn,
     renderView: renderViewFn,
     editRender: editRenderFn,
+    upscaleRender: upscaleRenderFn,
   };
 
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;

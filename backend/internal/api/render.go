@@ -463,6 +463,9 @@ type renderAssembly struct {
 	// edit is set instead of the screenshot-derived fields above when the job
 	// edits an existing Render (see edit.go).
 	edit *editAssembly
+	// upscale is set instead of them when the job makes a 4K version of an
+	// existing Render (see upscale.go).
+	upscale *upscaleAssembly
 	// assemblyMs is the setup cost (project/view lookup, screenshot decode,
 	// region/edge maps, prompt build) attributed to this variation's TotalMs,
 	// mirroring the old handler's assemblyMs semantics.
@@ -655,12 +658,15 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	held := job.Variations[idx].Held
 
 	var assembly *renderAssembly
-	if job.Request.Edit != nil {
+	switch {
+	case job.Request.Edit != nil:
 		// The region bitmaps only exist for this job; whichever way the
 		// variation ends they are no longer needed.
 		defer s.deleteEditBlobs(job.Request.Edit)
 		assembly, err = s.assembleEditRequest(pid, job)
-	} else {
+	case job.Request.Upscale != nil:
+		assembly, err = s.assembleUpscaleRequest(pid, job)
+	default:
 		assembly, err = s.assembleRenderRequest(pid, job.ViewID, job.Request)
 	}
 	if err != nil {
@@ -717,6 +723,16 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 		}
 		result.ImageData, result.MIMEType = composited, "image/png"
 	}
+	if assembly.upscale != nil {
+		// Keep the source's colour and lighting; the model only adds detail.
+		finished, err := assembly.upscale.finish(result.ImageData)
+		if err != nil {
+			log.Printf("render worker: finishing upscale project=%s job=%s view=%s: %v", pid, jid, job.ViewID, err)
+			s.failVariation(pid, jid, idx, fmt.Sprintf("upscale failed: %v", err))
+			return
+		}
+		result.ImageData, result.MIMEType = finished, "image/png"
+	}
 
 	mimeType := result.MIMEType
 	if mimeType == "" {
@@ -761,6 +777,9 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 		rec.SourceRenderID = assembly.edit.sourceRenderID
 		rec.EditInstructions = assembly.edit.instructions
 	}
+	if assembly.upscale != nil {
+		rec.UpscaledFromRenderID = assembly.upscale.sourceRenderID
+	}
 
 	if job.Request.PreservationCheck {
 		rec.Preservation = s.runPreservationCheck(
@@ -804,10 +823,11 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	log.Printf("render: project=%s job=%s view=%s variation=%d/%d model=%s resolution=%s regions=%d anchor=%v imageCallMs=%d totalMs=%d promptTokens=%d outputTokens=%d thoughtsTokens=%d costUsd=%s",
 		pid, jid, job.ViewID, idx+1, variations, assembly.modelID, job.Request.Resolution, assembly.qualifyingCount, assembly.hasAnchor, imageCallMs, totalMs, promptTokens, outputTokens, thoughtsTokens, costDisplay)
 
-	// Keep the better of this attempt and the best earlier one. Edits are never
-	// regenerated: they are blended over their source and carry no check.
+	// Keep the better of this attempt and the best earlier one. Edits and
+	// upscales are never regenerated: they are derived from a render the user
+	// already has and carry no check.
 	rec = s.settleCandidates(held, rec)
-	if assembly.edit == nil && attempt < s.cfg.Preservation.MaxRegenerations && flaggedRender(rec) {
+	if assembly.edit == nil && assembly.upscale == nil && attempt < s.cfg.Preservation.MaxRegenerations && flaggedRender(rec) {
 		if s.requeueVariation(ctx, pid, jid, idx, attempt, rec) {
 			log.Printf("render: regenerating project=%s job=%s view=%s variation=%d/%d attempt=%d edgeScore=%.3f",
 				pid, jid, job.ViewID, idx+1, variations, attempt+1, rec.Preservation.EdgeScore)

@@ -13,8 +13,12 @@ A Render derived from another Render by changing only marked areas of it.
 _Avoid_: Update, revision, inpaint
 
 **Source render**:
-The Render an Edit was made from.
+The Render an Edit or an Upscale was made from.
 _Avoid_: Parent, original
+
+**Upscale**:
+A Render that is the 4K version of another Render: the same picture, colors and lighting, with finer detail. It exists because generating the same request again at 4K would give a different picture.
+_Avoid_: Enhance, 4K render (a 4K Render made from a screenshot is not an Upscale)
 
 **Edit region**:
 An area the user marks on a Render for an Edit, paired with a free-text instruction.
@@ -30,9 +34,11 @@ An area painted on a view's screenshot before rendering, tied to an asset.
 ## Relationships
 
 - An **Edit** is a **Render** and has exactly one **Source render**
-- A **Render** can have many **Edits**, and an **Edit** can itself be edited
+- An **Upscale** is a **Render** and has exactly one **Source render**; it is never an **Edit**
+- A **Render** can have many **Edits** and many **Upscales**, and an **Edit** can itself be edited or upscaled
+- A 4K **Render** cannot be upscaled
 - An **Edit** is made of one or more **Edit regions**, each with its own instruction
-- Render history shows an **Edit** directly under its **Source render**, indented and joined by an arrow
+- Render history shows an **Edit** or an **Upscale** directly under its **Source render**, indented and joined by an arrow
 
 ## Example dialogue
 

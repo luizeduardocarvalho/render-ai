@@ -185,6 +185,10 @@ type Render struct {
 	// EditInstructions are the per-region instructions the Edit was asked
 	// for, in region order. Empty unless SourceRenderID is set.
 	EditInstructions []string `json:"editInstructions,omitempty"`
+	// UpscaledFromRenderID is set when this Render is an Upscale: the Render
+	// (in the same view) it is a 4K version of. Empty otherwise. An Upscale is
+	// never an Edit, so this and SourceRenderID are never both set.
+	UpscaledFromRenderID string `json:"upscaledFromRenderId,omitempty"`
 }
 
 // View is one camera angle: a screenshot plus its masks and render history.
@@ -364,6 +368,15 @@ type RenderJobRequest struct {
 	// the view's screenshot; Model and Resolution are then the source
 	// Render's own and Variations is 1.
 	Edit *RenderJobEdit `json:"edit,omitempty"`
+	// Upscale is set when the job makes a 4K version of an existing Render
+	// instead of rendering the view's screenshot; Model is then pro,
+	// Resolution 4K and Variations 1. Never set together with Edit.
+	Upscale *RenderJobUpscale `json:"upscale,omitempty"`
+}
+
+// RenderJobUpscale is the Upscale-specific half of a RenderJobRequest.
+type RenderJobUpscale struct {
+	SourceRenderID string `json:"sourceRenderId"`
 }
 
 // RenderJobEdit is the Edit-specific half of a RenderJobRequest.
@@ -441,6 +454,7 @@ func (j *RenderJob) clone() *RenderJob {
 		edit.Regions = slices.Clone(edit.Regions)
 		out.Request.Edit = &edit
 	}
+	out.Request.Upscale = clonePtr(j.Request.Upscale)
 	out.Variations = make([]RenderJobVariation, len(j.Variations))
 	for i, v := range j.Variations {
 		out.Variations[i] = v.clone()

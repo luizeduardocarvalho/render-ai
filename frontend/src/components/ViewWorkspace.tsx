@@ -34,6 +34,7 @@ export function ViewWorkspace({ view }: { view: View }) {
           view={view}
           render={selectedRender}
           onEdited={(edit) => setSelectedRenderId(edit.id)}
+          onUpscaled={(upscale) => setSelectedRenderId(upscale.id)}
         />
       )}
       <RenderHistory

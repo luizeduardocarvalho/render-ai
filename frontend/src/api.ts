@@ -634,6 +634,24 @@ export async function editRender(
   return pollJob(pid, job, opts);
 }
 
+/**
+ * Makes a 4K version of an existing render, keeping its picture, colors and
+ * lighting. Runs as a job like a render and resolves to the one new Render,
+ * linked to its source.
+ */
+export async function upscaleRender(
+  pid: string,
+  vid: string,
+  rid: string,
+  opts?: RenderViewOptions,
+): Promise<Render[]> {
+  const job = await request<RenderJob>(
+    `/api/projects/${pid}/views/${vid}/renders/${rid}/upscale`,
+    { method: "POST" },
+  );
+  return pollJob(pid, job, opts);
+}
+
 // ---- Pricing ----
 
 // Pricing barely changes and is the same for every user, so it's fetched at

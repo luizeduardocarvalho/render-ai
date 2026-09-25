@@ -217,7 +217,8 @@
     },
     "anchorBadge": "Anchor",
     "notAvailable": "n/a",
-    "editNote": "Edit: {{changes}}"
+    "editNote": "Edit: {{changes}}",
+    "upscaleNote": "4K upscale"
   },
   "resultView": {
     "title": "Result",
@@ -227,8 +228,17 @@
     "edit": "Edit",
     "downloadPng": "Download PNG",
     "loadingImage": "Loading image...",
+    "upscale_one": "Upscale to 4K ({{credits}} credit)",
+    "upscale_other": "Upscale to 4K ({{credits}} credits)",
+    "upscaleNoPrice": "Upscale to 4K",
+    "upscaleQueued": "Starting upscale...",
+    "upscaling": "Upscaling...",
+    "upscaleWait": "Upscaling can take up to a minute. It is a new render: your original stays as it is.",
+    "upscaleHint": "Makes a 4K copy of this render, keeping its picture, colors and lighting.",
     "errors": {
       "anchor": "Failed to update style anchor",
+      "upscale": "Failed to upscale the render",
+      "upscaleInsufficientCredits": "Upscale failed: insufficient credits. Ask an admin to top up your balance.",
       "download": "Failed to download image"
     }
   },
