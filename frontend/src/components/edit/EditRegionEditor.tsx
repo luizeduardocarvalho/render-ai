@@ -126,8 +126,8 @@ export function EditRegionEditor({ view, render, onCancel, onDone }: EditRegionE
       ? Math.min(containerSize.w / size.w, containerSize.h / size.h)
       : 1;
   const displayScale = Math.max(0.02, fitScale * (zoomPct / 100));
-  const stageW = size ? Math.max(1, Math.round(size.w * displayScale)) : 1;
-  const stageH = size ? Math.max(1, Math.round(size.h * displayScale)) : 1;
+  const stageW = size ? Math.max(1, Math.floor(size.w * displayScale)) : 1;
+  const stageH = size ? Math.max(1, Math.floor(size.h * displayScale)) : 1;
 
   const selected = regions.find((r) => r.id === selectedId) ?? null;
 
@@ -313,7 +313,7 @@ export function EditRegionEditor({ view, render, onCancel, onDone }: EditRegionE
               <div className="mask-canvas-status mask-canvas-status-error">{t("editRegions.loadError")}</div>
             )}
             {image && size && (
-              <div className="mask-canvas-scroll" style={{ width: containerSize.w, height: containerSize.h }}>
+              <div className="mask-canvas-scroll">
                 <Stage
                   width={stageW}
                   height={stageH}
