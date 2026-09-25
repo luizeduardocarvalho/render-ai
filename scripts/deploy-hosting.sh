@@ -1,25 +1,43 @@
 #!/usr/bin/env bash
-# Builds the frontend and deploys Firebase Hosting (landing + app sites) and
-# Firestore rules. Does NOT deploy the backend - see backend/DEPLOY.md for
-# the Cloud Run deployment (the `run` rewrite in firebase.json points at the
-# existing `render-ai-api` service, it does not deploy it).
+# Deploys Firebase Hosting from this machine - the local counterpart of the
+# Deploy workflow's "frontend" and "landing" options (.github/workflows/
+# deploy.yml), which is the usual way to deploy.
 #
-# One-time setup (see DEPLOY.md for the full walkthrough):
-#   - Replace the __GCP_PROJECT_ID__ / __LANDING_SITE_ID__ / __APP_SITE_ID__
-#     placeholders in .firebaserc and this script (or pass -P to override
-#     the project below), and create the hosting sites + targets.
+#   all      builds the frontend, then deploys both Hosting sites (landing +
+#            app) and the Firestore rules
+#   landing  deploys only the landing site, straight from landing/ (no build)
+#
+# Does NOT deploy the backend - see backend/DEPLOY.md for the Cloud Run
+# deployment (the `run` rewrite in firebase.json points at the existing
+# `render-ai-api` service, it does not deploy it).
+#
+# Needs the Firebase CLI, logged in (`firebase login`) with deploy access to
+# the project. The Hosting targets are bound in .firebaserc.
 #
 # Usage:
-#   ./scripts/deploy-hosting.sh
+#   ./scripts/deploy-hosting.sh [all|landing]     (default: all)
+#   PROJECT_ID=other-project ./scripts/deploy-hosting.sh
 
 set -euo pipefail
 
-PROJECT_ID="__GCP_PROJECT_ID__"
+PROJECT_ID="${PROJECT_ID:-render-ai-studio}"
+what="${1:-all}"
 
 cd "$(dirname "$0")/.."
 
-echo "==> Building frontend (pnpm --dir frontend build)"
-pnpm --dir frontend build
-
-echo "==> Deploying hosting (landing + app) and firestore rules"
-firebase deploy --only hosting,firestore --project "$PROJECT_ID"
+case "$what" in
+  all)
+    echo "==> Building frontend (pnpm --dir frontend build)"
+    pnpm --dir frontend build
+    echo "==> Deploying hosting (landing + app) and firestore rules to $PROJECT_ID"
+    firebase deploy --only hosting,firestore --project "$PROJECT_ID"
+    ;;
+  landing)
+    echo "==> Deploying the landing site to $PROJECT_ID"
+    firebase deploy --only hosting:landing --project "$PROJECT_ID"
+    ;;
+  *)
+    echo "usage: $0 [all|landing]" >&2
+    exit 2
+    ;;
+esac
