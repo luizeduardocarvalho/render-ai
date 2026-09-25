@@ -10,6 +10,14 @@
         {
           "source": "**/*.@(js|css|svg)",
           "headers": [{ "key": "Cache-Control", "value": "public, max-age=3600" }]
+        },
+        {
+          "source": "**/*.woff2",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        },
+        {
+          "source": "**/*.@(png|ico|webmanifest|xml|txt)",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
         }
       ]
     },
@@ -31,6 +39,10 @@
         }
       ],
       "headers": [
+        {
+          "source": "**",
+          "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }]
+        },
         {
           "source": "**/*.@(js|css)",
           "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]

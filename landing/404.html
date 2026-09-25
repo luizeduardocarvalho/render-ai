@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Page not found - render-ai</title>
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#efeae1" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14161a" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Absolute paths: Firebase serves this page for any missing URL, at any depth. -->
+    <link rel="preload" href="/fonts/archivo-var.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="folio">
+      <div class="sheet folio-row">
+        <a class="wordmark" href="/" aria-label="render-ai home">render-ai</a>
+        <span class="folio-ref">Plate 404 / Missing</span>
+      </div>
+      <div class="rule rule-ink" aria-hidden="true"></div>
+    </header>
+
+    <main class="sheet not-found">
+      <span class="folio-num">404</span>
+      <h1 class="display">This sheet isn't in the set.</h1>
+      <p class="deck">The page you asked for doesn't exist or has moved.</p>
+      <div class="hero-actions">
+        <a class="btn btn-ink" href="/">Back to render-ai</a>
+      </div>
+    </main>
+  </body>
+</html>
