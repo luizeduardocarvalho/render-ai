@@ -1150,6 +1150,60 @@ func (f *FirestoreStore) ListRenderJobs(pid string, since time.Time) ([]*RenderJ
 	return out, nil
 }
 
+// MarkRenderJobSeen writes seenAt (only if it is not set yet) and nothing
+// else, so updatedAt keeps meaning when the job last changed.
+func (f *FirestoreStore) MarkRenderJobSeen(pid, jid string, at time.Time) error {
+	ctx := context.Background()
+	pref := f.projects().Doc(pid)
+	jref := f.renderJobs(pid).Doc(jid)
+	return f.client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		if err := f.projectAliveTx(tx, pref); err != nil {
+			return err
+		}
+		jsnap, err := tx.Get(jref)
+		if isNotFound(err) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		var jd renderJobDoc
+		if err := jsnap.DataTo(&jd); err != nil {
+			return err
+		}
+		if jd.SeenAt != nil {
+			return nil
+		}
+		return tx.Update(jref, []firestore.Update{{Path: "seenAt", Value: at.UTC()}})
+	})
+}
+
+// ViewNames reads only the name of each view (a projection: the masks and
+// inventory that make a view document large are not fetched), and none of the
+// views' renders.
+func (f *FirestoreStore) ViewNames(pid string) (map[string]string, error) {
+	ctx := context.Background()
+	pref := f.projects().Doc(pid)
+	if err := f.projectAlive(ctx, pref); err != nil {
+		return nil, err
+	}
+	snaps, err := pref.Collection("views").Select("name").Documents(ctx).GetAll()
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]string, len(snaps))
+	for _, snap := range snaps {
+		var vd struct {
+			Name string `firestore:"name"`
+		}
+		if err := snap.DataTo(&vd); err != nil {
+			return nil, err
+		}
+		names[snap.Ref.ID] = vd.Name
+	}
+	return names, nil
+}
+
 // UpdateRenderJob runs fn against the job inside a Firestore transaction and
 // writes back the result. Returns ErrNotFound if the project or job doesn't
 // exist.

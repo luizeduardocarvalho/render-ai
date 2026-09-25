@@ -733,6 +733,40 @@ func (s *MemoryStore) ListRenderJobs(pid string, since time.Time) ([]*RenderJob,
 	return out, nil
 }
 
+// MarkRenderJobSeen sets SeenAt unless it is already set, leaving UpdatedAt
+// alone.
+func (s *MemoryStore) MarkRenderJobSeen(pid, jid string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.liveProject(pid); err != nil {
+		return err
+	}
+	j, ok := s.renderJobs[jobKey(pid, jid)]
+	if !ok {
+		return ErrNotFound
+	}
+	if j.SeenAt == nil {
+		at = at.UTC()
+		j.SeenAt = &at
+	}
+	return nil
+}
+
+// ViewNames returns the project's view names by view id.
+func (s *MemoryStore) ViewNames(pid string) (map[string]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p, err := s.liveProject(pid)
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]string, len(p.Views))
+	for _, v := range p.Views {
+		names[v.ID] = v.Name
+	}
+	return names, nil
+}
+
 // UpdateRenderJob runs fn against a private clone of the job under the
 // store lock (so concurrent worker claims of different variations serialize
 // cleanly), and only writes it back - bumping UpdatedAt - if fn returns

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -217,5 +218,117 @@ func TestMarkRenderJobSeen(t *testing.T) {
 		t.Error("unknown job: want an error")
 	} else if status, _ := statusAndMessage(err); status != http.StatusNotFound {
 		t.Errorf("unknown job status = %d, want 404", status)
+	}
+}
+
+// Marking a job seen must not touch UpdatedAt: the 24h window of the list is
+// measured on it, so seeing a job late would keep it listed for another day.
+func TestMarkRenderJobSeenLeavesTheWindowAlone(t *testing.T) {
+	s, repo, p, v, _ := setupRenderTest(t, alwaysSucceeds(t))
+	created := time.Now().UTC().Add(-23 * time.Hour)
+	req := store.RenderJobRequest{Model: store.ModelPro, Resolution: store.Resolution2K, Variations: 1}
+	if _, err := repo.CreateRenderJob(p.ID, notifJob("j", v.ID, created, req, doneVariation("r1"))); err != nil {
+		t.Fatalf("CreateRenderJob: %v", err)
+	}
+
+	if _, err := postSeen(s, p.ID, "j"); err != nil {
+		t.Fatalf("seen: %v", err)
+	}
+	job, _ := repo.GetRenderJob(p.ID, "j")
+	if job.SeenAt == nil {
+		t.Fatal("job not marked seen")
+	}
+	if !job.UpdatedAt.Equal(created) {
+		t.Errorf("UpdatedAt = %v after seeing, want unchanged %v (it would extend the job's stay in the list)", job.UpdatedAt, created)
+	}
+}
+
+// Another user's project must answer 404, and its job must stay untouched.
+func TestMarkRenderJobSeenIsOwnerOnly(t *testing.T) {
+	s, st := newTestServer()
+	p := st.CreateProject("user-a", "P")
+	v, err := st.CreateView(p.ID, "front", "img", 10, 10)
+	if err != nil {
+		t.Fatalf("CreateView: %v", err)
+	}
+	req := store.RenderJobRequest{Model: store.ModelPro, Resolution: store.Resolution2K, Variations: 1}
+	if _, err := st.CreateRenderJob(p.ID, notifJob("j", v.ID, time.Now().UTC(), req, doneVariation("r1"))); err != nil {
+		t.Fatalf("CreateRenderJob: %v", err)
+	}
+
+	seenBy := func(userID string) error {
+		h := s.requireOwner(s.markRenderJobSeen)
+		r := httptest.NewRequest(http.MethodPost, "/", nil)
+		r.SetPathValue("pid", p.ID)
+		r.SetPathValue("jid", "j")
+		r = r.WithContext(context.WithValue(r.Context(), userIDCtxKey, userID))
+		return h(httptest.NewRecorder(), r)
+	}
+
+	err = seenBy("user-b")
+	if status, _ := statusAndMessage(err); err == nil || status != http.StatusNotFound {
+		t.Fatalf("another user: err = %v (status %d), want a 404", err, status)
+	}
+	if job, _ := st.GetRenderJob(p.ID, "j"); job.SeenAt != nil {
+		t.Error("another user's request marked the job seen")
+	}
+	if err := seenBy("user-a"); err != nil {
+		t.Fatalf("owner: %v", err)
+	}
+	if job, _ := st.GetRenderJob(p.ID, "j"); job.SeenAt == nil {
+		t.Error("the owner's request did not mark the job seen")
+	}
+}
+
+// A worker that died mid-render leaves its variation "running" in storage; the
+// list must report it failed, the way the job endpoint does.
+func TestListMyRenderJobsReportsAStaleRunningJobAsFailed(t *testing.T) {
+	s, repo, p, v, _ := setupRenderTest(t, alwaysSucceeds(t))
+	long := time.Now().Add(-time.Hour)
+	req := store.RenderJobRequest{Model: store.ModelPro, Resolution: store.Resolution2K, Variations: 1}
+	if _, err := repo.CreateRenderJob(p.ID, notifJob("j", v.ID, long, req,
+		store.RenderJobVariation{Status: store.RenderJobRunning, RunningAt: &long})); err != nil {
+		t.Fatalf("CreateRenderJob: %v", err)
+	}
+
+	got := listNotifications(t, s, "owner-1")
+	if len(got) != 1 || got[0].Status != store.RenderJobFailed || got[0].Error == nil || *got[0].Error != staleRunningError {
+		t.Fatalf("got %+v, want one failed notification carrying %q", got, staleRunningError)
+	}
+	if _, err := postSeen(s, p.ID, "j"); err != nil {
+		t.Fatalf("seen: %v", err)
+	}
+	if job, _ := repo.GetRenderJob(p.ID, "j"); job.SeenAt == nil {
+		t.Error("a stale job reported as failed can be seen, but was not marked")
+	}
+}
+
+// Projects are read concurrently; none may be lost and the order must not
+// depend on which finished first.
+func TestListMyRenderJobsAcrossManyProjectsKeepsEveryJobInOrder(t *testing.T) {
+	s, repo, _, _, _ := setupRenderTest(t, alwaysSucceeds(t))
+	now := time.Now().UTC()
+	req := store.RenderJobRequest{Model: store.ModelPro, Resolution: store.Resolution2K, Variations: 1}
+	const n = 30
+	for i := 0; i < n; i++ {
+		p := repo.CreateProject("owner-1", "P")
+		v, err := repo.CreateView(p.ID, "front", "img", 10, 10)
+		if err != nil {
+			t.Fatalf("CreateView: %v", err)
+		}
+		id := fmt.Sprintf("j%02d", i)
+		if _, err := repo.CreateRenderJob(p.ID, notifJob(id, v.ID, now.Add(-time.Duration(i)*time.Minute), req, doneVariation("r"))); err != nil {
+			t.Fatalf("CreateRenderJob: %v", err)
+		}
+	}
+
+	got := listNotifications(t, s, "owner-1")
+	if len(got) != n {
+		t.Fatalf("got %d notifications, want %d", len(got), n)
+	}
+	for i, x := range got {
+		if want := fmt.Sprintf("j%02d", i); x.JobID != want {
+			t.Fatalf("position %d is %s, want %s (newest created first)", i, x.JobID, want)
+		}
 	}
 }
