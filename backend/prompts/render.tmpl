@@ -39,7 +39,21 @@ IMAGE 1: The original SketchUp screenshot. This defines the scene: camera, frami
 === SCENE STYLE (from project settings) ===
 - Scene type: {{ .Scene }}
 - Lighting preset: {{ .Lighting }}
-- Main light direction: {{ .LightDirection }}
+{{ if eq .Lighting "morning_sun" }}  Clear early-morning sun, low angle, slightly warm direct light (about 4500-5500K) with
+  crisp but soft-edged shadows. Bright, fresh sky. Sunlight enters through openings and
+  lands on floors and walls.
+{{ else if eq .Lighting "overcast" }}  Fully overcast sky acting as one large softbox. Diffuse cool-neutral light (about
+  6500K), very soft, barely visible shadows, low contrast, and no direct sun patches or
+  hard highlights.
+{{ else if eq .Lighting "golden_hour" }}  Sun just above the horizon. Warm directional light (about 2800-3500K), long soft
+  shadows, and a warm glow on surfaces facing the sun. Shadow areas stay cooler from sky fill.
+{{ else if eq .Lighting "evening_interior_lights" }}  Dusk. Deep blue twilight sky visible through windows, with the interior lit by warm
+  artificial light. The main look is warm indoor light against a cool blue exterior. The
+  artificial lights setting below overrides the fixtures part of this.
+{{ else if eq .Lighting "night_exterior" }}  Night. Dark sky and no sunlight. The scene is lit only by artificial light: facade and
+  landscape lighting, path lights, and warm glow from windows. Light falls off into darkness
+  and the surroundings stay dark.
+{{ end }}- Main light direction: {{ .LightDirection }}
 {{ if .InteriorLightsOff }}- Artificial lights: ALL OFF. Every artificial light fixture in the scene (ceiling lights,
   pendants, spotlights, lamps, sconces, LED strips) is switched off: no glowing bulbs or
   diffusers, no light pools or hotspots cast by fixtures. The scene is lit only by natural

@@ -132,6 +132,11 @@ type RenderMetrics struct {
 	OutputTokens     *int32     `json:"outputTokens,omitempty"`
 	ThoughtsTokens   *int32     `json:"thoughtsTokens,omitempty"`
 	EstimatedCostUsd *float64   `json:"estimatedCostUsd,omitempty"`
+	// Attempts is how many times the model was called to get this render: 1
+	// normally, more when earlier attempts were discarded for not following
+	// the screenshot (see PreservationConfig.MaxRegenerations). Every
+	// cumulative figure above (latencies, tokens, cost) covers all of them.
+	Attempts int `json:"attempts,omitempty"`
 }
 
 // PreservationReport is attached to a Render when preservationCheck was on.
@@ -349,6 +354,17 @@ type RenderJobVariation struct {
 	// the variation failed, so a redelivered task or a second failure
 	// observation can never refund it twice. Not surfaced to the frontend.
 	Refunded bool `json:"-"`
+	// Attempt is the 0-based attempt this variation is on: how many times it
+	// has been regenerated. It only ever grows, and is what bounds the chain
+	// of regenerations - see Server.RunRenderVariation. Not surfaced to the
+	// frontend.
+	Attempt int `json:"-"`
+	// Held is the best flagged Render of the earlier attempts, kept (image
+	// blob included) but not yet in the view's history: it is what the user
+	// gets if the remaining attempts fail or are flagged too. Its Metrics
+	// are cumulative over the attempts so far. Nil on the first attempt. Not
+	// surfaced to the frontend.
+	Held *Render `json:"-"`
 }
 
 // RenderJob is one POST .../render request turned into a job: one Cloud
@@ -393,6 +409,9 @@ func (v RenderJobVariation) clone() RenderJobVariation {
 	out.RenderID = clonePtr(v.RenderID)
 	out.Error = clonePtr(v.Error)
 	out.RunningAt = clonePtr(v.RunningAt)
+	if v.Held != nil {
+		out.Held = v.Held.clone()
+	}
 	return out
 }
 

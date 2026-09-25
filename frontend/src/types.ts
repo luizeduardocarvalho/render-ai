@@ -50,6 +50,11 @@ export interface RenderMetrics {
   outputTokens?: number;
   thoughtsTokens?: number;
   estimatedCostUsd?: number;
+  // How many model calls it took to get this render (1 unless earlier
+  // attempts were discarded for not following the screenshot). Latencies,
+  // tokens and estimatedCostUsd above cover all of them. Absent on renders
+  // made before this existed.
+  attempts?: number;
 }
 
 export interface PreservationReport {

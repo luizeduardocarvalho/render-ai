@@ -62,6 +62,7 @@ export function MetricsPanel({ render }: { render: Render }) {
           label={t("metricsPanel.outputTokens")}
           value={m.outputTokens !== undefined ? String(m.outputTokens) : t("metricsPanel.notAvailable")}
         />
+        <Metric label={t("metricsPanel.attempts")} value={String(m.attempts ?? 1)} />
         <Metric label={t("metricsPanel.estimatedCost")} value={fmtCost(m.estimatedCostUsd)} />
       </dl>
 

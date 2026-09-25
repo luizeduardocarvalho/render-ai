@@ -9,10 +9,16 @@ import "context"
 // Task identifies one render-job variation to work on. Its JSON shape is
 // the exact body POST /internal/render-tasks receives (see
 // API_CONTRACT.md).
+//
+// Attempt is 0 for the first task of a variation and n for its n-th
+// regeneration. The worker only runs a task whose Attempt matches the
+// variation's own, so a redelivered task of an earlier attempt can never
+// start (or extend) a chain of regenerations.
 type Task struct {
 	ProjectID string `json:"projectId"`
 	JobID     string `json:"jobId"`
 	Variation int    `json:"variation"`
+	Attempt   int    `json:"attempt"`
 }
 
 // Queue enqueues one Task for later (or immediate, for Inline) processing.

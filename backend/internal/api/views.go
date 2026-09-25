@@ -135,7 +135,7 @@ func (s *Server) generateInventory(w http.ResponseWriter, r *http.Request) error
 		return internalErr("screenshot blob missing for view %s", vid)
 	}
 
-	text, _, _, err := s.textModel.GenerateInventory(r.Context(), blob.Data)
+	text, _, _, err := s.textModel.GenerateInventory(r.Context(), blob.Data, r.URL.Query().Get("lang"))
 	if err != nil {
 		return badGateway("generating inventory: %v", err)
 	}

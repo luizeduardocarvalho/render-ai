@@ -42,6 +42,49 @@ func TestRenderPromptInteriorLights(t *testing.T) {
 	}
 }
 
+// Each lighting preset must add its own description under the "Lighting
+// preset" line, and an unknown or empty preset must still print just the line
+// without breaking the list that follows it.
+func TestRenderPromptLightingPreset(t *testing.T) {
+	cases := []struct {
+		preset string
+		want   string
+	}{
+		{"morning_sun", "Clear early-morning sun"},
+		{"overcast", "Fully overcast sky"},
+		{"golden_hour", "Sun just above the horizon"},
+		{"evening_interior_lights", "Dusk. Deep blue twilight"},
+		{"night_exterior", "Night. Dark sky and no sunlight"},
+		{"unknown_preset", ""},
+		{"", ""},
+	}
+	presetDescriptions := []string{
+		"Clear early-morning sun", "Fully overcast sky", "Sun just above the horizon",
+		"Dusk. Deep blue twilight", "Night. Dark sky and no sunlight",
+	}
+	for _, tc := range cases {
+		t.Run(tc.preset, func(t *testing.T) {
+			prompt, err := RenderPrompt("../../prompts/render.tmpl", TemplateData{
+				EdgeMapIndex: 2, Scene: "interior", Lighting: tc.preset, LightDirection: "from the left",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(prompt, "- Lighting preset: "+tc.preset+"\n") {
+				t.Errorf("prompt missing the lighting preset line for %q", tc.preset)
+			}
+			if !strings.Contains(prompt, "\n- Main light direction: from the left") {
+				t.Errorf("light direction line is not a clean list item after the preset")
+			}
+			for _, d := range presetDescriptions {
+				if got := strings.Contains(prompt, d); got != (d == tc.want) {
+					t.Errorf("description %q present=%v, want %v", d, got, d == tc.want)
+				}
+			}
+		})
+	}
+}
+
 // Every region's number, overlay color and instruction must reach the edit
 // prompt, and the keep-everything-else-identical rule must stay in it.
 func TestEditPromptListsEveryRegion(t *testing.T) {

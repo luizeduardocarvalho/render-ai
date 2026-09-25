@@ -84,6 +84,10 @@ interface RenderMetrics {
   outputTokens?: number;
   thoughtsTokens?: number;
   estimatedCostUsd?: number;
+  // Model calls it took to get this render: 1, or more when earlier attempts
+  // were discarded (see "Regeneration"). imageCallMs, totalMs, the token
+  // counts and estimatedCostUsd cover every attempt. Absent on old renders.
+  attempts?: number;
 }
 
 interface PreservationReport {
@@ -356,6 +360,20 @@ see `backend/DEPLOY.md`) does the actual Vertex AI call for each.
   debited from the project owner's balance atomically (see "Credits"); too
   little balance -> **`402`** `{ "error": "insufficient credits", "code":
   "insufficient_credits" }`, and nothing is created.
+
+  **Regeneration.** With `preservationCheck` on, a render whose
+  `preservation.edgeFlag` is set (its edge score is below
+  `preservation.edgeScoreFlagThreshold`, i.e. it does not follow the
+  screenshot) is generated again by a new task, at most
+  `preservation.maxRegenerations` times (default config: 2, so at most 3
+  model calls per variation; hard ceiling 5). Attempts that are discarded are
+  never shown or added to `renders`; the variation stays `"queued"`/`"running"`
+  meanwhile. It ends with the first render that passes, or, when every attempt
+  is flagged (or a later attempt fails outright), the best-scoring one, still
+  flagged. `metrics.attempts` says how many calls that took and
+  `metrics.estimatedCostUsd` includes all of them. **Credits are not charged
+  for regenerations** - the up-front debit is per variation, as before.
+  Edits (below) are never regenerated.
 
 - `GET    /api/projects/{pid}/render-jobs/{jid}` -> `200` with the current
   `RenderJob`, or `404` if it doesn't exist (or belongs to another project).

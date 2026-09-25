@@ -136,7 +136,17 @@ type TextPricing struct {
 type PreservationConfig struct {
 	EdgeScoreFlagThreshold float64 `yaml:"edgeScoreFlagThreshold"`
 	EdgeDilationPx         int     `yaml:"edgeDilationPx"`
+	// MaxRegenerations is how many extra times a render whose edge score is
+	// flagged is generated again (so a variation makes at most
+	// 1+MaxRegenerations image calls). Load clamps it to
+	// [0, MaxRegenerationsCeiling]; 0 turns regeneration off.
+	MaxRegenerations int `yaml:"maxRegenerations"`
 }
+
+// MaxRegenerationsCeiling is the hard upper bound on
+// PreservationConfig.MaxRegenerations, so a config typo can never turn a
+// flagged render into a long chain of full-price model calls.
+const MaxRegenerationsCeiling = 5
 
 // AuthConfig holds Clerk authentication settings. ClerkSecretKey is normally
 // supplied via the CLERK_SECRET_KEY env var rather than checked into
@@ -193,6 +203,7 @@ func Load(path string) (*Config, error) {
 	if cfg.Storage.Backend == "" {
 		cfg.Storage.Backend = "memory"
 	}
+	cfg.Preservation.MaxRegenerations = min(max(cfg.Preservation.MaxRegenerations, 0), MaxRegenerationsCeiling)
 
 	if v := os.Getenv("RENDER_QUEUE"); v != "" {
 		cfg.Jobs.Queue = v

@@ -51,9 +51,9 @@ const staleRunningGrace = 120 * time.Second
 // stale-running rule gives up on. See buildRenderJobResponse.
 const staleRunningError = "render worker did not finish"
 
-// qualifyingMask is a non-hidden, painted mask bound to a library asset -
-// these are exactly the masks that drive the region map and the set of
-// asset reference photos sent to the model.
+// qualifyingMask is a non-hidden, painted mask bound to a library asset that
+// has a reference photo - these are exactly the masks that drive the region
+// map and the set of asset reference photos sent to the model.
 type qualifyingMask struct {
 	mask  *store.Mask
 	asset *store.Asset
@@ -320,7 +320,11 @@ func (s *Server) buildRenderJobResponse(pid string, job *store.RenderJob) (*rend
 
 	for i, v := range job.Variations {
 		status, errMsg := v.Status, v.Error
-		if status == store.RenderJobRunning && v.RunningAt != nil && now.Sub(*v.RunningAt) > staleAfter {
+		// A variation waiting for its regeneration task (queued, Attempt > 0)
+		// carries RunningAt from the hand-off, so a task that never arrives is
+		// given up on the same way a worker that never finished is.
+		inFlight := status == store.RenderJobRunning || (status == store.RenderJobQueued && v.Attempt > 0)
+		if inFlight && v.RunningAt != nil && now.Sub(*v.RunningAt) > staleAfter {
 			status = store.RenderJobFailed
 			msg := staleRunningError
 			errMsg = &msg
@@ -596,7 +600,7 @@ func (s *Server) assembleRenderRequest(pid, vid string, jobReq store.RenderJobRe
 // Exported so cmd/server/main.go can wire it as the jobs.Inline handler and
 // so it satisfies jobs.Handler directly.
 func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
-	pid, jid, idx := task.ProjectID, task.JobID, task.Variation
+	pid, jid, idx, attempt := task.ProjectID, task.JobID, task.Variation, task.Attempt
 
 	// claimed (not just "the job now shows running") is what tells this
 	// delivery apart from a concurrent one: UpdateRenderJob's fn runs
@@ -614,8 +618,10 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 		if idx < 0 || idx >= len(j.Variations) {
 			return fmt.Errorf("variation index %d out of range (job has %d)", idx, len(j.Variations))
 		}
-		if j.Variations[idx].Status != store.RenderJobQueued {
-			return nil // already claimed/terminal: leave it alone, checked below
+		if j.Variations[idx].Status != store.RenderJobQueued || j.Variations[idx].Attempt != task.Attempt {
+			// Already claimed/terminal, or a redelivered task of an earlier
+			// attempt: leave it alone, checked below.
+			return nil
 		}
 		now := time.Now().UTC()
 		j.Variations[idx].Status = store.RenderJobRunning
@@ -636,6 +642,8 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 
 	variationStart := time.Now()
 	variations := job.Request.Variations
+	// held is the best flagged render of the earlier attempts, if any.
+	held := job.Variations[idx].Held
 
 	var assembly *renderAssembly
 	if job.Request.Edit != nil {
@@ -649,7 +657,7 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	if err != nil {
 		log.Printf("render worker: assembling project=%s job=%s view=%s variation=%d/%d: %v",
 			pid, jid, job.ViewID, idx+1, variations, err)
-		s.failVariation(pid, jid, idx, err.Error())
+		s.failOrSalvage(pid, jid, job.ViewID, idx, held, err.Error(), nil)
 		return
 	}
 
@@ -682,7 +690,11 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 		if ctx.Err() == context.DeadlineExceeded {
 			msg = fmt.Sprintf("render timed out after %ds", s.cfg.Server.RenderTimeoutSec)
 		}
-		s.failVariation(pid, jid, idx, msg)
+		var lostCost *float64
+		if failCostOK {
+			lostCost = &failCost
+		}
+		s.failOrSalvage(pid, jid, job.ViewID, idx, held, msg, lostCost)
 		return
 	}
 
@@ -703,10 +715,14 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	}
 	resultImageID, err := s.blobs.PutBlob(result.ImageData, mimeType)
 	if err != nil {
-		lostCost, _ := renderpkg.ImageCallCost(imgPricing, string(job.Request.Resolution), result.PromptTokens, result.TextOutputTokens, result.ThoughtsTokens)
+		lostCost, lostCostOK := renderpkg.ImageCallCost(imgPricing, string(job.Request.Resolution), result.PromptTokens, result.TextOutputTokens, result.ThoughtsTokens)
 		log.Printf("render: failed attempt project=%s job=%s view=%s variation=%d/%d model=%s resolution=%s stage=store costUsd=%.4f error=%v",
 			pid, jid, job.ViewID, idx+1, variations, assembly.modelID, job.Request.Resolution, lostCost, err)
-		s.failVariation(pid, jid, idx, fmt.Sprintf("storing render result: %v", err))
+		var lost *float64
+		if lostCostOK {
+			lost = &lostCost
+		}
+		s.failOrSalvage(pid, jid, job.ViewID, idx, held, fmt.Sprintf("storing render result: %v", err), lost)
 		return
 	}
 
@@ -764,7 +780,13 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	if haveCost {
 		metrics.EstimatedCostUsd = &totalCost
 	}
+	// The render's cost, latency and tokens cover every attempt made for it,
+	// the discarded ones included.
 	rec.Metrics = metrics
+	if held != nil {
+		rec.Metrics = accumulateMetrics(held.Metrics, metrics)
+	}
+	rec.Metrics.Attempts = attempt + 1
 
 	costDisplay := "n/a"
 	if metrics.EstimatedCostUsd != nil {
@@ -772,6 +794,18 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	}
 	log.Printf("render: project=%s job=%s view=%s variation=%d/%d model=%s resolution=%s regions=%d anchor=%v imageCallMs=%d totalMs=%d promptTokens=%d outputTokens=%d thoughtsTokens=%d costUsd=%s",
 		pid, jid, job.ViewID, idx+1, variations, assembly.modelID, job.Request.Resolution, assembly.qualifyingCount, assembly.hasAnchor, imageCallMs, totalMs, promptTokens, outputTokens, thoughtsTokens, costDisplay)
+
+	// Keep the better of this attempt and the best earlier one. Edits are never
+	// regenerated: they are blended over their source and carry no check.
+	rec = s.settleCandidates(held, rec)
+	if assembly.edit == nil && attempt < s.cfg.Preservation.MaxRegenerations && flaggedRender(rec) {
+		if s.requeueVariation(ctx, pid, jid, idx, attempt, rec) {
+			log.Printf("render: regenerating project=%s job=%s view=%s variation=%d/%d attempt=%d edgeScore=%.3f",
+				pid, jid, job.ViewID, idx+1, variations, attempt+1, rec.Preservation.EdgeScore)
+			return
+		}
+		// Could not hand the next attempt over: show what we have.
+	}
 
 	addedRec, err := s.repo.AddRender(pid, job.ViewID, rec)
 	if err != nil {
@@ -782,6 +816,138 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	}
 
 	s.completeVariation(pid, jid, idx, addedRec.ID)
+}
+
+// flaggedRender reports whether the preservation check found the render not
+// to follow its screenshot.
+func flaggedRender(r *store.Render) bool {
+	return r.Preservation != nil && r.Preservation.EdgeFlag
+}
+
+// settleCandidates picks what to keep out of the best earlier attempt (held,
+// may be nil) and the attempt that just finished (cur): cur, unless both are
+// flagged and held scored better. The other one's image is deleted - a
+// discarded attempt is never shown. The result carries cur's metrics, which
+// are already cumulative over all attempts.
+func (s *Server) settleCandidates(held, cur *store.Render) *store.Render {
+	if held == nil {
+		return cur
+	}
+	winner, loser := cur, held
+	if flaggedRender(cur) && held.Preservation != nil && held.Preservation.EdgeScore > cur.Preservation.EdgeScore {
+		winner, loser = held, cur
+	}
+	s.blobs.DeleteBlob(loser.ResultImageID)
+	out := *winner
+	out.Metrics = cur.Metrics
+	out.CreatedAt = cur.CreatedAt
+	return &out
+}
+
+// requeueVariation hands a variation whose render was flagged over to a fresh
+// task for its next attempt, keeping keep (the best render so far, image
+// included) aside in case the remaining attempts do no better. It returns
+// false, leaving the variation exactly as it was, if the hand-off did not
+// happen - the caller then publishes keep.
+//
+// The variation is put back to "queued" with Attempt+1 before the task is
+// enqueued (a task can start the moment it exists), and only a task carrying
+// that Attempt can claim it; that persisted counter, checked against
+// cfg.Preservation.MaxRegenerations by the caller, is what stops the chain.
+func (s *Server) requeueVariation(ctx context.Context, pid, jid string, idx, attempt int, keep *store.Render) bool {
+	errStale := errors.New("variation is no longer on this attempt")
+	now := time.Now().UTC()
+	_, err := s.repo.UpdateRenderJob(pid, jid, func(j *store.RenderJob) error {
+		if idx < 0 || idx >= len(j.Variations) {
+			return errStale
+		}
+		v := &j.Variations[idx]
+		if v.Status != store.RenderJobRunning || v.Attempt != attempt {
+			return errStale
+		}
+		v.Status = store.RenderJobQueued
+		v.RunningAt = &now
+		v.Attempt = attempt + 1
+		v.Held = keep
+		return nil
+	})
+	if err != nil {
+		log.Printf("render worker: requeueing project=%s job=%s variation=%d attempt=%d: %v", pid, jid, idx, attempt, err)
+		return false
+	}
+
+	// The render timeout may be nearly spent by now, and the hand-off must not
+	// be cut short by it.
+	enqueueCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	if err := s.queue.Enqueue(enqueueCtx, jobs.Task{ProjectID: pid, JobID: jid, Variation: idx, Attempt: attempt + 1}); err != nil {
+		log.Printf("render worker: enqueueing regeneration project=%s job=%s variation=%d attempt=%d: %v", pid, jid, idx, attempt+1, err)
+		// The variation now says queued but no task exists for it. The caller
+		// completes it straight away, which overwrites that.
+		return false
+	}
+	return true
+}
+
+// failOrSalvage ends a variation whose attempt failed with msg: it fails (and
+// is refunded) if it has nothing to show, but if an earlier attempt left a
+// held render - flagged, yet a real render - that one is published instead,
+// with the failed attempt counted in its cost when lostCostUsd is known.
+func (s *Server) failOrSalvage(pid, jid, viewID string, idx int, held *store.Render, msg string, lostCostUsd *float64) {
+	if held == nil {
+		s.failVariation(pid, jid, idx, msg)
+		return
+	}
+	out := *held
+	out.Metrics = held.Metrics
+	out.Metrics.Attempts++
+	if lostCostUsd != nil && out.Metrics.EstimatedCostUsd != nil {
+		sum := *out.Metrics.EstimatedCostUsd + *lostCostUsd
+		out.Metrics.EstimatedCostUsd = &sum
+	}
+	out.CreatedAt = time.Now().UTC()
+	added, err := s.repo.AddRender(pid, viewID, &out)
+	if err != nil {
+		log.Printf("render worker: saving held render project=%s job=%s variation=%d: %v", pid, jid, idx, err)
+		s.failVariation(pid, jid, idx, msg)
+		return
+	}
+	log.Printf("render: attempt failed, keeping the best earlier one project=%s job=%s variation=%d: %s", pid, jid, idx, msg)
+	s.completeVariation(pid, jid, idx, added.ID)
+}
+
+// accumulateMetrics adds the latency, token and cost figures of one more
+// attempt (cur) to those of the attempts before it (prev); the descriptive
+// fields are cur's. A missing token count is zero, but the cost is only known
+// if it is known for every attempt.
+func accumulateMetrics(prev, cur store.RenderMetrics) store.RenderMetrics {
+	out := cur
+	out.ImageCallMs += prev.ImageCallMs
+	out.TotalMs += prev.TotalMs
+	out.PromptTokens = sumPtr(prev.PromptTokens, cur.PromptTokens)
+	out.OutputTokens = sumPtr(prev.OutputTokens, cur.OutputTokens)
+	out.ThoughtsTokens = sumPtr(prev.ThoughtsTokens, cur.ThoughtsTokens)
+	out.EstimatedCostUsd = nil
+	if prev.EstimatedCostUsd != nil && cur.EstimatedCostUsd != nil {
+		sum := *prev.EstimatedCostUsd + *cur.EstimatedCostUsd
+		out.EstimatedCostUsd = &sum
+	}
+	return out
+}
+
+func sumPtr[T int32 | float64](a, b *T) *T {
+	switch {
+	case a == nil && b == nil:
+		return nil
+	case a == nil:
+		v := *b
+		return &v
+	case b == nil:
+		v := *a
+		return &v
+	}
+	v := *a + *b
+	return &v
 }
 
 // failVariation marks one variation failed with msg and refunds its charged
@@ -848,6 +1014,11 @@ func (s *Server) completeVariation(pid, jid string, idx int, renderID string) {
 	}
 }
 
+// qualifyingMasks returns the view's masks that can steer a render: visible,
+// painted, bound to an asset that still exists, and that asset has a
+// reference photo. A region without a photo would be tinted on the region map
+// but have no product image or mapping line in the prompt, so it is skipped
+// rather than left as an unexplained colored area.
 func qualifyingMasks(project *store.Project, view *store.View) []qualifyingMask {
 	var out []qualifyingMask
 	for _, m := range view.Masks {
@@ -855,7 +1026,7 @@ func qualifyingMasks(project *store.Project, view *store.View) []qualifyingMask 
 			continue
 		}
 		asset := findAssetIn(project, *m.AssetID)
-		if asset == nil {
+		if asset == nil || !asset.HasReferenceImage {
 			continue
 		}
 		out = append(out, qualifyingMask{mask: m, asset: asset})

@@ -276,6 +276,7 @@
     "totalLatency": "Total latency",
     "promptTokens": "Prompt tokens",
     "outputTokens": "Output tokens",
+    "attempts": "Attempts",
     "estimatedCost": "Estimated cost",
     "notAvailable": "n/a",
     "preservationCheck": "Preservation check",

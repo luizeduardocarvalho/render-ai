@@ -128,7 +128,7 @@ func TestProjectAssetMigrationKeepsMaskBindings(t *testing.T) {
 
 	const legacyAssetID = "legacy-asset-1"
 	if err := st.SeedLegacyProjectAssets(p.ID, []*store.Asset{
-		{ID: legacyAssetID, Name: "Sofa", Description: "d", Color: "#ff0000"},
+		{ID: legacyAssetID, Name: "Sofa", Description: "d", Color: "#ff0000", ReferenceImageID: "ref-1", HasReferenceImage: true},
 	}); err != nil {
 		t.Fatalf("SeedLegacyProjectAssets: %v", err)
 	}
