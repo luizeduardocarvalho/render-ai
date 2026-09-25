@@ -419,6 +419,7 @@ type renderTaskBody struct {
 	ProjectID string `json:"projectId"`
 	JobID     string `json:"jobId"`
 	Variation int    `json:"variation"`
+	Attempt   int    `json:"attempt"`
 }
 
 // handleRenderTask is the worker route Cloud Tasks calls. Per the contract
@@ -440,6 +441,7 @@ func (s *Server) handleRenderTask(w http.ResponseWriter, r *http.Request) error 
 		ProjectID: body.ProjectID,
 		JobID:     body.JobID,
 		Variation: body.Variation,
+		Attempt:   body.Attempt,
 	})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	return nil
