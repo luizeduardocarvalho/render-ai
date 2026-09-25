@@ -91,8 +91,8 @@ export function MaskEditor({ view }: { view: View }) {
   }, [containerSize, view.width, view.height]);
 
   const displayScale = Math.max(0.02, fitScale * (zoomPct / 100));
-  const stageW = Math.max(1, Math.round(view.width * displayScale));
-  const stageH = Math.max(1, Math.round(view.height * displayScale));
+  const stageW = Math.max(1, Math.floor(view.width * displayScale));
+  const stageH = Math.max(1, Math.floor(view.height * displayScale));
 
   // Keep the offscreen raw/display canvases in sync with the mask list:
   // create blank ones for new masks, drop ones for deleted masks, import
@@ -330,10 +330,7 @@ export function MaskEditor({ view }: { view: View }) {
               </div>
             )}
             {screenshotImg && (
-              <div
-                className="mask-canvas-scroll"
-                style={{ width: containerSize.w, height: containerSize.h }}
-              >
+              <div className="mask-canvas-scroll">
                 <Stage
                   ref={stageRef}
                   width={stageW}

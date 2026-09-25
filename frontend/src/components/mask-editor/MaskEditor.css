@@ -121,10 +121,10 @@
 }
 
 .mask-canvas-scroll {
+  /* Sized by the stage. Auto margins center it while it fits and, unlike
+     flex centering, leave every edge reachable by scrolling once it overflows. */
   margin: auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
 }
 
