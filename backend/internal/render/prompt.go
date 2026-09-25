@@ -95,3 +95,10 @@ type EditTemplateData struct {
 func EditPrompt(templatePath string, data EditTemplateData) (string, error) {
 	return executeTemplateFile(templatePath, "edit", data)
 }
+
+// UpscalePrompt returns the Upscale prompt from templatePath, loading it fresh
+// on every call like RenderPrompt does. It takes no data: an Upscale is always
+// the same request, made of one image.
+func UpscalePrompt(templatePath string) (string, error) {
+	return executeTemplateFile(templatePath, "upscale", nil)
+}

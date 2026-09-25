@@ -66,6 +66,7 @@ interface Render {
   isStyleAnchor: boolean;
   sourceRenderId?: string; // set iff this render is an Edit: the render (same view) it was made from
   editInstructions?: string[]; // set iff Edit: what each edited region was asked to become, in region order
+  upscaledFromRenderId?: string; // set iff this render is an Upscale: the render (same view) it is a 4K version of
 }
 
 interface RenderMetrics {
@@ -450,6 +451,46 @@ can itself be edited. See `CONTEXT.md` for the vocabulary.
   byte for byte**. The region bitmaps are stored only
   while the job runs and deleted when it ends. The resulting `Render` has
   `regionCount` = the number of regions and no `preservation`.
+
+### Upscale
+
+An **Upscale** is the 4K version of a finished render. Rendering the same
+request again at 4K would give a different picture (the image models take no
+seed), so an upscale reproduces the render the user already has instead. It is
+a new `Render` appended to the same view, linked to its source through
+`upscaledFromRenderId` (never `sourceRenderId`, which means Edit); the source is
+never touched. See `CONTEXT.md` for the vocabulary.
+
+- `POST   /api/projects/{pid}/views/{vid}/renders/{rid}/upscale` (no body)
+  A `400` if the render is already 4K; a `404` for an unknown project, view or
+  render (the render must belong to `{vid}`); a `500` for a missing renderer or
+  image blob, as for renders.
+  -> **`202 Accepted`** with a `RenderJob` exactly like the render endpoint's,
+  polled through `GET .../render-jobs/{jid}` until terminal. The job has one
+  variation and its `request` is `model: "pro"`, `resolution: "4K"` plus an
+  `upscale` block (`sourceRenderId`), whatever the source was made with (the
+  flash model stops at 1K). On `"done"`, `renders[0]` is the new Render, with
+  `regionCount` 0 and no `preservation`.
+  **Price and charging** are a pro 4K render's (2 credits): debited up front,
+  `402` on too little balance, refunded exactly once if the variation fails -
+  the whole "Credits" section applies unchanged.
+  **How it works.** The model gets only the source render and a prompt asking
+  for the same image at 4K (`backend/prompts/upscale.tmpl`); no screenshot,
+  style settings or asset photos are sent. The model reproduces the picture and
+  adds fine detail, but shifts colors a little (measured on one render: paler
+  bricks, mean red +5, blue +4), so its answer is pinned back to the source's
+  colors and lighting (`geometry.PinLowFrequency`): both images are blurred
+  (sigma ~0.5% of the width) and the difference between the blurred source and
+  the blurred answer is added to the answer. Everything finer than that blur,
+  which is all the detail the model added, is kept. This works on a
+  640-px-wide copy and changes the answer in place, so a 5504x3072 result takes
+  ~0.2 s and adds no full-size copies to a 512 MiB worker. Fine texture (brick
+  grain, weave, foliage) is still the model's own, so an upscale is close to the
+  source, not pixel-identical to it.
+  **Failure.** An answer that is not a larger image with the source's aspect
+  ratio fails the job, and so refunds it, instead of putting a different picture
+  or no more pixels in the history under the name of an upscale. Like an Edit,
+  an upscale is never regenerated.
 
 ### Pricing
 - `GET /api/pricing` -> `PricingResponse`. Requires only a signed-in user (like

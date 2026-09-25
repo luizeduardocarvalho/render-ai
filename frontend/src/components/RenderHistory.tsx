@@ -3,21 +3,23 @@ import type { Render, View } from "../types";
 import { useProject } from "../state/ProjectContext";
 
 // One row of the history table: a render, and how deeply it is nested under
-// the render it was edited from.
+// the render it was edited or upscaled from.
 interface HistoryRow {
   render: Render;
   depth: number;
 }
 
-// Renders newest first, each followed by its edits (oldest first, nested one
-// level deeper per edit-of-an-edit), so an edit sits right under its source.
+// Renders newest first, each followed by the renders made from it (oldest
+// first, nested one level deeper per generation), so an edit or an upscale sits
+// right under its source.
 function buildRows(renders: Render[]): HistoryRow[] {
   const ids = new Set(renders.map((r) => r.id));
   const edits = new Map<string, Render[]>();
   const roots: Render[] = [];
   for (const r of renders) {
-    if (r.sourceRenderId && ids.has(r.sourceRenderId)) {
-      edits.set(r.sourceRenderId, [...(edits.get(r.sourceRenderId) ?? []), r]);
+    const parentId = r.sourceRenderId ?? r.upscaledFromRenderId;
+    if (parentId && ids.has(parentId)) {
+      edits.set(parentId, [...(edits.get(parentId) ?? []), r]);
     } else {
       roots.push(r);
     }
@@ -101,6 +103,9 @@ export function RenderHistory({ view, selectedRenderId, onSelect }: RenderHistor
                       )}
                       <span className="render-row-created-text">
                         <span>{new Date(r.createdAt).toLocaleString(i18n.language)}</span>
+                        {r.upscaledFromRenderId && (
+                          <span className="render-row-edit-note">{t("renderHistory.upscaleNote")}</span>
+                        )}
                         {r.editInstructions && r.editInstructions.length > 0 && (
                           <span className="render-row-edit-note" title={r.editInstructions.join("\n")}>
                             {t("renderHistory.editNote", { changes: r.editInstructions.join(" · ") })}

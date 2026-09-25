@@ -1,6 +1,13 @@
+.result-header {
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
 .result-header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-2);
 }
 

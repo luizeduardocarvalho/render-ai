@@ -217,7 +217,8 @@
     },
     "anchorBadge": "Âncora",
     "notAvailable": "n/d",
-    "editNote": "Edição: {{changes}}"
+    "editNote": "Edição: {{changes}}",
+    "upscaleNote": "Ampliação 4K"
   },
   "resultView": {
     "title": "Resultado",
@@ -227,8 +228,17 @@
     "edit": "Editar",
     "downloadPng": "Baixar PNG",
     "loadingImage": "Carregando imagem...",
+    "upscale_one": "Ampliar para 4K ({{credits}} crédito)",
+    "upscale_other": "Ampliar para 4K ({{credits}} créditos)",
+    "upscaleNoPrice": "Ampliar para 4K",
+    "upscaleQueued": "Iniciando ampliação...",
+    "upscaling": "Ampliando...",
+    "upscaleWait": "A ampliação pode levar até um minuto. É um novo render: o original continua como está.",
+    "upscaleHint": "Cria uma cópia em 4K deste render, mantendo a imagem, as cores e a iluminação.",
     "errors": {
       "anchor": "Não foi possível atualizar a âncora de estilo",
+      "upscale": "Não foi possível ampliar o render",
+      "upscaleInsufficientCredits": "Falha na ampliação: créditos insuficientes. Peça a um administrador para recarregar seu saldo.",
       "download": "Não foi possível baixar a imagem"
     }
   },
