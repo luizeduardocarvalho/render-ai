@@ -8,6 +8,8 @@ name: Deploy
 # vars, secret, service account and scaling stay as Terraform set them.
 # Frontend: builds frontend/ and runs `firebase deploy --only hosting,firestore`
 # (both Hosting sites plus firestore.rules).
+# Landing: deploys only the landing Hosting site (`hosting:landing`), straight
+# from landing/ - no build, and the app, backend and rules are left alone.
 #
 # Runs in the GitHub `production` environment, so its protection rules (e.g.
 # required reviewers) apply, and signs in to Google Cloud through Workload
@@ -22,9 +24,9 @@ on:
   workflow_dispatch:
     inputs:
       component:
-        description: What to deploy
+        description: "What to deploy: both = backend + frontend; frontend = app + landing + Firestore rules; landing = landing page only"
         type: choice
-        options: [both, backend, frontend]
+        options: [both, backend, frontend, landing]
         default: both
 
 permissions:
@@ -38,7 +40,7 @@ concurrency:
 
 jobs:
   backend:
-    if: inputs.component != 'frontend'
+    if: inputs.component == 'both' || inputs.component == 'backend'
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -86,7 +88,7 @@ jobs:
     # new API routes), and on its own when only the frontend is chosen.
     needs: backend
     if: >-
-      always() && inputs.component != 'backend' &&
+      always() && (inputs.component == 'both' || inputs.component == 'frontend') &&
       (needs.backend.result == 'success' || needs.backend.result == 'skipped')
     runs-on: ubuntu-latest
     environment: production
@@ -129,3 +131,22 @@ jobs:
         env:
           PROJECT: ${{ vars.GCP_PROJECT }}
         run: npx --yes firebase-tools@15 deploy --only hosting,firestore --project "$PROJECT" --non-interactive
+
+  landing:
+    # The landing page is static files served as-is from landing/, so a copy
+    # or asset change ships without rebuilding the app or touching the rest.
+    if: inputs.component == 'landing'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SA }}
+
+      - name: Deploy the landing Hosting site
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT }}
+        run: npx --yes firebase-tools@15 deploy --only hosting:landing --project "$PROJECT" --non-interactive

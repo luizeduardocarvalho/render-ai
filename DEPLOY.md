@@ -29,40 +29,61 @@ production - no CORS configuration is needed. In local dev it falls back to
 `http://localhost:8080` (see `frontend/src/api.ts` and
 `frontend/.env.example` for the `VITE_API_URL` override).
 
-## One-time setup
+## Deploying
 
-Replace the placeholders below with real values as you go:
-- `__GCP_PROJECT_ID__` - a new, dedicated Firebase/GCP project id.
-- `__LANDING_SITE_ID__` - Hosting site id for the landing page.
-- `__APP_SITE_ID__` - Hosting site id for the frontend app.
+The usual way is the **Deploy** workflow: Actions -> Deploy -> Run workflow
+([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)). Pick what to
+deploy:
+
+| Option     | Deploys                                                              |
+| ---------- | -------------------------------------------------------------------- |
+| `both`     | the backend, then everything `frontend` deploys                      |
+| `backend`  | the Cloud Run services (`render-ai-api`, `render-ai-worker`)         |
+| `frontend` | builds the app, then both Hosting sites and `firestore.rules`        |
+| `landing`  | only the landing Hosting site, straight from `landing/` - no build   |
+
+Nothing deploys on merge; a run is always started by hand, in the GitHub
+`production` environment.
+
+To deploy Hosting from your own machine instead (Firebase CLI logged in with
+deploy access):
 
 ```bash
-# 1. Create (or select) the Firebase/GCP project.
-firebase projects:create __GCP_PROJECT_ID__
-# or, if it already exists:
-firebase use --add __GCP_PROJECT_ID__
-
-# 2. Create the two Hosting sites (a Firebase project's default site is not
-#    used here - both sites are explicit).
-firebase hosting:sites:create __LANDING_SITE_ID__ --project __GCP_PROJECT_ID__
-firebase hosting:sites:create __APP_SITE_ID__ --project __GCP_PROJECT_ID__
-
-# 3. Bind the Hosting targets in firebase.json to those sites. This updates
-#    .firebaserc; commit the result once the placeholders are filled in.
-firebase target:apply hosting landing __LANDING_SITE_ID__ --project __GCP_PROJECT_ID__
-firebase target:apply hosting app __APP_SITE_ID__ --project __GCP_PROJECT_ID__
-
-# 4. Deploy the Cloud Run backend first (render-ai-api, us-central1) - see
-#    backend/DEPLOY.md. The `app` site's /api/** rewrite expects that service
-#    to already exist.
-
-# 5. Build the frontend and deploy both Hosting sites plus Firestore rules.
-pnpm --dir frontend build
-firebase deploy --only hosting,firestore --project __GCP_PROJECT_ID__
+./scripts/deploy-hosting.sh           # build the app, deploy both sites + Firestore rules
+./scripts/deploy-hosting.sh landing   # deploy only the landing site
 ```
 
-`scripts/deploy-hosting.sh` wraps step 5 (build + deploy) for repeat
-deploys once the one-time setup above is done.
+## Where things live
+
+- Firebase/GCP project: `render-ai-studio`
+- Landing site: `render-ai-studio` (`https://render-ai-studio.web.app`)
+- App site: `render-ai-studio-app` (`https://render-ai-studio-app.web.app`)
+
+The `landing` and `app` Hosting targets in `firebase.json` are bound to those
+sites in `.firebaserc`.
+
+## Setting it up again from scratch
+
+Only needed for a new project (the one above is already set up). The GCP side -
+APIs, Cloud Run, service accounts, and the GitHub deploy identity - is
+Terraform, in [`infra/terraform/`](infra/terraform/README.md). The Hosting
+side is:
+
+```bash
+# 1. Create the two Hosting sites (the project's default site is not used -
+#    both sites are explicit).
+firebase hosting:sites:create <landing-site-id> --project <project-id>
+firebase hosting:sites:create <app-site-id> --project <project-id>
+
+# 2. Bind the Hosting targets in firebase.json to those sites. This updates
+#    .firebaserc; commit the result.
+firebase target:apply hosting landing <landing-site-id> --project <project-id>
+firebase target:apply hosting app <app-site-id> --project <project-id>
+
+# 3. Deploy the Cloud Run backend first - the `app` site's /api/** rewrite
+#    expects render-ai-api to exist. Then deploy Hosting.
+PROJECT_ID=<project-id> ./scripts/deploy-hosting.sh
+```
 
 ## Auth (Clerk)
 
@@ -70,9 +91,9 @@ deploys once the one-time setup above is done.
 (it's the publishable key, not a secret, so this is fine). After the first
 deploy:
 
-- Add the deployed app Hosting URL (e.g.
-  `https://__APP_SITE_ID__.web.app`) to the Clerk dev instance's allowed
-  origins so sign-in/sign-up work from that domain.
+- Add the deployed app Hosting URL (`https://render-ai-studio-app.web.app`)
+  to the Clerk dev instance's allowed origins so sign-in/sign-up work from
+  that domain.
 - Expect Clerk's "Development mode" banner to keep showing until the app has
   a custom domain and a Clerk production instance configured for it - that's
   a separate step, not part of this Hosting setup.
