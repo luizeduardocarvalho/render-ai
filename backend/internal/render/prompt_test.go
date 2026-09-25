@@ -126,3 +126,20 @@ func TestEditPromptDescribesTheScreenshotOnlyWhenSent(t *testing.T) {
 		t.Errorf("prompt mentions IMAGE 3 although no screenshot is sent:\n%s", without)
 	}
 }
+
+// The object inventory reaches the render prompt together with the rule that
+// its material text is what each surface is rendered in.
+func TestRenderPromptCarriesInventoryMaterials(t *testing.T) {
+	inv := "Floor, whole room - European oak, matte oil finish"
+	prompt, err := RenderPrompt("../../prompts/render.tmpl", TemplateData{
+		EdgeMapIndex: 2, Scene: "interior", Lighting: "overcast", Inventory: inv,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"OBJECT INVENTORY AND MATERIALS", "render it in exactly that material", inv} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt missing %q", want)
+		}
+	}
+}

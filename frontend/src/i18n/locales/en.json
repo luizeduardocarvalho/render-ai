@@ -159,10 +159,10 @@
     }
   },
   "inventory": {
-    "title": "Object inventory",
-    "subtitle": "Used to check what the render preserves",
+    "title": "Objects and materials",
+    "subtitle": "Every object must stay, and each one is rendered in the material listed",
     "generate": "Generate from screenshot",
-    "placeholder": "No inventory yet. Generate one from the screenshot, or write it yourself.",
+    "placeholder": "Nothing listed yet. Generate the list from the screenshot, or write it yourself: one object per line, then a dash and its material.",
     "save": "Save inventory",
     "saved": "Saved",
     "errors": {
