@@ -75,6 +75,21 @@ export function MetricsPanel({ render }: { render: Render }) {
               {preservation.edgeFlag ? t("metricsPanel.belowThreshold") : ""}
             </span>
           </div>
+          {preservation.assetColors && preservation.assetColors.length > 0 && (
+            <div className="asset-colors">
+              <span className="field-label" title={t("metricsPanel.assetColorHint")}>
+                {t("metricsPanel.assetColors")}
+              </span>
+              <ul>
+                {preservation.assetColors.map((c) => (
+                  <li key={c.assetId}>
+                    <span>{c.assetName}</span>
+                    <span className="asset-color-distance">{c.distance.toFixed(1)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>

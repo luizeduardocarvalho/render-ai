@@ -61,6 +61,16 @@ export interface RenderMetrics {
 export interface PreservationReport {
   edgeScore: number;
   edgeFlag: boolean;
+  // Per painted asset: color distance between its region in the render and
+  // its reference photo (0 identical, ~5 same asset lit differently, 20+ a
+  // clearly different color). Information only - nothing acts on it yet.
+  assetColors?: AssetColorScore[];
+}
+
+export interface AssetColorScore {
+  assetId: string;
+  assetName: string;
+  distance: number;
 }
 
 export interface Render {

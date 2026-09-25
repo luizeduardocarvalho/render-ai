@@ -150,6 +150,20 @@ type RenderMetrics struct {
 type PreservationReport struct {
 	EdgeScore float64 `json:"edgeScore"`
 	EdgeFlag  bool    `json:"edgeFlag"`
+	// AssetColors is, for each asset painted on the screenshot, how far the
+	// colors of its region in the render are from its reference photo. It is
+	// information only: nothing flags or regenerates a render on it yet.
+	AssetColors []AssetColorScore `json:"assetColors,omitempty"`
+}
+
+// AssetColorScore is the color match of one asset's region(s) in a render.
+// Distance is 0 for identical colors, around 5 for the same asset lit
+// differently, and 20 or more for a clearly different color (see
+// geometry.PaletteDistance). Lower is better.
+type AssetColorScore struct {
+	AssetID   string  `json:"assetId"`
+	AssetName string  `json:"assetName"`
+	Distance  float64 `json:"distance"`
 }
 
 // Render is one image generation result for a view.
@@ -321,6 +335,7 @@ func (r *Render) clone() *Render {
 	clone.Metrics.EstimatedCostUsd = clonePtr(r.Metrics.EstimatedCostUsd)
 	if r.Preservation != nil {
 		p := *r.Preservation
+		p.AssetColors = slices.Clone(r.Preservation.AssetColors)
 		clone.Preservation = &p
 	}
 	clone.EditInstructions = slices.Clone(r.EditInstructions)

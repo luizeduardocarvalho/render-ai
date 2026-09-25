@@ -75,7 +75,13 @@ IMAGE 1: The original SketchUp screenshot. This defines the scene: camera, frami
 {{ end }}{{ if .HasAnchor }}- A style anchor is provided: match its material palette, color temperature, lighting mood
   and color grading so this looks like a photo of the same space on the same day.
 {{ end }}
-=== OBJECT INVENTORY (these must all remain) ===
+=== OBJECT INVENTORY AND MATERIALS ===
+Every object listed here must remain. The text after the dash on a line is the material
+that object or surface is made of: render it in exactly that material, with the finish,
+texture scale and grain direction given, keeping the color shown in IMAGE 1 unless the line
+names a different one. Lines without a material, and anything not listed, get the most
+plausible material for the room. The Materials setting above and product reference photos
+win over this list if they disagree.
 {{ .Inventory }}
 
 === OUTPUT ===

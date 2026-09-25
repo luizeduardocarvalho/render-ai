@@ -95,6 +95,20 @@ interface RenderMetrics {
 interface PreservationReport {
   edgeScore: number;       // 0..1 edge IoU (dilated, masked regions excluded)
   edgeFlag: boolean;       // true if below threshold
+  // One entry per asset painted on the screenshot (omitted when none): how far
+  // the colors of its region in the render are from its reference photo, as
+  // the distance between the two color palettes in CIELAB (hue and chroma
+  // fully, lightness at half weight; the mask is shrunk slightly first).
+  // Lower is better: ~5 is the same asset lit differently, 20+ a clearly
+  // different color. INFORMATION ONLY for now - it never sets edgeFlag and
+  // never triggers regeneration; it is there to validate a future threshold.
+  assetColors?: AssetColorScore[];
+}
+
+interface AssetColorScore {
+  assetId: string;
+  assetName: string;
+  distance: number;
 }
 
 interface View {

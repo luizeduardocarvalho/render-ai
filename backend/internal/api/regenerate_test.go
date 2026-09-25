@@ -245,3 +245,44 @@ func TestRegenerationTaskOfAnotherAttemptIsIgnored(t *testing.T) {
 		t.Fatalf("current attempt ran the model %d times, want 1", got)
 	}
 }
+
+// The color check reports each asset's region against its reference photo,
+// and never flags or regenerates on it.
+func TestAssetColorScoresReportPerAssetAndSkipUnreadablePhotos(t *testing.T) {
+	encode := func(c color.RGBA) []byte {
+		img := image.NewRGBA(image.Rect(0, 0, 64, 64))
+		for i := 0; i < len(img.Pix); i += 4 {
+			img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = c.R, c.G, c.B, 255
+		}
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, img); err != nil {
+			t.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+	rust, blue := color.RGBA{R: 180, G: 70, B: 40}, color.RGBA{R: 40, G: 90, B: 190}
+	render := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	for i := 0; i < len(render.Pix); i += 4 {
+		render.Pix[i], render.Pix[i+1], render.Pix[i+2], render.Pix[i+3] = rust.R, rust.G, rust.B, 255
+	}
+	whole := image.NewGray(render.Bounds())
+	for i := range whole.Pix {
+		whole.Pix[i] = 255
+	}
+
+	got := assetColorScores(render, []regionAsset{
+		{asset: &store.Asset{ID: "a-sofa", Name: "Sofa"}, ref: encode(rust), bitmaps: []image.Image{whole}},
+		{asset: &store.Asset{ID: "a-lamp", Name: "Lamp"}, ref: encode(blue), bitmaps: []image.Image{whole}},
+		{asset: &store.Asset{ID: "a-broken", Name: "Broken"}, ref: []byte("not an image"), bitmaps: []image.Image{whole}},
+	})
+
+	if len(got) != 2 {
+		t.Fatalf("scores = %+v, want the sofa and the lamp (the unreadable photo is skipped)", got)
+	}
+	if got[0].AssetID != "a-sofa" || got[0].AssetName != "Sofa" || got[0].Distance > 1 {
+		t.Errorf("sofa score = %+v, want a match", got[0])
+	}
+	if got[1].AssetID != "a-lamp" || got[1].Distance < 30 {
+		t.Errorf("lamp score = %+v, want a clear mismatch", got[1])
+	}
+}

@@ -454,6 +454,8 @@ type renderAssembly struct {
 	screenshotEdges *image.Gray
 	screenshotBlob  store.Blob
 	maskBitmaps     []image.Image
+	// assets are the distinct assets used, for the asset color-match report.
+	assets          []regionAsset
 	qualifyingCount int
 	hasAnchor       bool
 	modelID         string
@@ -583,6 +585,7 @@ func (s *Server) assembleRenderRequest(pid, vid string, jobReq store.RenderJobRe
 		screenshotEdges: screenshotEdges,
 		screenshotBlob:  screenshotBlob,
 		maskBitmaps:     maskBitmaps,
+		assets:          regions.assets,
 		qualifyingCount: regions.masks,
 		hasAnchor:       hasAnchor,
 		modelID:         modelID,
@@ -761,7 +764,7 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 
 	if job.Request.PreservationCheck {
 		rec.Preservation = s.runPreservationCheck(
-			assembly.screenshotImg, assembly.screenshotEdges, result, assembly.view, assembly.maskBitmaps)
+			assembly.screenshotImg, assembly.screenshotEdges, result, assembly.view, assembly.maskBitmaps, assembly.assets)
 	}
 
 	totalMs := assembly.assemblyMs + time.Since(variationStart).Milliseconds()
@@ -1047,6 +1050,8 @@ type regionAsset struct {
 	asset  *store.Asset
 	ref    []byte
 	swatch geometry.Swatch
+	// bitmaps are the decoded bitmaps of this asset's masks.
+	bitmaps []image.Image
 }
 
 // regionSet is everything the masks contribute to a render request.
@@ -1161,7 +1166,7 @@ func (s *Server) buildRegionSet(screenshotImg image.Image, qualifying []qualifyi
 
 	assets := make([]regionAsset, len(groups))
 	for i, g := range groups {
-		assets[i] = regionAsset{asset: g.asset, ref: g.ref, swatch: swatches[i]}
+		assets[i] = regionAsset{asset: g.asset, ref: g.ref, swatch: swatches[i], bitmaps: g.bitmaps}
 	}
 	return &regionSet{mapPNG: regionMapPNG, bitmaps: bitmaps, assets: assets, masks: len(used)}, nil
 }
@@ -1175,6 +1180,7 @@ func (s *Server) runPreservationCheck(
 	result renderpkg.RenderResult,
 	view *store.View,
 	maskBitmaps []image.Image,
+	assets []regionAsset,
 ) *store.PreservationReport {
 	report := &store.PreservationReport{}
 
@@ -1199,7 +1205,29 @@ func (s *Server) runPreservationCheck(
 	}
 	report.EdgeScore = score
 	report.EdgeFlag = score < s.cfg.Preservation.EdgeScoreFlagThreshold
+	report.AssetColors = assetColorScores(resized, assets)
 	return report
+}
+
+// assetColorScores measures, per asset, how close the colors of its region in
+// the render are to its reference photo. An asset whose photo cannot be read,
+// or whose region has no pixels, is left out; nothing here can fail the render.
+func assetColorScores(render image.Image, assets []regionAsset) []store.AssetColorScore {
+	var out []store.AssetColorScore
+	for _, a := range assets {
+		ref, _, err := imageutil.Decode(a.ref)
+		if err != nil {
+			log.Printf("asset color check: decoding reference photo of asset %s: %v", a.asset.ID, err)
+			continue
+		}
+		mask := geometry.UnionMask(render.Bounds(), a.bitmaps)
+		dist, ok := geometry.RegionColorDistance(render, mask, ref)
+		if !ok {
+			continue
+		}
+		out = append(out, store.AssetColorScore{AssetID: a.asset.ID, AssetName: a.asset.Name, Distance: dist})
+	}
+	return out
 }
 
 func findViewIn(p *store.Project, vid string) *store.View {
