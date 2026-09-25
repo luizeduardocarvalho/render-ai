@@ -293,6 +293,10 @@
     "preservationCheck": "Preservation check",
     "edgeScore": "Edge score {{score}}",
     "belowThreshold": " - below threshold",
+    "editDrift": "Change from the original",
+    "editDriftHint": "How much each edited region's colors changed from the render before the edit. About 0-6 is the same look (for example grass made more realistic grass), 15 or more is a different material or color. A deliberate change of material or color scores high by design. Information only.",
+    "editDriftRegion": "Region {{number}}",
+    "editDriftValue": "{{drift}} · {{share}}% changed",
     "assetColors": "Asset color distance",
     "assetColorHint": "How far the colors in each asset's painted area are from its reference photo. Lower is better: about 5 is normal lighting variation, 20 or more is a clearly different color. Information only."
   },

@@ -325,12 +325,13 @@ func (s *Server) assembleEditRequest(pid string, job *store.RenderJob) (*renderA
 }
 
 // composite blends the model's answer over the source through the edit
-// mask and returns the PNG bytes of the result. Everything outside the mask
-// is the source's own pixels.
-func (e *editAssembly) composite(generated []byte) ([]byte, error) {
+// mask and returns the PNG bytes of the result, plus how much each region's
+// look changed from the source. Everything outside the mask is the source's
+// own pixels.
+func (e *editAssembly) composite(generated []byte) ([]byte, []store.EditRegionDrift, error) {
 	genImg, _, err := imageutil.Decode(generated)
 	if err != nil {
-		return nil, fmt.Errorf("decoding the model's image: %w", err)
+		return nil, nil, fmt.Errorf("decoding the model's image: %w", err)
 	}
 	// The model answers at the nearest aspect ratio it supports, so an oddly
 	// shaped source gets an answer that is stretched to fit. Worth seeing in
@@ -350,9 +351,28 @@ func (e *editAssembly) composite(generated []byte) ([]byte, error) {
 	}
 	blended, err := geometry.BlendEdit(e.source, answer, e.alpha)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return imageutil.EncodePNG(blended)
+	png, err := imageutil.EncodePNG(blended)
+	if err != nil {
+		return nil, nil, err
+	}
+	return png, e.regionDrift(blended), nil
+}
+
+// regionDrift measures how much the look of each edit region changed between
+// the source and the finished edit. A region with nothing to measure is left
+// out.
+func (e *editAssembly) regionDrift(edited image.Image) []store.EditRegionDrift {
+	var out []store.EditRegionDrift
+	for i, region := range e.regions {
+		drift, share, ok := geometry.RegionDrift(e.source, edited, geometry.ToGray(region.Bitmap))
+		if !ok {
+			continue
+		}
+		out = append(out, store.EditRegionDrift{Number: i + 1, Instruction: e.instructions[i], Drift: drift, ChangedShare: share})
+	}
+	return out
 }
 
 // deleteEditBlobs drops the region bitmaps of a finished edit job.

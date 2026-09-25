@@ -420,3 +420,46 @@ func TestEditDropsAnOutlineTheModelTracedAlongTheRegionBorder(t *testing.T) {
 		t.Errorf("centre of the region = %v, want the model's green", c)
 	}
 }
+
+// An edit reports how much each region's look changed from its source, so a
+// region the model did something else with can be told from one it only
+// refined.
+func TestEditReportsHowMuchEachRegionChanged(t *testing.T) {
+	run := func(t *testing.T, answer func(sourceData []byte) []byte) []store.EditRegionDrift {
+		t.Helper()
+		renderer := &recordingRenderer{}
+		s, repo, p, v, queue := setupRenderTest(t, renderer)
+		source, sourceData := addSourceRender(t, repo, p.ID, v.ID)
+		renderer.answer = answer(sourceData)
+		resp, err := postStartEdit(t, s, p.ID, v.ID, source.ID, editRequestBody{Regions: []editRegionBody{
+			{Instruction: "  a brass floor lamp  ", Bitmap: maskB64(t, editW/2, editH/2, image.Rect(15, 8, 25, 16))},
+		}})
+		if err != nil {
+			t.Fatalf("startEdit: %v", err)
+		}
+		queue.Wait()
+		final, err := getRenderJobResponse(t, s, p.ID, resp.ID)
+		if err != nil || final.Status != store.RenderJobDone || len(final.Renders) != 1 {
+			t.Fatalf("job = %+v (%v), want done with one render", final, err)
+		}
+		return final.Renders[0].EditDrift
+	}
+
+	t.Run("answer keeps the look", func(t *testing.T) {
+		drift := run(t, func(sourceData []byte) []byte { return sourceData })
+		if len(drift) != 1 || drift[0].Number != 1 || drift[0].Instruction != "a brass floor lamp" {
+			t.Fatalf("drift = %+v, want one entry for region 1 with the trimmed instruction", drift)
+		}
+		if drift[0].Drift > 1 || drift[0].ChangedShare != 0 {
+			t.Errorf("drift = %+v, want none: the model's answer is the source", drift[0])
+		}
+	})
+
+	t.Run("answer is something else", func(t *testing.T) {
+		red := color.NRGBA{R: 220, G: 20, B: 20, A: 255}
+		drift := run(t, func([]byte) []byte { return solidPNG(t, editW, editH, red) })
+		if len(drift) != 1 || drift[0].Drift < 15 || drift[0].ChangedShare < 0.9 {
+			t.Errorf("drift = %+v, want a large drift over the whole region", drift)
+		}
+	})
+}

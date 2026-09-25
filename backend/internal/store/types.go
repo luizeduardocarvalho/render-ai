@@ -166,6 +166,19 @@ type AssetColorScore struct {
 	Distance  float64 `json:"distance"`
 }
 
+// EditRegionDrift is how much one region of an Edit changed in look. Drift is
+// the mean CIELAB distance between the region's block-averaged colors before
+// and after (about 0 to 6 is the same look, 15 or more another material or
+// color) and ChangedShare the share of the region's blocks that changed a lot
+// (see geometry.RegionDrift). A deliberate change of material or color scores
+// high by design.
+type EditRegionDrift struct {
+	Number       int     `json:"number"`
+	Instruction  string  `json:"instruction"`
+	Drift        float64 `json:"drift"`
+	ChangedShare float64 `json:"changedShare"`
+}
+
 // Render is one image generation result for a view.
 type Render struct {
 	ID            string              `json:"id"`
@@ -189,6 +202,10 @@ type Render struct {
 	// (in the same view) it is a 4K version of. Empty otherwise. An Upscale is
 	// never an Edit, so this and SourceRenderID are never both set.
 	UpscaledFromRenderID string `json:"upscaledFromRenderId,omitempty"`
+	// EditDrift is, for each region of an Edit, how much its look changed from
+	// the Render it was made from. Information only: nothing flags or
+	// regenerates an edit on it. Empty unless SourceRenderID is set.
+	EditDrift []EditRegionDrift `json:"editDrift,omitempty"`
 }
 
 // View is one camera angle: a screenshot plus its masks and render history.
@@ -343,6 +360,7 @@ func (r *Render) clone() *Render {
 		clone.Preservation = &p
 	}
 	clone.EditInstructions = slices.Clone(r.EditInstructions)
+	clone.EditDrift = slices.Clone(r.EditDrift)
 	return &clone
 }
 

@@ -293,6 +293,10 @@
     "preservationCheck": "Verificação de preservação",
     "edgeScore": "Pontuação de bordas {{score}}",
     "belowThreshold": " - abaixo do limite",
+    "editDrift": "Mudança em relação ao original",
+    "editDriftHint": "Quanto as cores de cada região editada mudaram em relação à renderização antes da edição. Cerca de 0-6 é o mesmo aspecto (por exemplo, grama que ficou uma grama mais realista), 15 ou mais é outro material ou cor. Uma troca proposital de material ou cor tem valor alto por definição. Apenas informativo.",
+    "editDriftRegion": "Região {{number}}",
+    "editDriftValue": "{{drift}} · {{share}}% alterado",
     "assetColors": "Distância de cor dos ativos",
     "assetColorHint": "Quão longe estão as cores da área pintada de cada ativo da foto de referência dele. Quanto menor, melhor: cerca de 5 é variação normal de iluminação, 20 ou mais é uma cor claramente diferente. Apenas informativo."
   },
