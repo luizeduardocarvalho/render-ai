@@ -159,10 +159,10 @@
     }
   },
   "inventory": {
-    "title": "Inventário de objetos",
-    "subtitle": "Usado para verificar o que a renderização preserva",
+    "title": "Objetos e materiais",
+    "subtitle": "Todo objeto deve permanecer e é renderizado no material indicado",
     "generate": "Gerar a partir da captura de tela",
-    "placeholder": "Ainda sem inventário. Gere um a partir da captura de tela ou escreva o seu.",
+    "placeholder": "Nada listado ainda. Gere a lista a partir da captura de tela ou escreva a sua: um objeto por linha, depois um traço e o material.",
     "save": "Salvar inventário",
     "saved": "Salvo",
     "errors": {
