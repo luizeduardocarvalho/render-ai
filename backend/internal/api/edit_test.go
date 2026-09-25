@@ -365,3 +365,58 @@ func (r *recordingBlobs) PutBlob(data []byte, contentType string) (string, error
 	}
 	return id, err
 }
+
+// When the model traces the borders of the colored areas it was shown, the
+// outline must not reach the stored edit.
+func TestEditDropsAnOutlineTheModelTracedAlongTheRegionBorder(t *testing.T) {
+	green := color.NRGBA{R: 60, G: 120, B: 50, A: 255}
+	label := color.NRGBA{R: 235, G: 30, B: 25, A: 255} // close to the overlay's red
+	region := image.Rect(30, 16, 50, 32)               // in the source's pixels
+
+	answer := image.NewNRGBA(image.Rect(0, 0, editW, editH))
+	for y := 0; y < editH; y++ {
+		for x := 0; x < editW; x++ {
+			c := green
+			if x >= region.Min.X && x < region.Max.X && y >= region.Min.Y && y < region.Max.Y &&
+				(x < region.Min.X+2 || x >= region.Max.X-2 || y < region.Min.Y+2 || y >= region.Max.Y-2) {
+				c = label
+			}
+			answer.SetNRGBA(x, y, c)
+		}
+	}
+	renderer := &recordingRenderer{answer: encodePNG(t, answer)}
+	s, repo, p, v, queue := setupRenderTest(t, renderer)
+	source, _ := addSourceRender(t, repo, p.ID, v.ID)
+
+	resp, err := postStartEdit(t, s, p.ID, v.ID, source.ID, editRequestBody{Regions: []editRegionBody{
+		{Instruction: "a lawn", Bitmap: maskB64(t, editW/2, editH/2, image.Rect(15, 8, 25, 16))},
+	}})
+	if err != nil {
+		t.Fatalf("startEdit: %v", err)
+	}
+	queue.Wait()
+	final, err := getRenderJobResponse(t, s, p.ID, resp.ID)
+	if err != nil || final.Status != store.RenderJobDone || len(final.Renders) != 1 {
+		t.Fatalf("job = %+v (%v), want done with one render", final, err)
+	}
+	blob, ok := s.blobs.GetBlob(final.Renders[0].ResultImageID)
+	if !ok {
+		t.Fatal("edit result blob is missing")
+	}
+	got, err := png.Decode(bytes.NewReader(blob.Data))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for y := 0; y < editH; y++ {
+		for x := 0; x < editW; x++ {
+			c := color.NRGBAModel.Convert(got.At(x, y)).(color.NRGBA)
+			if c.R > 150 && c.G < 90 && c.B < 90 {
+				t.Fatalf("pixel (%d,%d) = %v is still the overlay's red", x, y, c)
+			}
+		}
+	}
+	if c := color.NRGBAModel.Convert(got.At(40, 24)).(color.NRGBA); c != green {
+		t.Errorf("centre of the region = %v, want the model's green", c)
+	}
+}

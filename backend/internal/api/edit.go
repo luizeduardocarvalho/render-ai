@@ -198,7 +198,10 @@ type editAssembly struct {
 	sourceRenderID string
 	source         image.Image
 	// alpha is the feathered union of the edit regions at the source's size.
-	alpha        *image.Gray
+	alpha *image.Gray
+	// regions are the edit regions as the overlay painted them, for scrubbing
+	// any trace of the overlay out of the model's answer.
+	regions      []geometry.Region
 	instructions []string
 }
 
@@ -314,6 +317,7 @@ func (s *Server) assembleEditRequest(pid string, job *store.RenderJob) (*renderA
 			sourceRenderID: sourceRender.ID,
 			source:         sourceImg,
 			alpha:          alpha,
+			regions:        overlayRegions,
 			instructions:   instructions,
 		},
 		assemblyMs: time.Since(start).Milliseconds(),
@@ -335,7 +339,16 @@ func (e *editAssembly) composite(generated []byte) ([]byte, error) {
 	if !sameAspect(gb.Dx(), gb.Dy(), sb.Dx(), sb.Dy()) {
 		log.Printf("edit: model answered %dx%d for a %dx%d source; scaling it to fit", gb.Dx(), gb.Dy(), sb.Dx(), sb.Dy())
 	}
-	blended, err := geometry.BlendEdit(e.source, genImg, e.alpha)
+	// The model sometimes traces the borders of the colored areas it was shown;
+	// take that out of its answer before it is blended in.
+	answer := geometry.ToNRGBA(genImg)
+	if gb := answer.Bounds(); gb.Dx() != sb.Dx() || gb.Dy() != sb.Dy() {
+		answer = geometry.ResizeBilinear(genImg, sb.Dx(), sb.Dy())
+	}
+	if n := geometry.ScrubOverlayColors(answer, e.regions); n > 0 {
+		log.Printf("edit: removed %d pixels of overlay color the model drew along the region borders", n)
+	}
+	blended, err := geometry.BlendEdit(e.source, answer, e.alpha)
 	if err != nil {
 		return nil, err
 	}
