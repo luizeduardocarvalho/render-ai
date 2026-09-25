@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"sync"
 	"time"
 
 	"render-ai/backend/internal/store"
@@ -63,9 +64,18 @@ func isTerminal(status store.RenderJobStatus) bool {
 	return status == store.RenderJobDone || status == store.RenderJobFailed
 }
 
+// listConcurrency bounds how many projects are read at once by
+// listMyRenderJobs: enough that a user with many projects is not waiting on
+// them one after another, few enough not to flood the store.
+const listConcurrency = 8
+
 // listMyRenderJobs returns the caller's render jobs from the last
 // notificationWindow, across all their projects, newest first. A job whose
 // view has since been deleted is left out: there is nothing to open.
+//
+// It is polled every few seconds while a job runs, so it reads as little as it
+// can: per project the recent jobs and, only for a project that has some, its
+// view names - never the views' masks or renders.
 func (s *Server) listMyRenderJobs(w http.ResponseWriter, r *http.Request) error {
 	ownerID, _ := userIDFromContext(r.Context())
 	projects, err := s.repo.ListProjects(ownerID)
@@ -74,38 +84,28 @@ func (s *Server) listMyRenderJobs(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	since := time.Now().Add(-notificationWindow)
-	out := []notificationView{}
-	for _, summary := range projects {
-		jobList, err := s.repo.ListRenderJobs(summary.ID, since)
-		if errors.Is(err, store.ErrNotFound) {
-			continue // deleted between the two calls
-		}
-		if err != nil {
-			return internalErr("listing render jobs of project %s: %v", summary.ID, err)
-		}
-		if len(jobList) == 0 {
-			continue
-		}
-		project, err := s.repo.GetProject(summary.ID)
-		if errors.Is(err, store.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return internalErr("loading project %s: %v", summary.ID, err)
-		}
-		viewNames := make(map[string]string, len(project.Views))
-		for _, v := range project.Views {
-			viewNames[v.ID] = v.Name
-		}
-		for _, job := range jobList {
-			viewName, ok := viewNames[job.ViewID]
-			if !ok {
-				continue
-			}
-			out = append(out, s.notificationFor(project, viewName, job))
-		}
+	perProject := make([][]notificationView, len(projects))
+	errs := make([]error, len(projects))
+	sem := make(chan struct{}, listConcurrency)
+	var wg sync.WaitGroup
+	for i, summary := range projects {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			perProject[i], errs[i] = s.projectNotifications(summary, since)
+		}()
 	}
+	wg.Wait()
 
+	out := []notificationView{}
+	for i := range projects {
+		if errs[i] != nil {
+			return errs[i]
+		}
+		out = append(out, perProject[i]...)
+	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
 			return out[i].JobID < out[j].JobID
@@ -116,7 +116,37 @@ func (s *Server) listMyRenderJobs(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
-func (s *Server) notificationFor(project *store.Project, viewName string, job *store.RenderJob) notificationView {
+// projectNotifications is one project's share of listMyRenderJobs.
+func (s *Server) projectNotifications(summary store.ProjectSummary, since time.Time) ([]notificationView, error) {
+	jobList, err := s.repo.ListRenderJobs(summary.ID, since)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, nil // deleted since the project list was read
+	}
+	if err != nil {
+		return nil, internalErr("listing render jobs of project %s: %v", summary.ID, err)
+	}
+	if len(jobList) == 0 {
+		return nil, nil
+	}
+	viewNames, err := s.repo.ViewNames(summary.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, internalErr("reading view names of project %s: %v", summary.ID, err)
+	}
+	var out []notificationView
+	for _, job := range jobList {
+		viewName, ok := viewNames[job.ViewID]
+		if !ok {
+			continue
+		}
+		out = append(out, s.notificationFor(summary, viewName, job))
+	}
+	return out, nil
+}
+
+func (s *Server) notificationFor(project store.ProjectSummary, viewName string, job *store.RenderJob) notificationView {
 	state := s.deriveJobState(job)
 	n := notificationView{
 		ProjectID:   project.ID,
@@ -146,26 +176,19 @@ func (s *Server) notificationFor(project *store.Project, viewName string, job *s
 	return n
 }
 
-// errAlreadySeen aborts markRenderJobSeen's update when there is nothing to
-// write, so the job is left untouched (UpdateRenderJob bumps UpdatedAt on
-// every successful write).
-var errAlreadySeen = errors.New("render job already seen")
-
 // markRenderJobSeen records that the user has seen the job's outcome. It is
 // idempotent, and does nothing for a job that has not finished yet: its
 // notification only becomes unread once there is an outcome to read.
 func (s *Server) markRenderJobSeen(w http.ResponseWriter, r *http.Request) error {
 	pid, jid := r.PathValue("pid"), r.PathValue("jid")
-	_, err := s.repo.UpdateRenderJob(pid, jid, func(j *store.RenderJob) error {
-		if j.SeenAt != nil || !isTerminal(s.deriveJobState(j).status) {
-			return errAlreadySeen
-		}
-		now := time.Now().UTC()
-		j.SeenAt = &now
-		return nil
-	})
-	if err != nil && !errors.Is(err, errAlreadySeen) {
+	job, err := s.repo.GetRenderJob(pid, jid)
+	if err != nil {
 		return mapStoreErr(err, "render job %s not found", jid)
+	}
+	if isTerminal(s.deriveJobState(job).status) {
+		if err := s.repo.MarkRenderJobSeen(pid, jid, time.Now()); err != nil {
+			return mapStoreErr(err, "render job %s not found", jid)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil

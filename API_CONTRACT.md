@@ -350,10 +350,11 @@ runs once per project and every existing mask binding keeps resolving.
 - `PUT    /api/projects/{pid}/views/{vid}/inventory` `{ inventory }` -> `View`
 - `POST   /api/projects/{pid}/views/{vid}/inventory/generate` -> `{ inventory }`
       (calls Gemini text model on the screenshot; overwrites cache; returns text).
-      Vertex quota errors (429 RESOURCE_EXHAUSTED / 503) are retried up to 3
-      attempts with backoff; if it is still exhausted the response is `429`
-      with `code: "rate_limited"` (the client shows a "busy, try again in a
-      minute" message). Other model failures are `502`.
+      Vertex quota errors (429 RESOURCE_EXHAUSTED) and 503s are retried up to 3
+      attempts with backoff. If the last answer is still a quota error the
+      response is `429` with `code: "rate_limited"` (the client shows a "busy,
+      try again in a minute" message). Any other failure, including a 503 that
+      persists, is `502`.
 
 ### Masks (per view)
 - `POST   /api/projects/{pid}/views/{vid}/masks` `{ assetId? }` -> `Mask`
@@ -526,9 +527,9 @@ of truth: the frontend keeps no job state of its own across reloads.
 
 - `GET    /api/me/render-jobs` -> `Notification[]`
   Any signed-in user (not project-gated): the caller's own projects only, jobs
-  last updated within the past 24 hours, newest **created** first (marking a job
-  seen bumps its `updatedAt`, so that is not the order). A job whose view has
-  been deleted, or whose project is soft-deleted, is left out - there is
+  last updated within the past 24 hours (marking a job seen does not count as an
+  update, so seeing one late does not keep it listed), newest **created** first.
+  A job whose view has been deleted, or whose project is soft-deleted, is left out - there is
   nothing to open. Status is derived exactly as for `GET .../render-jobs/{jid}`
   (including the stale-running rule), but no `Render` objects are loaded.
 

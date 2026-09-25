@@ -241,3 +241,67 @@ func TestMemoryStoreListRenderJobsMissingOrDeletedProject(t *testing.T) {
 		t.Errorf("deleted project: err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestMemoryStoreMarkRenderJobSeen(t *testing.T) {
+	s := NewMemory()
+	p := s.CreateProject("user-a", "P")
+	created := time.Now().UTC().Add(-time.Hour)
+	j := newTestJob("j", "v")
+	j.CreatedAt, j.UpdatedAt = created, created
+	if _, err := s.CreateRenderJob(p.ID, j); err != nil {
+		t.Fatalf("CreateRenderJob: %v", err)
+	}
+
+	first := created.Add(10 * time.Minute)
+	if err := s.MarkRenderJobSeen(p.ID, "j", first); err != nil {
+		t.Fatalf("MarkRenderJobSeen: %v", err)
+	}
+	if err := s.MarkRenderJobSeen(p.ID, "j", first.Add(time.Hour)); err != nil {
+		t.Fatalf("second MarkRenderJobSeen: %v", err)
+	}
+	got, _ := s.GetRenderJob(p.ID, "j")
+	if got.SeenAt == nil || !got.SeenAt.Equal(first) {
+		t.Errorf("SeenAt = %v, want the first time %v (a second call must not move it)", got.SeenAt, first)
+	}
+	if !got.UpdatedAt.Equal(created) {
+		t.Errorf("UpdatedAt = %v, want untouched %v", got.UpdatedAt, created)
+	}
+
+	if err := s.MarkRenderJobSeen(p.ID, "nope", first); err != ErrNotFound {
+		t.Errorf("unknown job: err = %v, want ErrNotFound", err)
+	}
+	if err := s.MarkRenderJobSeen("nope", "j", first); err != ErrNotFound {
+		t.Errorf("unknown project: err = %v, want ErrNotFound", err)
+	}
+	if err := s.DeleteProject(p.ID); err != nil {
+		t.Fatalf("DeleteProject: %v", err)
+	}
+	if err := s.MarkRenderJobSeen(p.ID, "j", first); err != ErrNotFound {
+		t.Errorf("deleted project: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestMemoryStoreViewNames(t *testing.T) {
+	s := NewMemory()
+	p := s.CreateProject("user-a", "P")
+	a, _ := s.CreateView(p.ID, "front", "img", 10, 10)
+	b, _ := s.CreateView(p.ID, "back", "img", 10, 10)
+
+	names, err := s.ViewNames(p.ID)
+	if err != nil {
+		t.Fatalf("ViewNames: %v", err)
+	}
+	if len(names) != 2 || names[a.ID] != "front" || names[b.ID] != "back" {
+		t.Errorf("names = %v, want front and back by id", names)
+	}
+
+	if _, err := s.ViewNames("nope"); err != ErrNotFound {
+		t.Errorf("unknown project: err = %v, want ErrNotFound", err)
+	}
+	if err := s.DeleteProject(p.ID); err != nil {
+		t.Fatalf("DeleteProject: %v", err)
+	}
+	if _, err := s.ViewNames(p.ID); err != ErrNotFound {
+		t.Errorf("deleted project: err = %v, want ErrNotFound", err)
+	}
+}

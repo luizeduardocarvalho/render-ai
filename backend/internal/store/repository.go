@@ -141,6 +141,15 @@ type Repository interface {
 	// since, newest created first. ErrNotFound if the project doesn't exist
 	// or is soft-deleted.
 	ListRenderJobs(pid string, since time.Time) ([]*RenderJob, error)
+	// MarkRenderJobSeen sets the job's SeenAt to at, unless it is already set.
+	// It does not touch UpdatedAt, which the 24h window of the notification list
+	// is measured on: seeing a job must not keep it listed longer.
+	// ErrNotFound if the project or job doesn't exist.
+	MarkRenderJobSeen(pid, jid string, at time.Time) error
+	// ViewNames returns the names of the project's views by view id, without
+	// loading the views' masks or renders. ErrNotFound if the project doesn't
+	// exist or is soft-deleted.
+	ViewNames(pid string) (map[string]string, error)
 }
 
 // BlobStore is the binary-object store for image bytes, keyed by blob ID. It

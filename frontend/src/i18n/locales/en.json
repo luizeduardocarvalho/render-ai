@@ -448,8 +448,8 @@
     "bell": {
       "unread_one": "{{count}} unread",
       "unread_other": "{{count}} unread",
-      "running_one": "{{count}} render in progress",
-      "running_other": "{{count}} renders in progress"
+      "running_one": "{{count}} in progress",
+      "running_other": "{{count}} in progress"
     },
     "markAllRead": "Mark all as read",
     "unreadMark": "Unread",
@@ -472,7 +472,11 @@
       "failed": "Failed"
     },
     "alert": {
-      "done": "{{kind}} finished",
+      "done": {
+        "render": "Render finished",
+        "edit": "Edit finished",
+        "upscale": "4K upscale finished"
+      },
       "failed": "{{kind}} failed"
     },
     "empty": {
