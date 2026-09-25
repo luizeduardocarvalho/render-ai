@@ -3,11 +3,72 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>render-ai - SketchUp screenshots, redrawn as photographs</title>
+    <title>render-ai - Photorealistic architectural renders from your 3D model</title>
     <meta
       name="description"
-      content="render-ai turns SketchUp screenshots into photorealistic architectural photographs, placing the exact real products you specify into masked regions, using AI image models."
+      content="render-ai turns a screenshot of your 3D model into a photorealistic architectural photograph, placing the exact real products you specify into each masked region - interiors or exteriors, up to 4K."
     />
+    <link rel="canonical" href="https://render-ai-studio.web.app/" />
+
+    <meta name="theme-color" content="#efeae1" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14161a" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Link previews (Open Graph + X/Twitter) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="render-ai" />
+    <meta property="og:url" content="https://render-ai-studio.web.app/" />
+    <meta property="og:title" content="render-ai - Turn a 3D model screenshot into a photograph" />
+    <meta
+      property="og:description"
+      content="Photoreal architectural renders with the exact products you specify placed into each masked region, matching perspective, light, and material. Up to 4K."
+    />
+    <meta property="og:image" content="https://render-ai-studio.web.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="render-ai: a 3D model's line drawing of a living room beside the same room rendered as a photograph."
+    />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://render-ai-studio.web.app/#organization",
+            "name": "render-ai",
+            "url": "https://render-ai-studio.web.app/",
+            "logo": "https://render-ai-studio.web.app/icon-512.png"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://render-ai-studio.web.app/#website",
+            "name": "render-ai",
+            "url": "https://render-ai-studio.web.app/",
+            "publisher": { "@id": "https://render-ai-studio.web.app/#organization" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "render-ai",
+            "url": "https://render-ai-studio.web.app/",
+            "applicationCategory": "DesignApplication",
+            "operatingSystem": "Web",
+            "description": "Turns a screenshot of a 3D model into a photorealistic architectural photograph, placing the exact real products you specify into masked regions of the image, at up to 4K.",
+            "image": "https://render-ai-studio.web.app/og-image.png",
+            "publisher": { "@id": "https://render-ai-studio.web.app/#organization" }
+          }
+        ]
+      }
+    </script>
+
+    <link rel="preload" href="./fonts/archivo-var.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -30,7 +91,7 @@
       <section class="sheet spread hero">
         <div class="hero-copy">
           <h1 class="display">
-            Turn a SketchUp screenshot into a <em>photograph</em>.
+            Turn a 3D&nbsp;model screenshot into a <em>photograph</em>.
           </h1>
           <p class="deck">
             render-ai places the exact products you specify into your masked
@@ -93,8 +154,8 @@
             </div>
 
             <div class="ba-layer ba-before" id="baBefore">
-              <!-- SketchUp line-art -->
-              <svg viewBox="0 0 480 360" preserveAspectRatio="xMidYMid slice" role="img" aria-label="SketchUp screenshot of the same living room">
+              <!-- Model line-art -->
+              <svg viewBox="0 0 480 360" preserveAspectRatio="xMidYMid slice" role="img" aria-label="3D model screenshot of the same living room">
                 <rect width="480" height="360" fill="var(--paper)" />
                 <g fill="none" stroke="var(--ink)" stroke-width="2.2" stroke-linejoin="round">
                   <line x1="0" y1="228" x2="480" y2="228" />
@@ -117,7 +178,7 @@
 
             <div class="ba-plumb" id="baPlumb" aria-hidden="true"></div>
             <span class="ba-tag ba-tag-after">Photograph</span>
-            <span class="ba-tag ba-tag-before">SketchUp</span>
+            <span class="ba-tag ba-tag-before">Model</span>
 
             <input
               id="baRange"
@@ -126,12 +187,12 @@
               min="0"
               max="100"
               value="52"
-              aria-label="Drag to compare the SketchUp screenshot and the photographic render"
+              aria-label="Drag to compare the 3D model screenshot and the photographic render"
             />
           </div>
           <figcaption>
             <span class="fig-mark">Fig. 1</span>
-            SketchUp study, redrawn as a photograph with the specified sofa in
+            Model study, redrawn as a photograph with the specified sofa in
             place. Drag to compare.
           </figcaption>
 
@@ -145,8 +206,8 @@
               <dd>Product-accurate</dd>
             </div>
             <div class="ledger-row">
-              <dt>Session</dt>
-              <dd>Local &amp; private</dd>
+              <dt>Access</dt>
+              <dd>Private per account</dd>
             </div>
           </dl>
         </div>
@@ -223,8 +284,8 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
             </span>
             <div class="spec-body">
-              <h3>Local &amp; private</h3>
-              <p>Runs on your machine, in memory. No cloud storage, no database - your screenshots and products never leave your session.</p>
+              <h3>Private to your account</h3>
+              <p>Your screenshots, product library, and renders are tied to your account and never shown to other users.</p>
             </div>
           </li>
         </ol>
@@ -243,7 +304,7 @@
           <li class="step">
             <span class="step-num">01</span>
             <h3>Upload a screenshot</h3>
-            <p>Drop in a SketchUp screenshot of any view. render-ai reads its exact resolution.</p>
+            <p>Drop in a screenshot of any view of your 3D model. render-ai reads its exact resolution.</p>
           </li>
           <li class="step">
             <span class="step-num">02</span>
@@ -278,13 +339,13 @@
         <div class="colophon-about">
           <p class="colophon-lead">
             render-ai is a proof of concept for architects and interior designers
-            who work in SketchUp and want photoreal, product-accurate visuals
+            who want photoreal, product-accurate visuals of their 3D models
             without a manual render pipeline.
           </p>
           <dl class="imprint">
             <div class="ledger-row"><dt>Built on</dt><dd>AI image models</dd></div>
             <div class="ledger-row"><dt>Rendering</dt><dd>Photoreal, up to 4K</dd></div>
-            <div class="ledger-row"><dt>Runs</dt><dd>Entirely on your machine</dd></div>
+            <div class="ledger-row"><dt>Runs</dt><dd>In your browser</dd></div>
           </dl>
         </div>
 

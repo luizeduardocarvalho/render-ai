@@ -5,6 +5,10 @@
 // involved; writes are gated by the Firestore security rules in
 // ../firestore.rules (create-only, validated).
 //
+// The SDK is large, so it is not loaded with the page: it is fetched the first
+// time the visitor interacts with the form (and awaited on submit), keeping it
+// off the critical path for page speed.
+//
 // SETUP (see ../README-landing.md):
 //   1. Create a Firebase project and a Web App, enable Firestore.
 //   2. Replace every "__FILL_ME__" below with your real web config values
@@ -14,13 +18,7 @@
 // Until the config is filled in, the form stays usable but reports that the
 // backend isn't connected yet instead of throwing.
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
-import {
-  getFirestore,
-  collection,
-  addDoc,
-  serverTimestamp,
-} from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/11.6.0";
 
 // ---------------------------------------------------------------------------
 // Firebase config - REPLACE the placeholders with your project's values.
@@ -40,13 +38,27 @@ const COLLECTION = "contactMessages";
 
 const isConfigured = !JSON.stringify(firebaseConfig).includes("__FILL_ME__");
 
-let db = null;
-if (isConfigured) {
-  try {
-    db = getFirestore(initializeApp(firebaseConfig));
-  } catch (err) {
-    console.error("Firebase init failed:", err);
+// Resolves to { db, collection, addDoc, serverTimestamp }. Memoized so the SDK
+// is fetched and initialized once; a failed load is retried on the next call.
+let firestorePromise = null;
+function loadFirestore() {
+  if (!firestorePromise) {
+    firestorePromise = Promise.all([
+      import(`${FIREBASE_SDK}/firebase-app.js`),
+      import(`${FIREBASE_SDK}/firebase-firestore.js`),
+    ])
+      .then(([{ initializeApp }, { getFirestore, collection, addDoc, serverTimestamp }]) => ({
+        db: getFirestore(initializeApp(firebaseConfig)),
+        collection,
+        addDoc,
+        serverTimestamp,
+      }))
+      .catch((err) => {
+        firestorePromise = null;
+        throw err;
+      });
   }
+  return firestorePromise;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +78,16 @@ function setStatus(message, kind) {
 }
 
 if (form) {
+  // Start fetching the SDK as soon as the visitor shows intent, so it is
+  // usually ready by the time they submit.
+  if (isConfigured) {
+    form.addEventListener(
+      "focusin",
+      () => loadFirestore().catch((err) => console.error("Firebase load failed:", err)),
+      { once: true }
+    );
+  }
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
@@ -88,7 +110,7 @@ if (form) {
       return;
     }
 
-    if (!isConfigured || !db) {
+    if (!isConfigured) {
       setStatus(
         "The contact form isn't connected yet. Add your Firebase config in contact.js to enable it.",
         "error"
@@ -102,6 +124,7 @@ if (form) {
     setStatus("");
 
     try {
+      const { db, collection, addDoc, serverTimestamp } = await loadFirestore();
       await addDoc(collection(db, COLLECTION), {
         email,
         message,

@@ -242,7 +242,10 @@ svg {
 
 .folio-row {
   display: flex;
+  flex-wrap: wrap;
+  /* Baseline-align the wordmark with the nav, and center that line in the bar. */
   align-items: baseline;
+  align-content: center;
   gap: 28px;
   height: 68px;
 }
@@ -301,7 +304,7 @@ svg {
 }
 
 .hero-copy {
-  max-width: 34ch;
+  min-width: 0;
 }
 
 .hero-side {
@@ -318,7 +321,9 @@ h1.display em {
   font-style: normal;
   text-decoration: underline;
   text-decoration-thickness: 4px;
-  text-underline-offset: 10px;
+  /* Sit the rule just under the descenders instead of breaking around them. */
+  text-underline-offset: 0.2em;
+  text-decoration-skip-ink: none;
   text-decoration-color: var(--ink);
 }
 
@@ -747,6 +752,30 @@ figcaption {
 }
 
 /* ---------------------------------------------------------------------- */
+/* 404                                                                    */
+/* ---------------------------------------------------------------------- */
+
+.not-found {
+  padding-top: clamp(56px, 10vw, 128px);
+  padding-bottom: clamp(56px, 10vw, 128px);
+}
+
+.not-found .folio-num {
+  display: block;
+  margin-bottom: 18px;
+}
+
+.not-found h1.display {
+  max-width: 16ch;
+  text-wrap: balance;
+}
+
+/* Pages without the nav still keep the plate reference at the right edge. */
+.wordmark + .folio-ref {
+  margin-left: auto;
+}
+
+/* ---------------------------------------------------------------------- */
 /* Motion - one authored on-load moment; content visible without it        */
 /* ---------------------------------------------------------------------- */
 
@@ -789,9 +818,6 @@ figcaption {
   .spread {
     grid-template-columns: 1fr;
     gap: 40px;
-  }
-  .hero-copy {
-    max-width: none;
   }
   .figure {
     max-width: 560px;
