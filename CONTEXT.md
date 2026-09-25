@@ -1,4 +1,4 @@
-# Render AI
+# StudioIA
 
 Turns a screenshot of a 3D scene into photorealistic renders, guided by assets painted onto the screenshot, and lets the user refine a finished render.
 

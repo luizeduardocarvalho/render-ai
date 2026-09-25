@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Firestore security rules for the render-ai landing page contact form.
+// Firestore security rules for the StudioIA landing page contact form.
 //
 // The public landing page is allowed to CREATE contact messages only, and
 // only when they are well-formed. Nobody (client-side) may read, update, or

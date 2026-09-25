@@ -7,7 +7,7 @@ related_targets: []
 
 ## Direction contract
 
-THESIS: render-ai's landing page is a published architecture monograph - the
+THESIS: StudioIA's landing page is a published architecture monograph - the
 kind of plate spread (El Croquis / 2G) where a building's drawing and its
 photograph sit side by side under an index. It refuses the SaaS gradient hero and
 the icon-card grid; the page proves the mechanism by showing the SketchUp study
@@ -28,7 +28,7 @@ screenshot becomes a real photograph with their specified product in it, sees it
 demonstrated in the hero figure, believes it because the geometry is preserved
 and the products are real, and acts by requesting access (or reading the method).
 
-FIRST VIEWPORT: Running header/folio - "render-ai" left, nav center-right,
+FIRST VIEWPORT: Running header/folio - "StudioIA" left, nav center-right,
 "PLATE 01 / STUDY" mono right, full-width hairline rule under it. Below, a
 two-plate spread: left column carries the headline in big expanded grotesque
 ("Turn a SketchUp screenshot into a photograph."), a one-line deck, the primary

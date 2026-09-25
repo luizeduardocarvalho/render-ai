@@ -1,7 +1,7 @@
 /**
  * Maps the app's CSS custom properties (see src/index.css) onto Clerk's
  * appearance API so the drop-in <SignIn>/<SignUp>/<UserButton> components
- * match the rest of render-ai instead of Clerk's default look. Using CSS
+ * match the rest of StudioIA instead of Clerk's default look. Using CSS
  * vars (rather than resolved colors) means this adapts to light/dark
  * automatically via the existing `prefers-color-scheme` rules.
  */

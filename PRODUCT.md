@@ -16,7 +16,7 @@ standing up a manual render pipeline (V-Ray, Enscape, Lumion, physical staging).
 
 ## Product Purpose
 
-render-ai turns a SketchUp screenshot into a photorealistic architectural
+StudioIA turns a SketchUp screenshot into a photorealistic architectural
 photograph, placing specific real products into user-masked regions of the image.
 Success is a render that reads as a real photograph, keeps the original geometry,
 and shows the exact specified products in place - produced in one model call,
@@ -61,7 +61,7 @@ surface.
 
 ## Brand Commitments
 
-- Product name: **render-ai** (lowercase).
+- Product name: **StudioIA** (one word: capital S, capital IA). Code, infrastructure and URLs keep the older `render-ai` identifiers.
 - Built on Google's Gemini 3 image models ("Nano Banana Pro" / "Nano Banana 2")
   via Vertex AI - a real, nameable technical foundation.
 - Existing app design language: neutral gray scale with an indigo accent
