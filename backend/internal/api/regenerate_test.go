@@ -3,11 +3,14 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"image"
 	"image/color"
 	"image/png"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -219,6 +222,62 @@ func TestFailedRegenerationFallsBackToTheHeldRender(t *testing.T) {
 	}
 	if r.Metrics.Attempts != 2 {
 		t.Errorf("attempts = %d, want 2 (the failed one counts)", r.Metrics.Attempts)
+	}
+}
+
+// deliverThroughRoute makes the queue hand every task to the worker route the
+// way Cloud Tasks does: as the JSON body of an authenticated POST to
+// /internal/render-tasks, not as a Go value. The inline queue skips that hop,
+// which is how a field dropped from the route's body went unnoticed.
+func (f *regenFixture) deliverThroughRoute(t *testing.T) {
+	t.Helper()
+	const invoker = "render-tasks-invoker@my-project.iam.gserviceaccount.com"
+	f.s.cfg.Jobs.WorkerAudience = "https://worker.example.com"
+	f.s.cfg.Jobs.InvokerServiceAccount = invoker
+	f.s.oidcValidator = func(context.Context, string, string) (oidcClaims, error) {
+		return oidcClaims{Email: invoker, EmailVerified: true}, nil
+	}
+	f.queue.SetHandler(func(ctx context.Context, task jobs.Task) {
+		body, err := json.Marshal(task)
+		if err != nil {
+			t.Errorf("marshaling task: %v", err)
+			return
+		}
+		r := httptest.NewRequest(http.MethodPost, "/internal/render-tasks", bytes.NewReader(body)).WithContext(ctx)
+		r.Header.Set("Authorization", "Bearer fake-token")
+		w := httptest.NewRecorder()
+		if err := f.s.handleRenderTask(w, r); err != nil {
+			t.Errorf("handleRenderTask: %v", err)
+			return
+		}
+		if w.Code != http.StatusOK {
+			t.Errorf("render-tasks status = %d, want 200", w.Code)
+		}
+	})
+}
+
+// The regeneration task reaches the worker as a request body, so the route
+// must carry its attempt number through: run as attempt 0 it would look like
+// a stale redelivery, be ignored with a 200, and leave the variation queued
+// until the stale rule reports it failed.
+func TestRegenerationTaskDeliveredThroughTheWorkerRouteRuns(t *testing.T) {
+	f := newRegenFixture(t, 2, func(f *regenFixture, call int) ([]byte, error) {
+		if call < 1 {
+			return f.miss, nil
+		}
+		return f.match, nil
+	})
+	f.deliverThroughRoute(t)
+	job := f.run(t)
+
+	if job.Status != store.RenderJobDone || len(job.Renders) != 1 {
+		t.Fatalf("job status=%s renders=%d, want done with 1 render (the regeneration task was not run)", job.Status, len(job.Renders))
+	}
+	if got := f.renderer.callCount(); got != 2 {
+		t.Fatalf("model called %d times, want 2", got)
+	}
+	if r := job.Renders[0]; r.Metrics.Attempts != 2 || !bytes.Equal(f.imageOf(t, r), f.match) {
+		t.Errorf("kept render: attempts=%d, matching image=%v, want attempts=2 and the matching image", r.Metrics.Attempts, bytes.Equal(f.imageOf(t, r), f.match))
 	}
 }
 
