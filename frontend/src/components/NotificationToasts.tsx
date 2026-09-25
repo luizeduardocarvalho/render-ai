@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { alertTitle } from "../lib/notifications";
 import { useNotifications } from "../state/notificationsContext";
 import type { JobNotification } from "../types";
 import { AlertCircleIcon, CheckCircleIcon, CloseIcon } from "./NotificationIcons";
@@ -9,23 +10,31 @@ const TOAST_MS = 8_000;
 
 function Toast({ n }: { n: JobNotification }) {
   const { t } = useTranslation();
-  const { open, dismissToast } = useNotifications();
+  const { open, dismissToast, attending } = useNotifications();
+  // Held while the pointer or keyboard focus is on it, so it can be read and
+  // clicked (WCAG 2.2.1), and while nobody is looking at the app, so it is
+  // still there when they come back.
+  const [held, setHeld] = useState(false);
 
   useEffect(() => {
+    if (held || !attending) return;
     const timer = window.setTimeout(() => dismissToast(n.jobId), TOAST_MS);
     return () => window.clearTimeout(timer);
-  }, [n.jobId, dismissToast]);
+  }, [held, attending, n.jobId, dismissToast]);
 
   const failed = n.status === "failed";
-  const kind = t(`notifications.kind.${n.kind}`);
   return (
-    <div className={`notif-toast ${failed ? "notif-toast-failed" : "notif-toast-done"}`}>
+    <div
+      className={`notif-toast ${failed ? "notif-toast-failed" : "notif-toast-done"}`}
+      onMouseEnter={() => setHeld(true)}
+      onMouseLeave={() => setHeld(false)}
+      onFocus={() => setHeld(true)}
+      onBlur={() => setHeld(false)}
+    >
       <button type="button" className="notif-toast-main" onClick={() => open(n)}>
         <span className="notif-row-icon">{failed ? <AlertCircleIcon /> : <CheckCircleIcon />}</span>
         <span className="notif-row-text">
-          <span className="notif-row-title">
-            {t(failed ? "notifications.alert.failed" : "notifications.alert.done", { kind })}
-          </span>
+          <span className="notif-row-title">{alertTitle(t, n)}</span>
           <span className="notif-row-meta">
             {n.projectName} / {n.viewName}
           </span>

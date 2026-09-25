@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import * as api from "../api";
 import { onJobsChanged } from "../lib/jobEvents";
-import { isActive, isUnread, notificationPath } from "../lib/notifications";
+import { alertTitle, isActive, isUnread, justFinished, notificationPath } from "../lib/notifications";
 import type { JobNotification } from "../types";
 import { useProject } from "./ProjectContext";
 import { NotificationsContext, type DesktopPermission, type NotificationsContextValue } from "./notificationsContext";
@@ -66,25 +66,26 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   const alertFinished = useCallback(
     (n: JobNotification) => {
-      // A toast is for someone looking at the app. Anyone else gets a desktop
-      // notification, if they have allowed those; if not, the toast waits for
-      // them in the tab.
-      const granted = currentPermission() === "granted";
-      if (isAttending() || (!granted && document.visibilityState === "visible")) {
-        setToasts((prev) => [n, ...prev.filter((x) => x.jobId !== n.jobId)].slice(0, 3));
-        return;
+      // The toast is always queued: it is what is waiting when the user comes
+      // back to the tab (it only starts to count down once they are looking).
+      setToasts((prev) => [n, ...prev.filter((x) => x.jobId !== n.jobId)].slice(0, 3));
+      // Someone who is not looking at the app also gets a desktop notification,
+      // if they have allowed those.
+      if (isAttending() || currentPermission() !== "granted") return;
+      try {
+        const desktop = new Notification(alertTitle(t, n), {
+          body: `${n.projectName} / ${n.viewName}`,
+          tag: n.jobId,
+        });
+        desktop.onclick = () => {
+          window.focus();
+          openNotification(n);
+          desktop.close();
+        };
+      } catch {
+        // Some browsers (Chrome on Android) allow the permission but refuse
+        // this constructor. The toast is there.
       }
-      if (!granted) return;
-      const kind = t(`notifications.kind.${n.kind}`);
-      const desktop = new Notification(
-        t(n.status === "failed" ? "notifications.alert.failed" : "notifications.alert.done", { kind }),
-        { body: `${n.projectName} / ${n.viewName}`, tag: n.jobId },
-      );
-      desktop.onclick = () => {
-        window.focus();
-        openNotification(n);
-        desktop.close();
-      };
     },
     [t, openNotification],
   );
@@ -97,19 +98,21 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   const apply = useCallback((list: JobNotification[]) => {
     const next = list.map((n) => (seenHere.current.has(n.jobId) ? { ...n, seen: true } : n));
-    const finished = next.filter((n) => {
-      const before = known.current.get(n.jobId);
-      return before !== undefined && isActive(before) && !isActive(n);
-    });
+    const finished = justFinished(known.current, next);
     known.current = new Map(next.map((n) => [n.jobId, n]));
     setItems(next);
     setLoaded(true);
 
     for (const n of finished) {
-      const { isShowing, alertFinished, refreshProject, pid } = latest.current;
-      // Its renders are in the open project's history now.
-      if (n.projectId === pid) void refreshProject();
-      if (!isShowing(n)) alertFinished(n);
+      // One job's alert failing must not cost the others theirs.
+      try {
+        const { isShowing, alertFinished, refreshProject, pid } = latest.current;
+        // Its renders are in the open project's history now.
+        if (n.projectId === pid) void refreshProject();
+        if (!isShowing(n)) alertFinished(n);
+      } catch {
+        // Nothing to do: the entry is in the bell either way.
+      }
     }
   }, []);
 
@@ -128,9 +131,14 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
     const stop = onJobsChanged(() => void refresh());
+    // The list is fetched when the user comes back, once: coming back fires
+    // both "focus" and "visibilitychange".
+    let wasAttending = isAttending();
     const onAttention = () => {
-      setAttending(isAttending());
-      if (document.visibilityState === "visible") void refresh();
+      const now = isAttending();
+      setAttending(now);
+      if (now && !wasAttending) void refresh();
+      wasAttending = now;
     };
     window.addEventListener("focus", onAttention);
     window.addEventListener("blur", onAttention);
@@ -207,10 +215,22 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       open,
       toasts,
       dismissToast,
+      attending,
       desktopPermission,
       enableDesktopAlerts,
     }),
-    [items, loaded, markSeen, markAllSeen, open, toasts, dismissToast, desktopPermission, enableDesktopAlerts],
+    [
+      items,
+      loaded,
+      markSeen,
+      markAllSeen,
+      open,
+      toasts,
+      dismissToast,
+      attending,
+      desktopPermission,
+      enableDesktopAlerts,
+    ],
   );
 
   return (

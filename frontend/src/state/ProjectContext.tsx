@@ -159,6 +159,22 @@ function announcingJob(opts?: JobOptions): JobOptions {
   };
 }
 
+// A project reloaded from the server, laid over the copy on screen: the
+// renders and the style anchor (what a job that ran elsewhere changes) come
+// from the server, everything else - masks, inventory, assets - stays as the
+// user has it, so a save made while the reload was in flight is not undone.
+function withReloadedRenders(current: Project, reloaded: Project): Project {
+  const local = new Map(current.views.map((v) => [v.id, v]));
+  return {
+    ...current,
+    styleAnchorRenderId: reloaded.styleAnchorRenderId,
+    views: reloaded.views.map((sv) => {
+      const lv = local.get(sv.id);
+      return lv ? { ...lv, renders: sv.renders } : sv;
+    }),
+  };
+}
+
 // Adds finished renders to a view, skipping any it already has: a project
 // reloaded from the server while a render was polling can already hold them.
 function withRenders(view: View, renders: Render[]): View {
@@ -181,6 +197,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [settledRid, setSettledRid] = useState<string | null>(null);
   const fetchingRid = useRef<string | null>(null);
   const project = loadedProject && loadedProject.id === route.pid ? loadedProject : null;
+
+  // Going back to the project list drops the loaded project, so coming back to
+  // it (the back button) loads it afresh instead of showing a copy that may be
+  // out of date, or of a project deleted in the meantime. (State adjusted while
+  // rendering, the pattern React documents for reacting to a change.)
+  const [seenPid, setSeenPid] = useState(route.pid);
+  if (seenPid !== route.pid) {
+    setSeenPid(route.pid);
+    if (route.pid === null) setProject(null);
+  }
 
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [projectsLoading, setProjectsLoading] = useState(true);
@@ -348,7 +374,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     try {
       const p = await api.getProject(pid);
       // Only if it is still the project on screen.
-      setProject((cur) => (cur && cur.id === p.id ? p : cur));
+      setProject((cur) => (cur && cur.id === p.id ? withReloadedRenders(cur, p) : cur));
     } catch {
       // The project on screen is only a little stale - keep it.
     }
@@ -378,7 +404,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   // Once the list has loaded, on the app's first screen only, open the last
   // project if it still exists. Later visits to the list (the back button)
   // are the user's choice and are not bounced forward.
-  const autoOpened = useRef(false);
+  // (A start on a link to a project is not a first screen to replace: if that
+  // project cannot be opened the user is told so on the list, not sent
+  // elsewhere.)
+  const autoOpened = useRef(route.pid !== null);
   useEffect(() => {
     if (autoOpened.current || projects === null) return;
     autoOpened.current = true;
@@ -401,6 +430,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (openPid.current && !route.pid) reloadProjectsQuietly();
     openPid.current = route.pid;
   }, [route.pid, reloadProjectsQuietly]);
+
+  // A path that is not the project list or a project ("/foo") is the list.
+  useEffect(() => {
+    if (!route.pid && location.pathname !== "/") navigate("/", { replace: true });
+  }, [route.pid, location.pathname, navigate]);
 
   const closeProjectFn = useCallback(() => {
     try {
@@ -672,7 +706,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   // The render the URL names. While one the project does not have yet is being
   // looked for on the server, none is shown rather than the wrong one.
-  const ridKey = project && route.rid ? `${project.id}/${route.rid}` : null;
+  // Keyed by navigation too, so opening a link to the same missing render
+  // again looks for it on the server again.
+  const ridKey = project && route.rid ? `${project.id}/${route.rid}/${location.key}` : null;
   const ridFound = !!route.rid && !!selectedView?.renders.some((r) => r.id === route.rid);
   const selectedRenderId = ridFound
     ? route.rid
@@ -690,6 +726,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (!view) {
       const first = project.views[0];
       if (first) navigate(appPath(project.id, first.id), { replace: true });
+      else if (route.vid) navigate(appPath(project.id), { replace: true });
       return;
     }
     if (route.rid && view.renders.some((r) => r.id === route.rid)) return;

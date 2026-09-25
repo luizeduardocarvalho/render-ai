@@ -17,6 +17,8 @@ export interface NotificationsContextValue {
   /** Toasts for jobs that finished while the user was elsewhere in the app. */
   toasts: JobNotification[];
   dismissToast: (jobId: string) => void;
+  /** The user is looking at the app: its tab is showing and its window focused. */
+  attending: boolean;
   desktopPermission: DesktopPermission;
   enableDesktopAlerts: () => Promise<void>;
 }

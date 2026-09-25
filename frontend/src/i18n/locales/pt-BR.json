@@ -448,8 +448,8 @@
     "bell": {
       "unread_one": "{{count}} não lida",
       "unread_other": "{{count}} não lidas",
-      "running_one": "{{count}} render em andamento",
-      "running_other": "{{count}} renders em andamento"
+      "running_one": "{{count}} em andamento",
+      "running_other": "{{count}} em andamento"
     },
     "markAllRead": "Marcar todas como lidas",
     "unreadMark": "Não lida",
@@ -472,7 +472,11 @@
       "failed": "Falhou"
     },
     "alert": {
-      "done": "{{kind}} concluído",
+      "done": {
+        "render": "Render concluído",
+        "edit": "Edição concluída",
+        "upscale": "Upscale 4K concluído"
+      },
       "failed": "{{kind}} falhou"
     },
     "empty": {
