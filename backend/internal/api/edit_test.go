@@ -189,8 +189,16 @@ func TestStartEditProducesLinkedRenderThatKeepsOutsideIdentical(t *testing.T) {
 		t.Fatalf("model called %d times, want 1", len(renderer.requests))
 	}
 	req := renderer.requests[0]
-	if len(req.Images) != 2 || !bytes.Equal(req.Images[0], sourceData) {
-		t.Errorf("model got %d images, first the source = %v, want 2 and the source first", len(req.Images), bytes.Equal(req.Images[0], sourceData))
+	screenshot, ok := s.blobs.GetBlob(v.ScreenshotImageID)
+	if !ok {
+		t.Fatal("the view's screenshot blob is missing")
+	}
+	if len(req.Images) != 3 || !bytes.Equal(req.Images[0], sourceData) || !bytes.Equal(req.Images[2], screenshot.Data) {
+		t.Errorf("model got %d images (source first = %v), want 3: the source, the overlay, then the view's screenshot",
+			len(req.Images), bytes.Equal(req.Images[0], sourceData))
+	}
+	if !strings.Contains(req.Prompt, "IMAGE 3: The original 3D model screenshot") {
+		t.Errorf("prompt does not describe the screenshot:\n%s", req.Prompt)
 	}
 	if !strings.Contains(req.Prompt, "red area (region 1): a brass floor lamp") {
 		t.Errorf("prompt does not carry the instruction:\n%s", req.Prompt)
