@@ -713,15 +713,17 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 		return
 	}
 
+	var editDrift []store.EditRegionDrift
 	if assembly.edit != nil {
 		// Keep the source's own pixels everywhere outside the edit regions.
-		composited, err := assembly.edit.composite(result.ImageData)
+		composited, drift, err := assembly.edit.composite(result.ImageData)
 		if err != nil {
 			log.Printf("render worker: compositing edit project=%s job=%s view=%s: %v", pid, jid, job.ViewID, err)
 			s.failVariation(pid, jid, idx, fmt.Sprintf("compositing edit: %v", err))
 			return
 		}
 		result.ImageData, result.MIMEType = composited, "image/png"
+		editDrift = drift
 	}
 	if assembly.upscale != nil {
 		// Keep the source's colour and lighting; the model only adds detail.
@@ -776,6 +778,7 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	if assembly.edit != nil {
 		rec.SourceRenderID = assembly.edit.sourceRenderID
 		rec.EditInstructions = assembly.edit.instructions
+		rec.EditDrift = editDrift
 	}
 	if assembly.upscale != nil {
 		rec.UpscaledFromRenderID = assembly.upscale.sourceRenderID

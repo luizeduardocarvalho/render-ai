@@ -67,6 +67,7 @@ interface Render {
   sourceRenderId?: string; // set iff this render is an Edit: the render (same view) it was made from
   editInstructions?: string[]; // set iff Edit: what each edited region was asked to become, in region order
   upscaledFromRenderId?: string; // set iff this render is an Upscale: the render (same view) it is a 4K version of
+  editDrift?: EditRegionDrift[]; // set iff Edit: how much each region's look changed from its source
 }
 
 interface RenderMetrics {
@@ -91,6 +92,18 @@ interface RenderMetrics {
   // were discarded (see "Regeneration"). imageCallMs, totalMs, the token
   // counts and estimatedCostUsd cover every attempt. Absent on old renders.
   attempts?: number;
+}
+
+interface EditRegionDrift {
+  number: number;          // 1-based, in region order
+  instruction: string;
+  // Mean CIELAB distance between the region's block-averaged colors before and
+  // after (lightness at half weight): ~0-6 is the same look (grass made more
+  // realistic grass), 15+ another material or color (grass turned to pebbles).
+  drift: number;
+  changedShare: number;    // 0..1, share of the region's blocks with drift >= 12; shows a change that covers only part of the region, which the mean dilutes
+  // INFORMATION ONLY: nothing flags or regenerates an edit on it, and a
+  // deliberate change of material or color scores high by design.
 }
 
 interface PreservationReport {

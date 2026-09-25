@@ -58,6 +58,16 @@ export interface RenderMetrics {
   attempts?: number;
 }
 
+export interface EditRegionDrift {
+  number: number;
+  instruction: string;
+  // Mean color distance of the region before -> after: ~0-6 same look, 15+
+  // another material or color.
+  drift: number;
+  // Share (0-1) of the region that changed a lot.
+  changedShare: number;
+}
+
 export interface PreservationReport {
   edgeScore: number;
   edgeFlag: boolean;
@@ -91,6 +101,10 @@ export interface Render {
   // Set when this render is an Upscale: the render (in the same view) it is a
   // 4K version of. Never set together with sourceRenderId.
   upscaledFromRenderId?: string;
+  // Set on an Edit: per region, how much its look changed from the render it
+  // was made from. Information only - a deliberate change of material or color
+  // scores high by design.
+  editDrift?: EditRegionDrift[];
 }
 
 export interface View {

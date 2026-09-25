@@ -66,6 +66,29 @@ export function MetricsPanel({ render }: { render: Render }) {
         <Metric label={t("metricsPanel.estimatedCost")} value={fmtCost(m.estimatedCostUsd)} />
       </dl>
 
+      {render.editDrift && render.editDrift.length > 0 && (
+        <div className="preservation-report">
+          <div className="asset-colors">
+            <span className="field-label" title={t("metricsPanel.editDriftHint")}>
+              {t("metricsPanel.editDrift")}
+            </span>
+            <ul>
+              {render.editDrift.map((r) => (
+                <li key={r.number} title={r.instruction}>
+                  <span>{t("metricsPanel.editDriftRegion", { number: r.number })}</span>
+                  <span className="asset-color-distance">
+                    {t("metricsPanel.editDriftValue", {
+                      drift: r.drift.toFixed(1),
+                      share: Math.round(r.changedShare * 100),
+                    })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
       {preservation && (
         <div className="preservation-report">
           <div className="preservation-header">
