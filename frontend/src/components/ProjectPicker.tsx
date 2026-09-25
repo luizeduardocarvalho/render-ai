@@ -3,12 +3,14 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { ApiError } from "../api";
+import { useRelativeTime } from "../hooks/useRelativeTime";
 import { useSignedImageUrl } from "../hooks/useSignedImageUrl";
 import { useProject } from "../state/ProjectContext";
 import type { ProjectSummary } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CreditsChip } from "./CreditsChip";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { NotificationsBell } from "./NotificationsBell";
 import { LibraryPanel } from "./LibraryPanel";
 import "./ProjectPicker.css";
 
@@ -24,28 +26,12 @@ function PickerThumb({ project }: { project: ProjectSummary }) {
   );
 }
 
-function useRelativeTime() {
-  const { t, i18n } = useTranslation();
-  return function relativeTime(iso: string): string {
-    const then = new Date(iso).getTime();
-    if (Number.isNaN(then)) return "";
-    const diff = Date.now() - then;
-    const mins = Math.round(diff / 60000);
-    if (mins < 1) return t("picker.time.justNow");
-    if (mins < 60) return t("picker.time.minutesAgo", { count: mins });
-    const hrs = Math.round(mins / 60);
-    if (hrs < 24) return t("picker.time.hoursAgo", { count: hrs });
-    const days = Math.round(hrs / 24);
-    if (days < 30) return t("picker.time.daysAgo", { count: days });
-    return new Date(iso).toLocaleDateString(i18n.language);
-  };
-}
-
 export function ProjectPicker() {
   const { t } = useTranslation();
   const relativeTime = useRelativeTime();
   const {
     me,
+    openError,
     projects,
     projectsLoading,
     projectsError,
@@ -112,6 +98,7 @@ export function ProjectPicker() {
       <header className="picker-topbar">
         <div className="app-brand">{t("app.brand")}</div>
         <div className="app-topbar-right">
+          <NotificationsBell />
           <CreditsChip />
           {me?.isAdmin && (
             <Link to="/admin" className="btn btn-ghost btn-sm">
@@ -157,7 +144,7 @@ export function ProjectPicker() {
 
         {tab === "projects" && (
           <>
-        {error && <div className="error-banner">{error}</div>}
+        {(error ?? openError) && <div className="error-banner">{error ?? openError}</div>}
 
         {showForm && (
           <form className="panel picker-create-card" onSubmit={handleCreate}>

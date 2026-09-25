@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useProject } from "../state/ProjectContext";
 import { MaskEditor } from "./mask-editor/MaskEditor";
 import { InventoryPanel } from "./InventoryPanel";
 import { RenderControls } from "./RenderControls";
@@ -7,18 +7,8 @@ import { ResultView } from "./result/ResultView";
 import type { View } from "../types";
 
 export function ViewWorkspace({ view }: { view: View }) {
-  const [selectedRenderId, setSelectedRenderId] = useState<string | null>(
-    view.renders.at(-1)?.id ?? null,
-  );
-
-  // Reset the visible result whenever the user switches views (adjust state
-  // during render rather than in an effect, so there's no stale-view flash).
-  const [lastViewId, setLastViewId] = useState(view.id);
-  if (lastViewId !== view.id) {
-    setLastViewId(view.id);
-    setSelectedRenderId(view.renders.at(-1)?.id ?? null);
-  }
-
+  // Which render is shown is in the URL, so a link to one opens it.
+  const { selectedRenderId, selectRender } = useProject();
   const selectedRender = view.renders.find((r) => r.id === selectedRenderId) ?? null;
 
   return (
@@ -27,20 +17,22 @@ export function ViewWorkspace({ view }: { view: View }) {
       <InventoryPanel view={view} />
       <RenderControls
         view={view}
-        onRendered={(renders) => setSelectedRenderId(renders[0]?.id ?? null)}
+        onRendered={(renders) => {
+          if (renders[0]) selectRender(view.id, renders[0].id);
+        }}
       />
       {selectedRender && (
         <ResultView
           view={view}
           render={selectedRender}
-          onEdited={(edit) => setSelectedRenderId(edit.id)}
-          onUpscaled={(upscale) => setSelectedRenderId(upscale.id)}
+          onEdited={(edit) => selectRender(view.id, edit.id)}
+          onUpscaled={(upscale) => selectRender(view.id, upscale.id)}
         />
       )}
       <RenderHistory
         view={view}
         selectedRenderId={selectedRenderId}
-        onSelect={(render) => setSelectedRenderId(render.id)}
+        onSelect={(render) => selectRender(view.id, render.id)}
       />
     </div>
   );

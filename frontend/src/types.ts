@@ -289,3 +289,27 @@ export const INTERIOR_LIGHTS_OPTIONS: {
   { value: "4000k", labelKey: "style.interiorLights.options.4000k.label", hintKey: "style.interiorLights.options.4000k.hint" },
   { value: "6000k", labelKey: "style.interiorLights.options.6000k.label", hintKey: "style.interiorLights.options.6000k.hint" },
 ];
+
+// One entry of the header bell (GET /api/me/render-jobs): a render, edit or
+// upscale job with the names needed to show and link to it. Named for the job
+// so it does not shadow the browser's own Notification.
+export type JobNotificationKind = "render" | "edit" | "upscale";
+
+export interface JobNotification {
+  projectId: string;
+  projectName: string;
+  viewId: string;
+  viewName: string;
+  jobId: string;
+  kind: JobNotificationKind;
+  status: RenderJobStatus;
+  createdAt: string;
+  updatedAt: string;
+  variations: { done: number; failed: number; total: number };
+  // The first finished variation's Render, once there is one.
+  renderId?: string;
+  // Set iff status is "failed".
+  error?: string;
+  // The user has opened this outcome.
+  seen: boolean;
+}

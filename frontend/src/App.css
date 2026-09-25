@@ -33,11 +33,21 @@
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text);
+  white-space: nowrap;
 }
 
 .app-project-name {
   font-size: 13px;
   color: var(--text-faint);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-switch-project {
+  flex: none;
+  white-space: nowrap;
 }
 
 .app-project-name::before {
@@ -50,6 +60,25 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+/* On a phone the two groups of the header do not fit side by side: the
+   project and its switch button get a row, the account controls the next. */
+@media (max-width: 720px) {
+  .app-topbar {
+    flex-wrap: wrap;
+    padding: var(--space-2) var(--space-4);
+  }
+
+  .app-topbar-left {
+    flex: 1 1 100%;
+  }
+
+  .app-topbar-right {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
 }
 
 .app-layout {
