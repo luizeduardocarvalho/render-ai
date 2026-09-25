@@ -168,7 +168,8 @@
     "errors": {
       "generate": "Failed to generate inventory",
       "save": "Failed to save inventory",
-      "insufficientCredits": "You don't have enough credits to generate an inventory. Ask an admin to top up your balance."
+      "insufficientCredits": "You don't have enough credits to generate an inventory. Ask an admin to top up your balance.",
+      "rateLimited": "The AI service is busy right now. Please try again in a minute."
     }
   },
   "renderControls": {

@@ -4,7 +4,9 @@ package inventory
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"google.golang.org/genai"
@@ -78,6 +80,41 @@ Piso, ambiente todo - carvalho europeu em réguas largas, acabamento fosco com �
 
 Escreva o catálogo em português do Brasil.`
 
+// Vertex answers 429 RESOURCE_EXHAUSTED when the per-minute quota of the model
+// is used up, which usually clears within seconds. The inventory call is cheap
+// and a user is waiting on it, so it retries a few times with backoff before
+// giving up. Retries are per call (not on the shared client) so renders keep
+// their own failure handling.
+const retryAttempts int32 = 3
+
+// Delays are in seconds. Variables so tests can run the retry loop instantly.
+var (
+	retryInitialDelay = 2.0
+	retryMaxDelay     = 8.0
+	retryJitter       = 1.0
+)
+
+func retryOptions() *genai.HTTPRetryOptions {
+	attempts, initial, maxDelay, jitter := retryAttempts, retryInitialDelay, retryMaxDelay, retryJitter
+	return &genai.HTTPRetryOptions{
+		Attempts:        &attempts,
+		InitialDelay:    &initial,
+		MaxDelay:        &maxDelay,
+		Jitter:          &jitter,
+		HTTPStatusCodes: []int32{http.StatusTooManyRequests, http.StatusServiceUnavailable},
+	}
+}
+
+// IsRateLimited reports whether err is Vertex telling us its quota is
+// exhausted (HTTP 429 / RESOURCE_EXHAUSTED), as opposed to a real failure.
+func IsRateLimited(err error) bool {
+	var apiErr genai.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.Code == http.StatusTooManyRequests || apiErr.Status == "RESOURCE_EXHAUSTED"
+	}
+	return false
+}
+
 // GenerateInventory asks the text model for a concise object inventory of
 // the screenshot (counts, rough positions and materials), written in the given
 // language ("pt-BR" or anything else, which falls back to English).
@@ -94,7 +131,9 @@ func (t *TextModel) GenerateInventory(ctx context.Context, screenshotPNG []byte,
 	}
 	contents := []*genai.Content{genai.NewContentFromParts(parts, genai.RoleUser)}
 
-	resp, err := t.client.Models.GenerateContent(ctx, t.modelID, contents, &genai.GenerateContentConfig{})
+	resp, err := t.client.Models.GenerateContent(ctx, t.modelID, contents, &genai.GenerateContentConfig{
+		HTTPOptions: &genai.HTTPOptions{RetryOptions: retryOptions()},
+	})
 	if err != nil {
 		return "", 0, 0, fmt.Errorf("generating inventory: %w", err)
 	}

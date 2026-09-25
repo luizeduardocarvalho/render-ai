@@ -55,6 +55,12 @@ func insufficientCreditsErr() *httpError {
 	return &httpError{status: http.StatusPaymentRequired, message: "insufficient credits", code: "insufficient_credits"}
 }
 
+// rateLimitedErr is the 429 returned when the AI provider's quota is used up
+// and retrying did not help. The frontend branches on the "code" field.
+func rateLimitedErr() *httpError {
+	return &httpError{status: http.StatusTooManyRequests, message: "the AI service is busy, try again in a minute", code: "rate_limited"}
+}
+
 // mapStoreErr turns store.ErrNotFound into a 404 with a friendlier message,
 // and passes any other error through unchanged.
 func mapStoreErr(err error, format string, args ...any) error {

@@ -27,6 +27,7 @@ export const API_BASE =
 // backend. Callers compare `err.code` against this rather than matching on
 // the (possibly localized-by-nobody, but still not-for-matching) message.
 export const INSUFFICIENT_CREDITS_CODE = "insufficient_credits";
+export const RATE_LIMITED_CODE = "rate_limited";
 
 export class ApiError extends Error {
   status: number;

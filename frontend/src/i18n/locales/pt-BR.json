@@ -168,7 +168,8 @@
     "errors": {
       "generate": "Não foi possível gerar o inventário",
       "save": "Não foi possível salvar o inventário",
-      "insufficientCredits": "Você não tem créditos suficientes para gerar um inventário. Peça a um administrador para recarregar seu saldo."
+      "insufficientCredits": "Você não tem créditos suficientes para gerar um inventário. Peça a um administrador para recarregar seu saldo.",
+      "rateLimited": "O serviço de IA está ocupado no momento. Tente novamente em um minuto."
     }
   },
   "renderControls": {

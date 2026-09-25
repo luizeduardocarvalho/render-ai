@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"render-ai/backend/internal/inventory"
+)
 
 // createView takes the screenshot either as a multipart "file" field or, for
 // a direct upload (see uploads.go), as JSON {"name", "uploadId"}.
@@ -137,6 +141,9 @@ func (s *Server) generateInventory(w http.ResponseWriter, r *http.Request) error
 
 	text, _, _, err := s.textModel.GenerateInventory(r.Context(), blob.Data, r.URL.Query().Get("lang"))
 	if err != nil {
+		if inventory.IsRateLimited(err) {
+			return rateLimitedErr()
+		}
 		return badGateway("generating inventory: %v", err)
 	}
 	if _, err := s.repo.SetInventory(pid, vid, text); err != nil {

@@ -349,7 +349,11 @@ runs once per project and every existing mask binding keeps resolving.
 - `DELETE /api/projects/{pid}/views/{vid}` -> `204`
 - `PUT    /api/projects/{pid}/views/{vid}/inventory` `{ inventory }` -> `View`
 - `POST   /api/projects/{pid}/views/{vid}/inventory/generate` -> `{ inventory }`
-      (calls Gemini text model on the screenshot; overwrites cache; returns text)
+      (calls Gemini text model on the screenshot; overwrites cache; returns text).
+      Vertex quota errors (429 RESOURCE_EXHAUSTED / 503) are retried up to 3
+      attempts with backoff; if it is still exhausted the response is `429`
+      with `code: "rate_limited"` (the client shows a "busy, try again in a
+      minute" message). Other model failures are `502`.
 
 ### Masks (per view)
 - `POST   /api/projects/{pid}/views/{vid}/masks` `{ assetId? }` -> `Mask`
