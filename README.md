@@ -1,4 +1,4 @@
-# render-ai
+# StudioIA
 
 Local proof of concept: turn SketchUp screenshots into photorealistic architectural
 photographs, placing specific real products into user-masked regions, using Google's

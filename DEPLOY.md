@@ -1,4 +1,4 @@
-# Deploying render-ai
+# Deploying StudioIA
 
 The app deploys as three pieces:
 

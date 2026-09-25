@@ -1,6 +1,6 @@
-# render-ai landing page
+# StudioIA landing page
 
-A standalone marketing page for render-ai. Static HTML/CSS/JS in [`landing/`](landing/),
+A standalone marketing page for StudioIA. Static HTML/CSS/JS in [`landing/`](landing/),
 deployed on **Firebase Hosting**, with the contact form writing straight to
 **Cloud Firestore**.
 

@@ -1,6 +1,6 @@
 # Design
 
-Visual world for the render-ai **landing page** (`landing/`). Scope: this
+Visual world for the StudioIA **landing page** (`landing/`). Scope: this
 marketing surface only. The in-app tool (`frontend/`) keeps its own indigo
 system; this document does not govern it.
 

@@ -1,6 +1,6 @@
 {
-  "name": "render-ai",
-  "short_name": "render-ai",
+  "name": "StudioIA",
+  "short_name": "StudioIA",
   "description": "Photorealistic architectural renders from your 3D model.",
   "start_url": "/",
   "display": "browser",
