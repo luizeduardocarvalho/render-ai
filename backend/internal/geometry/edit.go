@@ -192,6 +192,10 @@ func ResizeGray(src *image.Gray, w, h int) *image.Gray {
 	return out
 }
 
+// ToNRGBA returns img as a zero-origin *image.NRGBA, without copying when it
+// already is one (so changing the result may change img).
+func ToNRGBA(img image.Image) *image.NRGBA { return toNRGBA(img) }
+
 // toNRGBA returns img as a zero-origin *image.NRGBA, without copying when it
 // already is one.
 func toNRGBA(img image.Image) *image.NRGBA {
