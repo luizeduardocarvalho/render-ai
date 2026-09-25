@@ -168,7 +168,8 @@
     "errors": {
       "generate": "Failed to generate inventory",
       "save": "Failed to save inventory",
-      "insufficientCredits": "You don't have enough credits to generate an inventory. Ask an admin to top up your balance."
+      "insufficientCredits": "You don't have enough credits to generate an inventory. Ask an admin to top up your balance.",
+      "rateLimited": "The AI service is busy right now. Please try again in a minute."
     }
   },
   "renderControls": {
@@ -440,6 +441,47 @@
     },
     "errors": {
       "loadMe": "Failed to load your account"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "bell": {
+      "unread_one": "{{count}} unread",
+      "unread_other": "{{count}} unread",
+      "running_one": "{{count}} render in progress",
+      "running_other": "{{count}} renders in progress"
+    },
+    "markAllRead": "Mark all as read",
+    "unreadMark": "Unread",
+    "loading": "Loading...",
+    "dismiss": "Dismiss",
+    "sections": {
+      "running": "In progress",
+      "recent": "Recent"
+    },
+    "kind": {
+      "render": "Render",
+      "edit": "Edit",
+      "upscale": "4K upscale"
+    },
+    "status": {
+      "queued": "Waiting to start",
+      "running": "Rendering",
+      "runningProgress": "Rendering, {{done}} of {{count}} done",
+      "done": "Ready to view",
+      "failed": "Failed"
+    },
+    "alert": {
+      "done": "{{kind}} finished",
+      "failed": "{{kind}} failed"
+    },
+    "empty": {
+      "title": "Nothing in the last day",
+      "body": "Renders you start show up here while they run, and again when they finish."
+    },
+    "desktop": {
+      "prompt": "Get an alert when a render finishes and this tab is in the background.",
+      "enable": "Turn on"
     }
   }
 }

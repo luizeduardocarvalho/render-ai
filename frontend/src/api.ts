@@ -4,6 +4,7 @@ import type {
   ApiErrorBody,
   CreditsResponse,
   EditRegionRequest,
+  JobNotification,
   Mask,
   Me,
   PricingResponse,
@@ -27,6 +28,7 @@ export const API_BASE =
 // backend. Callers compare `err.code` against this rather than matching on
 // the (possibly localized-by-nobody, but still not-for-matching) message.
 export const INSUFFICIENT_CREDITS_CODE = "insufficient_credits";
+export const RATE_LIMITED_CODE = "rate_limited";
 
 export class ApiError extends Error {
   status: number;
@@ -160,6 +162,16 @@ function json(body: unknown): RequestInit {
 
 export function getMe(): Promise<Me> {
   return request<Me>("/api/me");
+}
+
+/** The caller's render, edit and upscale jobs from the last day, newest first. */
+export function listMyRenderJobs(): Promise<JobNotification[]> {
+  return request<JobNotification[]>("/api/me/render-jobs");
+}
+
+/** Records that the user has seen a finished job's outcome. */
+export function markRenderJobSeen(pid: string, jid: string): Promise<void> {
+  return request<void>(`/api/projects/${pid}/render-jobs/${jid}/seen`, { method: "POST" });
 }
 
 export function getMyCredits(): Promise<CreditsResponse> {

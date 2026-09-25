@@ -4,11 +4,15 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate } from "react-router-dom";
 import * as api from "../api";
+import { announceJobsChanged } from "../lib/jobEvents";
+import { appPath, parseAppPath } from "../lib/routes";
 import type {
   Asset,
   EditRegionRequest,
@@ -26,7 +30,17 @@ import type {
 const LAST_PROJECT_KEY = "render-ai:lastProjectId";
 
 interface ProjectContextValue {
+  // The open project: the one the URL names, once it has loaded. Null on the
+  // project list, and while a project named by the URL is still loading.
   project: Project | null;
+  // The id of a project the URL names that has not loaded yet.
+  openingProjectId: string | null;
+  // Why the last project the URL named could not be opened (it was sent back
+  // to the project list). Cleared when a project opens.
+  openError: string | null;
+  // Reloads the open project from the server, e.g. for a render made while
+  // its screen was not open.
+  refreshProject: () => Promise<void>;
 
   // The signed-in user's identity + credit balance (GET /api/me). Fetched
   // once on mount and refreshed after anything that can change the balance
@@ -65,9 +79,15 @@ interface ProjectContextValue {
   deleteLibraryAsset: (aid: string) => Promise<void>;
   uploadLibraryAssetReference: (aid: string, file: File, opts?: api.UploadOptions) => Promise<Asset>;
 
+  // The view and render shown, from the URL (the first view, and the latest
+  // render, when it names none).
   selectedViewId: string | null;
   selectedView: View | null;
-  setSelectedViewId: (id: string | null) => void;
+  selectView: (vid: string) => void;
+  selectedRenderId: string | null;
+  // Shows a render of a view, unless the user has moved to another view since
+  // (a render that finishes in the background must not pull them back).
+  selectRender: (vid: string, rid: string) => void;
 
   createProject: (name: string) => Promise<void>;
   updateStyle: (style: StyleSettings) => Promise<void>;
@@ -122,10 +142,45 @@ function replaceView(project: Project, vid: string, updater: (v: View) => View):
   };
 }
 
+type JobOptions = { onProgress?: (job: RenderJob) => void; signal?: AbortSignal };
+
+// Tells the notification bell when a job starts and when it ends, so its list
+// is current at once instead of at its next poll.
+function announcingJob(opts?: JobOptions): JobOptions {
+  let started = false;
+  return {
+    ...opts,
+    onProgress: (job) => {
+      opts?.onProgress?.(job);
+      const ended = job.status === "done" || job.status === "failed";
+      if (!started || ended) announceJobsChanged();
+      started = true;
+    },
+  };
+}
+
+// Adds finished renders to a view, skipping any it already has: a project
+// reloaded from the server while a render was polling can already hold them.
+function withRenders(view: View, renders: Render[]): View {
+  const known = new Set(view.renders.map((r) => r.id));
+  return { ...view, renders: [...view.renders, ...renders.filter((r) => !known.has(r.id))] };
+}
+
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const { t, i18n } = useTranslation();
-  const [project, setProject] = useState<Project | null>(null);
-  const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const route = useMemo(() => parseAppPath(location.pathname), [location.pathname]);
+
+  // The last project loaded from the server. It is the open project only
+  // while the URL names it (see `project` below).
+  const [loadedProject, setProject] = useState<Project | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
+  // The render a URL named that was not in the loaded project and has been
+  // looked for on the server since: its `pid/rid` key.
+  const [settledRid, setSettledRid] = useState<string | null>(null);
+  const fetchingRid = useRef<string | null>(null);
+  const project = loadedProject && loadedProject.id === route.pid ? loadedProject : null;
 
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [projectsLoading, setProjectsLoading] = useState(true);
@@ -158,9 +213,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Fetched once on mount. (Not through refreshMeFn: that sets its loading
+  // state synchronously, which an effect should not.)
   useEffect(() => {
-    void refreshMeFn();
-  }, [refreshMeFn]);
+    let cancelled = false;
+    api
+      .getMe()
+      .then((m) => {
+        if (!cancelled) setMe(m);
+      })
+      .catch(() => {
+        // Balance chip / admin link just stay hidden - not worth a banner for this.
+      })
+      .finally(() => {
+        if (!cancelled) setMeLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const refreshLibraryAssetsFn = useCallback(async () => {
     setLibraryAssetsLoading(true);
@@ -218,25 +289,100 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }, [t]);
 
-  // Load the project list once on mount.
+  // Load the project list once on mount (it starts out loading).
   useEffect(() => {
-    void refreshProjectsFn();
-  }, [refreshProjectsFn]);
+    let cancelled = false;
+    api
+      .listProjects()
+      .then((list) => {
+        if (!cancelled) setProjects(list);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setProjectsError(err instanceof Error ? err.message : t("picker.errors.loadFailed"));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setProjectsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
 
-  const selectProjectFn = useCallback(async (id: string) => {
-    const p = await api.getProject(id);
-    setProject(p);
-    setSelectedViewId(p.views[0]?.id ?? null);
-    try {
-      localStorage.setItem(LAST_PROJECT_KEY, id);
-    } catch {
-      // ignore storage failures (private mode, quota) - selection still works.
-    }
+  // Reloads the list without the loading state, so a list already on screen
+  // stays put while it updates.
+  const reloadProjectsQuietly = useCallback(() => {
+    api
+      .listProjects()
+      .then(setProjects)
+      .catch(() => {
+        // The list on screen is only a little stale - not worth a banner.
+      });
   }, []);
 
-  // Auto-open the last project once the list has loaded, if it still exists.
+  // The project the URL names is loaded when it is not the one already held.
   useEffect(() => {
-    if (project || projects === null) return;
+    if (!route.pid || loadedProject?.id === route.pid) return;
+    let cancelled = false;
+    api
+      .getProject(route.pid)
+      .then((p) => {
+        if (cancelled) return;
+        setOpenError(null);
+        setProject(p);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setOpenError(err instanceof api.ApiError ? err.message : t("picker.errors.openFailed"));
+        navigate("/", { replace: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [route.pid, loadedProject?.id, navigate, t]);
+
+  const refreshProjectFn = useCallback(async () => {
+    const pid = route.pid;
+    if (!pid) return;
+    try {
+      const p = await api.getProject(pid);
+      // Only if it is still the project on screen.
+      setProject((cur) => (cur && cur.id === p.id ? p : cur));
+    } catch {
+      // The project on screen is only a little stale - keep it.
+    }
+  }, [route.pid]);
+
+  const selectProjectFn = useCallback(
+    async (id: string) => {
+      const p = await api.getProject(id);
+      setOpenError(null);
+      setProject(p);
+      navigate(appPath(p.id, p.views[0]?.id));
+    },
+    [navigate],
+  );
+
+  // Remember the open project, and open it again next time the app starts.
+  const openId = project?.id ?? null;
+  useEffect(() => {
+    if (!openId) return;
+    try {
+      localStorage.setItem(LAST_PROJECT_KEY, openId);
+    } catch {
+      // ignore storage failures (private mode, quota) - the project still opens.
+    }
+  }, [openId]);
+
+  // Once the list has loaded, on the app's first screen only, open the last
+  // project if it still exists. Later visits to the list (the back button)
+  // are the user's choice and are not bounced forward.
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (autoOpened.current || projects === null) return;
+    autoOpened.current = true;
+    if (route.pid) return;
     let lastId: string | null = null;
     try {
       lastId = localStorage.getItem(LAST_PROJECT_KEY);
@@ -244,29 +390,32 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       lastId = null;
     }
     if (lastId && projects.some((p) => p.id === lastId)) {
-      void selectProjectFn(lastId);
+      navigate(appPath(lastId), { replace: true });
     }
-  }, [project, projects, selectProjectFn]);
+  }, [projects, route.pid, navigate]);
+
+  // Back on the project list after a project: its card (renders, thumbnail)
+  // may have changed.
+  const openPid = useRef<string | null>(null);
+  useEffect(() => {
+    if (openPid.current && !route.pid) reloadProjectsQuietly();
+    openPid.current = route.pid;
+  }, [route.pid, reloadProjectsQuietly]);
 
   const closeProjectFn = useCallback(() => {
-    setProject(null);
-    setSelectedViewId(null);
     try {
       localStorage.removeItem(LAST_PROJECT_KEY);
     } catch {
       // ignore
     }
-    void refreshProjectsFn();
-  }, [refreshProjectsFn]);
+    navigate("/");
+  }, [navigate]);
 
   const deleteProjectFn = useCallback(
     async (id: string) => {
       await api.deleteProject(id);
       setProjects((prev) => (prev ? prev.filter((p) => p.id !== id) : prev));
-      if (project?.id === id) {
-        setProject(null);
-        setSelectedViewId(null);
-      }
+      if (route.pid === id) navigate("/", { replace: true });
       let lastId: string | null = null;
       try {
         lastId = localStorage.getItem(LAST_PROJECT_KEY);
@@ -281,22 +430,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [project?.id],
+    [route.pid, navigate],
   );
 
   const createProjectFn = useCallback(
     async (name: string) => {
       const p = await api.createProject(name);
+      setOpenError(null);
       setProject(p);
-      setSelectedViewId(p.views[0]?.id ?? null);
-      try {
-        localStorage.setItem(LAST_PROJECT_KEY, p.id);
-      } catch {
-        // ignore
-      }
-      void refreshProjectsFn();
+      navigate(appPath(p.id, p.views[0]?.id));
     },
-    [refreshProjectsFn],
+    [navigate],
   );
 
   const updateStyleFn = useCallback(
@@ -371,20 +515,20 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const p = requireProject();
       const view = await api.createView(p.id, name, file, opts);
       setProject((prev) => (prev ? { ...prev, views: [...prev.views, view] } : prev));
-      setSelectedViewId(view.id);
+      navigate(appPath(p.id, view.id));
       return view;
     },
-    [requireProject],
+    [requireProject, navigate],
   );
 
   const deleteViewFn = useCallback(
     async (vid: string) => {
       const p = requireProject();
       await api.deleteView(p.id, vid);
+      // If it was the open view, the URL is sent to another one (see below).
       setProject((prev) =>
         prev ? { ...prev, views: prev.views.filter((v) => v.id !== vid) } : prev,
       );
-      setSelectedViewId((prev) => (prev === vid ? null : prev));
     },
     [requireProject],
   );
@@ -476,11 +620,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       opts?: { onProgress?: (job: RenderJob) => void; signal?: AbortSignal },
     ) => {
       const p = requireProject();
-      const renders = await api.renderView(p.id, vid, req, opts);
+      const renders = await api.renderView(p.id, vid, req, announcingJob(opts));
       setProject((prev) =>
-        prev
-          ? replaceView(prev, vid, (v) => ({ ...v, renders: [...v.renders, ...renders] }))
-          : prev,
+        prev ? replaceView(prev, vid, (v) => withRenders(v, renders)) : prev,
       );
       return renders;
     },
@@ -495,11 +637,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       opts?: { onProgress?: (job: RenderJob) => void; signal?: AbortSignal },
     ) => {
       const p = requireProject();
-      const renders = await api.editRender(p.id, vid, rid, regions, opts);
+      const renders = await api.editRender(p.id, vid, rid, regions, announcingJob(opts));
       setProject((prev) =>
-        prev
-          ? replaceView(prev, vid, (v) => ({ ...v, renders: [...v.renders, ...renders] }))
-          : prev,
+        prev ? replaceView(prev, vid, (v) => withRenders(v, renders)) : prev,
       );
       return renders;
     },
@@ -513,24 +653,84 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       opts?: { onProgress?: (job: RenderJob) => void; signal?: AbortSignal },
     ) => {
       const p = requireProject();
-      const renders = await api.upscaleRender(p.id, vid, rid, opts);
+      const renders = await api.upscaleRender(p.id, vid, rid, announcingJob(opts));
       setProject((prev) =>
-        prev
-          ? replaceView(prev, vid, (v) => ({ ...v, renders: [...v.renders, ...renders] }))
-          : prev,
+        prev ? replaceView(prev, vid, (v) => withRenders(v, renders)) : prev,
       );
       return renders;
     },
     [requireProject],
   );
 
+  // The view the URL names, or the first one when it names none (or one that
+  // is gone): the URL is corrected to match below.
   const selectedView = useMemo(
-    () => project?.views.find((v) => v.id === selectedViewId) ?? null,
-    [project, selectedViewId],
+    () => project?.views.find((v) => v.id === route.vid) ?? project?.views[0] ?? null,
+    [project, route.vid],
+  );
+  const selectedViewId = selectedView?.id ?? null;
+
+  // The render the URL names. While one the project does not have yet is being
+  // looked for on the server, none is shown rather than the wrong one.
+  const ridKey = project && route.rid ? `${project.id}/${route.rid}` : null;
+  const ridFound = !!route.rid && !!selectedView?.renders.some((r) => r.id === route.rid);
+  const selectedRenderId = ridFound
+    ? route.rid
+    : ridKey && settledRid !== ridKey
+      ? null
+      : (selectedView?.renders.at(-1)?.id ?? null);
+
+  // Keep the URL naming what is shown: a project's first view and a view's
+  // latest render when it names none, and a render that does not exist (after
+  // looking for it on the server, where a job that ran while this screen was
+  // closed left it) falls back the same way.
+  useEffect(() => {
+    if (!project) return;
+    const view = project.views.find((v) => v.id === route.vid);
+    if (!view) {
+      const first = project.views[0];
+      if (first) navigate(appPath(project.id, first.id), { replace: true });
+      return;
+    }
+    if (route.rid && view.renders.some((r) => r.id === route.rid)) return;
+    if (route.rid && ridKey && settledRid !== ridKey) {
+      if (fetchingRid.current !== ridKey) {
+        fetchingRid.current = ridKey;
+        void refreshProjectFn().finally(() => setSettledRid(ridKey));
+      }
+      return;
+    }
+    const latest = view.renders.at(-1);
+    if (latest) navigate(appPath(project.id, view.id, latest.id), { replace: true });
+  }, [project, route.vid, route.rid, ridKey, settledRid, navigate, refreshProjectFn]);
+
+  // The latest route and selection, for callbacks that outlive a render (a
+  // render finishing minutes after it started).
+  const shown = useRef({ pid: route.pid, vid: selectedViewId });
+  useEffect(() => {
+    shown.current = { pid: route.pid, vid: selectedViewId };
+  }, [route.pid, selectedViewId]);
+
+  const selectViewFn = useCallback(
+    (vid: string) => {
+      if (route.pid) navigate(appPath(route.pid, vid));
+    },
+    [route.pid, navigate],
+  );
+
+  const selectRenderFn = useCallback(
+    (vid: string, rid: string) => {
+      const { pid, vid: current } = shown.current;
+      if (pid && current === vid) navigate(appPath(pid, vid, rid));
+    },
+    [navigate],
   );
 
   const value: ProjectContextValue = {
     project,
+    openingProjectId: route.pid && !project ? route.pid : null,
+    openError,
+    refreshProject: refreshProjectFn,
     me,
     meLoading,
     refreshMe: refreshMeFn,
@@ -552,7 +752,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     uploadLibraryAssetReference: uploadLibraryAssetReferenceFn,
     selectedViewId,
     selectedView,
-    setSelectedViewId,
+    selectView: selectViewFn,
+    selectedRenderId,
+    selectRender: selectRenderFn,
     createProject: createProjectFn,
     updateStyle: updateStyleFn,
     setAnchor: setAnchorFn,

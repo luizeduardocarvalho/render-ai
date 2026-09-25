@@ -302,17 +302,26 @@ func (s *Server) getRenderJob(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// buildRenderJobResponse derives the job's overall status, its renders list
-// and its top-level error from its variations, applying the stale-running
-// rule (a variation stuck "running" past renderTimeoutSec+120s is reported
-// as failed - its worker died without marking it terminal) at read time.
-// Nothing about the stale check is persisted; see API_CONTRACT.md.
-func (s *Server) buildRenderJobResponse(pid string, job *store.RenderJob) (*renderJobResponse, error) {
+// jobState is a job's variations and overall status as reported to the
+// client, derived from what is stored.
+type jobState struct {
+	variations []renderJobVariationView
+	status     store.RenderJobStatus
+	// firstErr is the first failed variation's error, set only when the job as
+	// a whole is failed.
+	firstErr *string
+}
+
+// deriveJobState computes the job's overall status and per-variation view,
+// applying the stale-running rule (a variation stuck "running" past
+// renderTimeoutSec+120s is reported as failed - its worker died without
+// marking it terminal) at read time. Nothing about the stale check is
+// persisted; see API_CONTRACT.md.
+func (s *Server) deriveJobState(job *store.RenderJob) jobState {
 	staleAfter := time.Duration(s.cfg.Server.RenderTimeoutSec)*time.Second + staleRunningGrace
 	now := time.Now()
 
 	variations := make([]renderJobVariationView, len(job.Variations))
-	var renders []*store.Render
 	var anyQueued, anyRunning, anyDone, anyFailed bool
 	var firstFailedErr *string
 
@@ -336,13 +345,6 @@ func (s *Server) buildRenderJobResponse(pid string, job *store.RenderJob) (*rend
 			anyRunning = true
 		case store.RenderJobDone:
 			anyDone = true
-			if v.RenderID != nil {
-				rec, err := s.repo.FindRender(pid, *v.RenderID)
-				if err != nil {
-					return nil, mapStoreErr(err, "render %s not found", *v.RenderID)
-				}
-				renders = append(renders, rec)
-			}
 		case store.RenderJobFailed:
 			anyFailed = true
 			if firstFailedErr == nil {
@@ -365,21 +367,43 @@ func (s *Server) buildRenderJobResponse(pid string, job *store.RenderJob) (*rend
 		status = store.RenderJobFailed
 	}
 
-	resp := &renderJobResponse{
+	state := jobState{variations: variations, status: status}
+	if status == store.RenderJobFailed {
+		state.firstErr = firstFailedErr
+	}
+	return state
+}
+
+// buildRenderJobResponse derives the job's overall status, its renders list
+// and its top-level error from its variations - see deriveJobState and
+// API_CONTRACT.md.
+func (s *Server) buildRenderJobResponse(pid string, job *store.RenderJob) (*renderJobResponse, error) {
+	state := s.deriveJobState(job)
+
+	var renders []*store.Render
+	for _, v := range state.variations {
+		if v.Status != store.RenderJobDone || v.RenderID == nil {
+			continue
+		}
+		rec, err := s.repo.FindRender(pid, *v.RenderID)
+		if err != nil {
+			return nil, mapStoreErr(err, "render %s not found", *v.RenderID)
+		}
+		renders = append(renders, rec)
+	}
+
+	return &renderJobResponse{
 		ID:             job.ID,
 		ViewID:         job.ViewID,
-		Status:         status,
+		Status:         state.status,
 		CreatedAt:      job.CreatedAt,
 		UpdatedAt:      job.UpdatedAt,
 		Request:        job.Request,
-		Variations:     variations,
+		Variations:     state.variations,
 		Renders:        nonNilRenders(renders),
+		Error:          state.firstErr,
 		CreditsCharged: unitsToCredits(job.ChargedUnitsPerVariation * int64(len(job.Variations))),
-	}
-	if status == store.RenderJobFailed {
-		resp.Error = firstFailedErr
-	}
-	return resp, nil
+	}, nil
 }
 
 func nonNilRenders(rs []*store.Render) []*store.Render {

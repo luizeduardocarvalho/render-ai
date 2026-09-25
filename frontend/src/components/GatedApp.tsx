@@ -1,6 +1,8 @@
 import { RedirectToSignIn, SignedIn, SignedOut } from "@clerk/clerk-react";
 import App from "../App";
+import { NotificationsProvider } from "../state/NotificationsProvider";
 import { ProjectProvider } from "../state/ProjectContext";
+import { NotificationToasts } from "./NotificationToasts";
 
 /**
  * Renders the real app for every signed-in user, and bounces everyone else
@@ -14,7 +16,10 @@ export function GatedApp() {
     <>
       <SignedIn>
         <ProjectProvider>
-          <App />
+          <NotificationsProvider>
+            <App />
+            <NotificationToasts />
+          </NotificationsProvider>
         </ProjectProvider>
       </SignedIn>
       <SignedOut>

@@ -1,6 +1,9 @@
 package store
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func newTestJob(id, vid string) *RenderJob {
 	return &RenderJob{
@@ -169,3 +172,72 @@ func TestMemoryStoreUpdateRenderJobMissingJob(t *testing.T) {
 type boomErr struct{}
 
 func (*boomErr) Error() string { return "boom" }
+
+// TestMemoryStoreListRenderJobs covers the window (jobs last updated before
+// since are left out), the newest-created-first order, per-project scoping,
+// and that SeenAt round-trips and is deep-copied.
+func TestMemoryStoreListRenderJobs(t *testing.T) {
+	s := NewMemory()
+	p := s.CreateProject("user-a", "P")
+	other := s.CreateProject("user-a", "Other")
+	now := time.Now().UTC()
+
+	add := func(pid, jid string, created, updated time.Time) {
+		t.Helper()
+		j := newTestJob(jid, "v")
+		j.CreatedAt, j.UpdatedAt = created, updated
+		if _, err := s.CreateRenderJob(pid, j); err != nil {
+			t.Fatalf("CreateRenderJob %s: %v", jid, err)
+		}
+	}
+	add(p.ID, "older", now.Add(-2*time.Hour), now.Add(-2*time.Hour))
+	add(p.ID, "newer", now.Add(-time.Hour), now.Add(-time.Hour))
+	add(p.ID, "stale", now.Add(-48*time.Hour), now.Add(-48*time.Hour))
+	// Created long ago but updated recently (finished just now): still listed.
+	add(p.ID, "long-running", now.Add(-3*time.Hour), now.Add(-time.Minute))
+	add(other.ID, "elsewhere", now, now)
+
+	got, err := s.ListRenderJobs(p.ID, now.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatalf("ListRenderJobs: %v", err)
+	}
+	var ids []string
+	for _, j := range got {
+		ids = append(ids, j.ID)
+	}
+	want := []string{"newer", "older", "long-running"}
+	if len(ids) != 3 || ids[0] != want[0] || ids[1] != want[1] || ids[2] != want[2] {
+		t.Fatalf("listed %v, want %v (in the window, project-scoped, newest created first)", ids, want)
+	}
+
+	seenAt := now
+	if _, err := s.UpdateRenderJob(p.ID, "newer", func(j *RenderJob) error {
+		j.SeenAt = &seenAt
+		return nil
+	}); err != nil {
+		t.Fatalf("UpdateRenderJob: %v", err)
+	}
+	got, _ = s.ListRenderJobs(p.ID, now.Add(-24*time.Hour))
+	if got[0].SeenAt == nil || !got[0].SeenAt.Equal(seenAt) {
+		t.Fatalf("SeenAt = %v, want %v", got[0].SeenAt, seenAt)
+	}
+	*got[0].SeenAt = now.Add(time.Hour) // mutate the copy
+	again, _ := s.GetRenderJob(p.ID, "newer")
+	if !again.SeenAt.Equal(seenAt) {
+		t.Errorf("mutating a listed job's SeenAt changed the stored one: %v", again.SeenAt)
+	}
+}
+
+func TestMemoryStoreListRenderJobsMissingOrDeletedProject(t *testing.T) {
+	s := NewMemory()
+	if _, err := s.ListRenderJobs("nope", time.Now()); err != ErrNotFound {
+		t.Errorf("missing project: err = %v, want ErrNotFound", err)
+	}
+	p := s.CreateProject("user-a", "P")
+	if err := s.DeleteProject(p.ID); err != nil {
+		t.Fatalf("DeleteProject: %v", err)
+	}
+	if _, err := s.ListRenderJobs(p.ID, time.Now()); err != ErrNotFound {
+		t.Errorf("deleted project: err = %v, want ErrNotFound", err)
+	}
+}

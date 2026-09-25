@@ -5,6 +5,7 @@ import "./App.css";
 import { AssetLibrary } from "./components/AssetLibrary";
 import { CreditsChip } from "./components/CreditsChip";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
+import { NotificationsBell } from "./components/NotificationsBell";
 import { ProjectPicker } from "./components/ProjectPicker";
 import { StylePanel } from "./components/StylePanel";
 import { ViewsBar } from "./components/ViewsBar";
@@ -13,9 +14,20 @@ import { useProject } from "./state/ProjectContext";
 
 function App() {
   const { t } = useTranslation();
-  const { project, selectedView, closeProject, me } = useProject();
+  const { project, openingProjectId, selectedView, closeProject, me } = useProject();
 
   if (!project) {
+    // A link to a project: hold on the loading state instead of flashing the
+    // project list.
+    if (openingProjectId) {
+      return (
+        <div className="picker-screen">
+          <div className="picker-status">
+            <span className="spinner" /> {t("picker.loading")}
+          </div>
+        </div>
+      );
+    }
     return <ProjectPicker />;
   }
 
@@ -30,6 +42,7 @@ function App() {
           </button>
         </div>
         <div className="app-topbar-right">
+          <NotificationsBell />
           <CreditsChip />
           {me?.isAdmin && (
             <Link to="/admin" className="btn btn-ghost btn-sm">

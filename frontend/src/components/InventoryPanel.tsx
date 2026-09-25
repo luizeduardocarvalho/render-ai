@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ApiError, INSUFFICIENT_CREDITS_CODE } from "../api";
+import { ApiError, INSUFFICIENT_CREDITS_CODE, RATE_LIMITED_CODE } from "../api";
 import { useProject } from "../state/ProjectContext";
 import type { View } from "../types";
 
@@ -33,6 +33,8 @@ export function InventoryPanel({ view }: { view: View }) {
       if (err instanceof ApiError && err.code === INSUFFICIENT_CREDITS_CODE) {
         setError(t("inventory.errors.insufficientCredits"));
         void refreshMe();
+      } else if (err instanceof ApiError && err.code === RATE_LIMITED_CODE) {
+        setError(t("inventory.errors.rateLimited"));
       } else {
         setError(err instanceof ApiError ? err.message : t("inventory.errors.generate"));
       }

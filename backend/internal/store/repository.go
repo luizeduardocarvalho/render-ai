@@ -137,6 +137,10 @@ type Repository interface {
 	CreateRenderJob(pid string, job *RenderJob) (*RenderJob, error)
 	GetRenderJob(pid, jid string) (*RenderJob, error)
 	UpdateRenderJob(pid, jid string, fn func(j *RenderJob) error) (*RenderJob, error)
+	// ListRenderJobs returns the project's jobs last updated at or after
+	// since, newest created first. ErrNotFound if the project doesn't exist
+	// or is soft-deleted.
+	ListRenderJobs(pid string, since time.Time) ([]*RenderJob, error)
 }
 
 // BlobStore is the binary-object store for image bytes, keyed by blob ID. It

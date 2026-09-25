@@ -13,7 +13,7 @@ function ViewThumb({ view }: { view: View }) {
 
 export function ViewsBar() {
   const { t } = useTranslation();
-  const { project, selectedViewId, setSelectedViewId, createView, deleteView } = useProject();
+  const { project, selectedViewId, selectView, createView, deleteView } = useProject();
   const views = project?.views ?? [];
 
   const [adding, setAdding] = useState(false);
@@ -72,7 +72,7 @@ export function ViewsBar() {
             key={v.id}
             type="button"
             className={`view-tab ${v.id === selectedViewId ? "view-tab-active" : ""}`}
-            onClick={() => setSelectedViewId(v.id)}
+            onClick={() => selectView(v.id)}
           >
             <ViewThumb view={v} />
             <span className="view-tab-text">

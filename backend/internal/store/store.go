@@ -1,6 +1,7 @@
 package store
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -712,6 +713,24 @@ func (s *MemoryStore) GetRenderJob(pid, jid string) (*RenderJob, error) {
 		return nil, ErrNotFound
 	}
 	return j.clone(), nil
+}
+
+// ListRenderJobs returns deep copies of the project's jobs last updated at or
+// after since, newest created first.
+func (s *MemoryStore) ListRenderJobs(pid string, since time.Time) ([]*RenderJob, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.liveProject(pid); err != nil {
+		return nil, err
+	}
+	var out []*RenderJob
+	for key, j := range s.renderJobs {
+		if strings.HasPrefix(key, pid+"/") && !j.UpdatedAt.Before(since) {
+			out = append(out, j.clone())
+		}
+	}
+	sortRenderJobsNewestFirst(out)
+	return out, nil
 }
 
 // UpdateRenderJob runs fn against a private clone of the job under the

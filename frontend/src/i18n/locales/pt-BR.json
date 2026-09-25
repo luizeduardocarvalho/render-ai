@@ -168,7 +168,8 @@
     "errors": {
       "generate": "Não foi possível gerar o inventário",
       "save": "Não foi possível salvar o inventário",
-      "insufficientCredits": "Você não tem créditos suficientes para gerar um inventário. Peça a um administrador para recarregar seu saldo."
+      "insufficientCredits": "Você não tem créditos suficientes para gerar um inventário. Peça a um administrador para recarregar seu saldo.",
+      "rateLimited": "O serviço de IA está ocupado no momento. Tente novamente em um minuto."
     }
   },
   "renderControls": {
@@ -440,6 +441,47 @@
     },
     "errors": {
       "loadMe": "Não foi possível carregar sua conta"
+    }
+  },
+  "notifications": {
+    "title": "Notificações",
+    "bell": {
+      "unread_one": "{{count}} não lida",
+      "unread_other": "{{count}} não lidas",
+      "running_one": "{{count}} render em andamento",
+      "running_other": "{{count}} renders em andamento"
+    },
+    "markAllRead": "Marcar todas como lidas",
+    "unreadMark": "Não lida",
+    "loading": "Carregando...",
+    "dismiss": "Dispensar",
+    "sections": {
+      "running": "Em andamento",
+      "recent": "Recentes"
+    },
+    "kind": {
+      "render": "Render",
+      "edit": "Edição",
+      "upscale": "Upscale 4K"
+    },
+    "status": {
+      "queued": "Aguardando para começar",
+      "running": "Renderizando",
+      "runningProgress": "Renderizando, {{done}} de {{count}} prontos",
+      "done": "Pronto para ver",
+      "failed": "Falhou"
+    },
+    "alert": {
+      "done": "{{kind}} concluído",
+      "failed": "{{kind}} falhou"
+    },
+    "empty": {
+      "title": "Nada no último dia",
+      "body": "Os renders que você inicia aparecem aqui enquanto rodam e de novo quando terminam."
+    },
+    "desktop": {
+      "prompt": "Receba um aviso quando um render terminar e esta aba estiver em segundo plano.",
+      "enable": "Ativar"
     }
   }
 }
