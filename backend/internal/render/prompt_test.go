@@ -51,16 +51,18 @@ func TestRenderPromptLightingPreset(t *testing.T) {
 		want   string
 	}{
 		{"morning_sun", "Clear early-morning sun"},
+		{"midday", "Midday sun high overhead"},
 		{"overcast", "Fully overcast sky"},
-		{"golden_hour", "Sun just above the horizon"},
-		{"evening_interior_lights", "Dusk. Deep blue twilight"},
-		{"night_exterior", "Night. Dark sky and no sunlight"},
+		{"afternoon_sun", "Afternoon sun past its peak"},
+		{"late_afternoon", "Late afternoon, sun just above the horizon"},
+		{"night", "Night. Dark sky and no sunlight"},
 		{"unknown_preset", ""},
 		{"", ""},
 	}
 	presetDescriptions := []string{
-		"Clear early-morning sun", "Fully overcast sky", "Sun just above the horizon",
-		"Dusk. Deep blue twilight", "Night. Dark sky and no sunlight",
+		"Clear early-morning sun", "Midday sun high overhead", "Fully overcast sky",
+		"Afternoon sun past its peak", "Late afternoon, sun just above the horizon",
+		"Night. Dark sky and no sunlight",
 	}
 	for _, tc := range cases {
 		t.Run(tc.preset, func(t *testing.T) {
@@ -73,7 +75,7 @@ func TestRenderPromptLightingPreset(t *testing.T) {
 			if !strings.Contains(prompt, "- Lighting preset: "+tc.preset+"\n") {
 				t.Errorf("prompt missing the lighting preset line for %q", tc.preset)
 			}
-			if !strings.Contains(prompt, "\n- Main light direction: from the left") {
+			if !strings.Contains(prompt, "\n- Main light direction (as seen in IMAGE 1): from the left") {
 				t.Errorf("light direction line is not a clean list item after the preset")
 			}
 			for _, d := range presetDescriptions {

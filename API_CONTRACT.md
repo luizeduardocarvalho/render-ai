@@ -26,8 +26,10 @@ every request is treated as user `""`.
 
 type ScenePreset = "interior" | "exterior";
 type LightingPreset =
-  | "morning_sun" | "overcast" | "golden_hour"
-  | "evening_interior_lights" | "night_exterior";
+  | "morning_sun" | "midday" | "overcast"
+  | "afternoon_sun" | "late_afternoon" | "night";
+// Projects saved with the retired ids read back mapped: golden_hour -> late_afternoon,
+// evening_interior_lights and night_exterior -> night.
 type InteriorLights = "off" | "3000k" | "4000k" | "6000k" | "";  // "" = never set (older projects)
 type ModelChoice = "pro" | "flash";      // pro = gemini-3-pro-image, flash = gemini-3.1-flash-image
 type Resolution  = "1K" | "2K" | "4K";   // flash supports 1K only

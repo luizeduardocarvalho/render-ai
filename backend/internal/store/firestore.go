@@ -97,7 +97,7 @@ func (pd *projectDoc) toProject(id string) *Project {
 		CreatedAt:           pd.CreatedAt,
 		UpdatedAt:           pd.UpdatedAt,
 		DeletedAt:           clonePtr(pd.DeletedAt),
-		Style:               pd.Style,
+		Style:               pd.Style.canonical(),
 		Assets:              assets,
 		Views:               []*View{},
 		StyleAnchorRenderID: clonePtr(pd.StyleAnchorRenderID),

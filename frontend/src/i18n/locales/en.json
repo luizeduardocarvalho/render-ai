@@ -93,14 +93,15 @@
     },
     "lightingPresets": {
       "morning_sun": "Morning sun",
+      "midday": "Midday",
       "overcast": "Overcast",
-      "golden_hour": "Golden hour",
-      "evening_interior_lights": "Evening interior lights",
-      "night_exterior": "Night exterior"
+      "afternoon_sun": "Afternoon sun",
+      "late_afternoon": "Late afternoon",
+      "night": "Night"
     },
     "lightDirection": {
       "label": "Light direction",
-      "placeholder": "e.g. low sun from the west"
+      "placeholder": "e.g. from the left, through the window"
     },
     "interiorLights": {
       "label": "Artificial lights",

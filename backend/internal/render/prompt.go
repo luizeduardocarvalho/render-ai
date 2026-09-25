@@ -13,7 +13,9 @@ type AssetRef struct {
 	Index       int
 	Name        string
 	Description string
-	ColorName   string
+	// ColorName is the palette color name of the asset's tinted region on the
+	// region map (for example "magenta"), not the asset's own display color.
+	ColorName string
 }
 
 // TemplateData is the exact set of fields prompts/render.tmpl expects.

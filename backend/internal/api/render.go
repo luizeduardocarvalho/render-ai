@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"image/color"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -478,7 +476,7 @@ type renderAssembly struct {
 func (s *Server) assembleRenderRequest(pid, vid string, jobReq store.RenderJobRequest) (*renderAssembly, error) {
 	start := time.Now()
 
-	// withLibraryAssets so qualifyingMasks/appendAssetRefs below resolve
+	// withLibraryAssets so qualifyingMasks/buildRegionSet below resolve
 	// against the owner's asset library, exactly like the getProject
 	// handler - this is the worker path, so it needs its own call (see
 	// API_CONTRACT.md's asset library section).
@@ -503,18 +501,17 @@ func (s *Server) assembleRenderRequest(pid, vid string, jobReq store.RenderJobRe
 		return nil, internalErr("decoding stored screenshot: %v", err)
 	}
 
-	qualifying := qualifyingMasks(project, view)
+	regions, err := s.buildRegionSet(screenshotImg, qualifyingMasks(project, view), vid)
+	if err != nil {
+		return nil, err
+	}
 	images := [][]byte{screenshotBlob.Data}
 	var maskBitmaps []image.Image
 
-	hasRegionMap := len(qualifying) > 0
+	hasRegionMap := len(regions.assets) > 0
 	if hasRegionMap {
-		regionMapPNG, bitmaps, err := s.buildRegionMap(screenshotImg, qualifying)
-		if err != nil {
-			return nil, err
-		}
-		images = append(images, regionMapPNG)
-		maskBitmaps = bitmaps
+		images = append(images, regions.mapPNG)
+		maskBitmaps = regions.bitmaps
 	}
 
 	screenshotEdges := geometry.EdgeMap(screenshotImg)
@@ -536,7 +533,16 @@ func (s *Server) assembleRenderRequest(pid, vid string, jobReq store.RenderJobRe
 		}
 	}
 
-	images, assetRefs := s.appendAssetRefs(images, qualifying, vid)
+	var assetRefs []renderpkg.AssetRef
+	for _, ra := range regions.assets {
+		images = append(images, ra.ref)
+		assetRefs = append(assetRefs, renderpkg.AssetRef{
+			Index:       len(images),
+			Name:        ra.asset.Name,
+			Description: ra.asset.Description,
+			ColorName:   ra.swatch.Name,
+		})
+	}
 
 	promptData := renderpkg.TemplateData{
 		HasRegionMap:      hasRegionMap,
@@ -577,7 +583,7 @@ func (s *Server) assembleRenderRequest(pid, vid string, jobReq store.RenderJobRe
 		screenshotEdges: screenshotEdges,
 		screenshotBlob:  screenshotBlob,
 		maskBitmaps:     maskBitmaps,
-		qualifyingCount: len(qualifying),
+		qualifyingCount: regions.masks,
 		hasAnchor:       hasAnchor,
 		modelID:         modelID,
 		req:             renderReq,
@@ -1034,72 +1040,130 @@ func qualifyingMasks(project *store.Project, view *store.View) []qualifyingMask 
 	return out
 }
 
-// buildRegionMap composites the region map PNG and returns the decoded mask
-// bitmaps too (needed later to build the preservation-check exclusion mask).
-func (s *Server) buildRegionMap(screenshotImg image.Image, qualifying []qualifyingMask) ([]byte, []image.Image, error) {
-	regions := make([]geometry.Region, 0, len(qualifying))
-	bitmaps := make([]image.Image, 0, len(qualifying))
+// regionAsset is one distinct asset steering a render: its reference photo and
+// the palette swatch that marks its regions on the region map and names them
+// in the prompt.
+type regionAsset struct {
+	asset  *store.Asset
+	ref    []byte
+	swatch geometry.Swatch
+}
+
+// regionSet is everything the masks contribute to a render request.
+type regionSet struct {
+	mapPNG []byte
+	// bitmaps are the decoded bitmaps of the masks actually used, needed later
+	// to build the preservation-check exclusion mask.
+	bitmaps []image.Image
+	// assets are the distinct assets used, in order of first appearance.
+	assets []regionAsset
+	// masks is how many masks were used (the render's regionCount metric).
+	masks int
+}
+
+// baseRenderImages is how many images always precede the asset reference
+// photos: screenshot, region map, edge map and the optional style anchor.
+const baseRenderImages = 4
+
+// buildRegionSet turns the qualifying masks into the region map and the asset
+// reference photos, so the two always agree: an asset is used only if its
+// reference photo loads, and every used asset gets its own palette swatch.
+//
+// Regions are painted from geometry.RenderPalette, not from the asset's own
+// display color: the prompt names the swatch ("magenta tinted region"), and a
+// hex code would never match the semi-transparent tint the model actually
+// sees. AssignSwatches steers each asset away from hues already present in the
+// scene so a real object of that color is not mistaken for a region.
+//
+// The palette also caps how many distinct assets one request can use, which
+// keeps the total within MaxInputImages; assets beyond the cap (the
+// lowest-priority, last-encountered) are dropped with their masks and logged.
+func (s *Server) buildRegionSet(screenshotImg image.Image, qualifying []qualifyingMask, vid string) (*regionSet, error) {
+	type group struct {
+		asset   *store.Asset
+		ref     []byte
+		bitmaps []image.Image
+	}
+	type usedMask struct {
+		bitmap image.Image
+		group  int
+	}
+	maxAssets := min(len(geometry.RenderPalette), renderpkg.MaxInputImages-baseRenderImages)
+
+	var groups []*group
+	groupOf := map[string]int{}
+	skipped := map[string]bool{}
+	var used []usedMask
+	dropped := 0
 	for _, q := range qualifying {
+		id := q.asset.ID
+		if skipped[id] {
+			continue
+		}
+		gi, known := groupOf[id]
+		if !known {
+			refBlob, ok := s.blobs.GetBlob(q.asset.ReferenceImageID)
+			if !ok {
+				log.Printf("render: skipping asset %s in view %s: reference photo blob is missing", id, vid)
+				skipped[id] = true
+				continue
+			}
+			if len(groups) >= maxAssets {
+				dropped++
+				skipped[id] = true
+				continue
+			}
+			gi = len(groups)
+			groupOf[id] = gi
+			groups = append(groups, &group{asset: q.asset, ref: refBlob.Data})
+		}
 		bitmapBlob, ok := s.blobs.GetBlob(q.mask.ID)
 		if !ok {
-			return nil, nil, internalErr("mask bitmap blob missing for mask %s", q.mask.ID)
+			return nil, internalErr("mask bitmap blob missing for mask %s", q.mask.ID)
 		}
 		bitmapImg, _, err := imageutil.Decode(bitmapBlob.Data)
 		if err != nil {
-			return nil, nil, internalErr("decoding mask bitmap for mask %s: %v", q.mask.ID, err)
+			return nil, internalErr("decoding mask bitmap for mask %s: %v", q.mask.ID, err)
 		}
-		col, err := parseHexColor(q.asset.Color)
-		if err != nil {
-			return nil, nil, badRequest("asset %s has an invalid color %q: %v", q.asset.ID, q.asset.Color, err)
-		}
-		regions = append(regions, geometry.Region{Bitmap: bitmapImg, Color: col})
-		bitmaps = append(bitmaps, bitmapImg)
+		groups[gi].bitmaps = append(groups[gi].bitmaps, bitmapImg)
+		used = append(used, usedMask{bitmap: bitmapImg, group: gi})
+	}
+	if dropped > 0 {
+		log.Printf("render: dropped %d asset(s) beyond the %d-asset limit, with their masks (view %s)", dropped, maxAssets, vid)
+	}
+	if len(groups) == 0 {
+		return &regionSet{}, nil
+	}
+
+	bitmapGroups := make([][]image.Image, len(groups))
+	for i, g := range groups {
+		bitmapGroups[i] = g.bitmaps
+	}
+	swatches, err := geometry.AssignSwatches(screenshotImg, bitmapGroups, geometry.RenderPalette)
+	if err != nil {
+		return nil, internalErr("choosing region colors: %v", err)
+	}
+
+	regions := make([]geometry.Region, len(used))
+	bitmaps := make([]image.Image, len(used))
+	for i, u := range used {
+		regions[i] = geometry.Region{Bitmap: u.bitmap, Color: swatches[u.group].Color}
+		bitmaps[i] = u.bitmap
 	}
 	regionMapImg, err := geometry.CompositeRegionMap(screenshotImg, regions)
 	if err != nil {
-		return nil, nil, internalErr("compositing region map: %v", err)
+		return nil, internalErr("compositing region map: %v", err)
 	}
 	regionMapPNG, err := imageutil.EncodePNG(regionMapImg)
 	if err != nil {
-		return nil, nil, internalErr("encoding region map: %v", err)
+		return nil, internalErr("encoding region map: %v", err)
 	}
-	return regionMapPNG, bitmaps, nil
-}
 
-// appendAssetRefs adds one reference photo per distinct asset used by a
-// qualifying mask (skipping assets with no reference photo), enforcing the
-// MaxInputImages budget by dropping the lowest-priority (last-encountered)
-// refs and logging a warning.
-func (s *Server) appendAssetRefs(images [][]byte, qualifying []qualifyingMask, vid string) ([][]byte, []renderpkg.AssetRef) {
-	var assetRefs []renderpkg.AssetRef
-	seen := map[string]bool{}
-	dropped := 0
-	for _, q := range qualifying {
-		if seen[q.asset.ID] || !q.asset.HasReferenceImage {
-			continue
-		}
-		if len(images)+1 > renderpkg.MaxInputImages {
-			dropped++
-			continue
-		}
-		refBlob, ok := s.blobs.GetBlob(q.asset.ReferenceImageID)
-		if !ok {
-			continue
-		}
-		seen[q.asset.ID] = true
-		images = append(images, refBlob.Data)
-		assetRefs = append(assetRefs, renderpkg.AssetRef{
-			Index:       len(images),
-			Name:        q.asset.Name,
-			Description: q.asset.Description,
-			ColorName:   q.asset.Color,
-		})
+	assets := make([]regionAsset, len(groups))
+	for i, g := range groups {
+		assets[i] = regionAsset{asset: g.asset, ref: g.ref, swatch: swatches[i]}
 	}
-	if dropped > 0 {
-		log.Printf("render: dropped %d asset reference photo(s) to stay within the %d-image budget (view %s)",
-			dropped, renderpkg.MaxInputImages, vid)
-	}
-	return images, assetRefs
+	return &regionSet{mapPNG: regionMapPNG, bitmaps: bitmaps, assets: assets, masks: len(used)}, nil
 }
 
 // runPreservationCheck computes the edge-IoU score between the screenshot
@@ -1154,18 +1218,6 @@ func findAssetIn(p *store.Project, aid string) *store.Asset {
 		}
 	}
 	return nil
-}
-
-func parseHexColor(s string) (color.RGBA, error) {
-	h := strings.TrimPrefix(s, "#")
-	if len(h) != 6 {
-		return color.RGBA{}, fmt.Errorf("expected 6 hex digits, got %q", s)
-	}
-	v, err := strconv.ParseUint(h, 16, 32)
-	if err != nil {
-		return color.RGBA{}, err
-	}
-	return color.RGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 255}, nil
 }
 
 func inventoryOrPlaceholder(inv string) string {
