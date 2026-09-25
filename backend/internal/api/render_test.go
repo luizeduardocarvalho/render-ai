@@ -60,10 +60,15 @@ const renderTestTimeoutSec = 30
 // the other handler tests in this package call handlers directly.
 func setupRenderTest(t *testing.T, renderer renderpkg.Renderer) (*Server, *store.MemoryStore, *store.Project, *store.View, *jobs.Inline) {
 	t.Helper()
+	return setupRenderTestWithScreenshot(t, renderer, testPNG(t))
+}
+
+// setupRenderTestWithScreenshot is setupRenderTest with a chosen screenshot.
+func setupRenderTestWithScreenshot(t *testing.T, renderer renderpkg.Renderer, png []byte) (*Server, *store.MemoryStore, *store.Project, *store.View, *jobs.Inline) {
+	t.Helper()
 	repo := store.NewMemory()
 	p := repo.CreateProject("owner-1", "P")
 
-	png := testPNG(t)
 	cfg, _, err := decodeImageConfig(png)
 	if err != nil {
 		t.Fatalf("decoding test png: %v", err)

@@ -118,7 +118,7 @@ function replaceView(project: Project, vid: string, updater: (v: View) => View):
 }
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [project, setProject] = useState<Project | null>(null);
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
 
@@ -396,13 +396,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const generateInventoryFn = useCallback(
     async (vid: string) => {
       const p = requireProject();
-      const { inventory } = await api.generateInventory(p.id, vid);
+      const { inventory } = await api.generateInventory(p.id, vid, i18n.language);
       setProject((prev) =>
         prev ? replaceView(prev, vid, (v) => ({ ...v, inventory })) : prev,
       );
       return inventory;
     },
-    [requireProject],
+    [requireProject, i18n.language],
   );
 
   const createMaskFn = useCallback(

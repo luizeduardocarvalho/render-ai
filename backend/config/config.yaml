@@ -44,8 +44,14 @@ pricing:
   usdToBrl: 5.16
 
 preservation:
-  # Edge IoU below this is flagged in the UI.
-  edgeScoreFlagThreshold: 0.55
+  # Edge IoU below this marks the render as not following the screenshot (a
+  # hallucination) - flagged in the UI and regenerated (see maxRegenerations).
+  # Measured on cena 05: good renders score 0.19, hallucinated ones 0.09.
+  edgeScoreFlagThreshold: 0.135
+  # Extra attempts for a flagged render, at most (hard ceiling: 5). Only the
+  # final attempt is kept and shown; attempts are not charged to the user but
+  # add to the render's estimated cost. 0 turns regeneration off.
+  maxRegenerations: 2
   # Dilation (px) applied before computing edge overlap, to tolerate sub-pixel drift.
   edgeDilationPx: 2
 

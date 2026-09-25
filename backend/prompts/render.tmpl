@@ -5,16 +5,17 @@ photograph, while preserving the scene EXACTLY.
 === INPUT IMAGES (in order) ===
 IMAGE 1: The original SketchUp screenshot. This defines the scene: camera, framing,
   perspective, geometry, and every object's position, size and orientation.
-{{ if .HasRegionMap }}IMAGE 2: A REGION MAP - the same screenshot with certain regions filled with solid
-  colors at partial opacity. Each colored region marks where a specific real product must
-  be placed. The colors are labels only; do not render the colors themselves.
+{{ if .HasRegionMap }}IMAGE 2: A REGION MAP - the same screenshot with certain regions covered by a flat,
+  semi-transparent color tint. Each tinted region marks where a specific real product must
+  be placed. The tints are labels only; do not render them. Only a tint added on top of the
+  scene marks a region: an object that is naturally that color in IMAGE 1 is not a region.
 {{ end }}IMAGE {{ .EdgeMapIndex }}: A CANNY EDGE MAP of IMAGE 1 (white edges on black). Treat these
   edges as the ground-truth geometry the photograph must follow.
 {{ if .HasAnchor }}IMAGE {{ .AnchorIndex }}: A STYLE ANCHOR - a finished photorealistic render of ANOTHER camera
   angle of THIS SAME room. Match its materials, colors, lighting mood and color grading
   exactly. Do NOT copy its geometry or framing - the geometry must come from IMAGE 1.
 {{ end }}{{ range .AssetRefs }}IMAGE {{ .Index }}: Reference photo of the product "{{ .Name }}" ({{ .Description }}),
-  shown in the {{ .ColorName }} region.
+  shown in the {{ .ColorName }} tinted region.
 {{ end }}
 === STRICT PRESERVATION (highest priority) ===
 - Keep the EXACT camera position, framing, perspective, focal length, geometry and layout
@@ -27,19 +28,38 @@ IMAGE 1: The original SketchUp screenshot. This defines the scene: camera, frami
 - Preserve object counts exactly.
 
 === WHAT TO CHANGE ===
-- OUTSIDE the colored regions: only change APPEARANCE - convert flat SketchUp surfaces into
+- OUTSIDE the tinted regions: only change APPEARANCE - convert flat SketchUp surfaces into
   photorealistic materials, textures, lighting, shadows and reflections. Do not change WHAT
   any object is; a SketchUp chair stays the same chair, just photorealistic.
-{{ if .HasRegionMap }}- INSIDE each colored region: replace whatever is there with the specific real product from
+{{ if .HasRegionMap }}- INSIDE each tinted region: replace whatever is there with the specific real product from
   that region's reference photo, reproducing its true shape, material, color and details.
   Fit it in correct perspective and scale for the region and the surrounding scene.
   Region -> product mapping:
-{{ range .AssetRefs }}    {{ .ColorName }} region -> IMAGE {{ .Index }}: {{ .Description }}
+{{ range .AssetRefs }}    {{ .ColorName }} tinted region -> IMAGE {{ .Index }}: {{ .Description }}
 {{ end }}{{ end }}
 === SCENE STYLE (from project settings) ===
 - Scene type: {{ .Scene }}
 - Lighting preset: {{ .Lighting }}
-- Main light direction: {{ .LightDirection }}
+{{ if eq .Lighting "morning_sun" }}  Clear early-morning sun, low angle, slightly warm direct light (about 4500-5500K) with
+  crisp but soft-edged shadows. Bright, fresh sky. Sunlight enters through openings and
+  lands on floors and walls.
+{{ else if eq .Lighting "midday" }}  Midday sun high overhead. Bright neutral-white direct light (about 5500-6500K), short
+  dark shadows falling almost straight down, strong contrast, and a clear bright sky.
+  Sunlight enters through openings as small hard-edged patches on floors.
+{{ else if eq .Lighting "overcast" }}  Fully overcast sky acting as one large softbox. Diffuse cool-neutral light (about
+  6500K), very soft, barely visible shadows, low contrast, and no direct sun patches or
+  hard highlights.
+{{ else if eq .Lighting "afternoon_sun" }}  Afternoon sun past its peak but still fairly high. Warm-neutral direct light (about
+  4000-5000K), clearly defined shadows angled and lengthening, and a clear sky. Slightly
+  warmer and softer than midday.
+{{ else if eq .Lighting "late_afternoon" }}  Late afternoon, sun just above the horizon. Warm directional light (about 2800-3500K),
+  long soft shadows, and a warm glow on surfaces facing the sun. Shadow areas stay cooler
+  from sky fill.
+{{ else if eq .Lighting "night" }}  Night. Dark sky and no sunlight; windows show a dark night sky. The scene is lit only
+  by artificial light: indoors the room's own fixtures, outdoors facade, landscape and path
+  lighting and warm glow from windows. Light falls off into darkness. The artificial lights
+  setting below decides which fixtures are on.
+{{ end }}- Main light direction (as seen in IMAGE 1): {{ .LightDirection }}
 {{ if .InteriorLightsOff }}- Artificial lights: ALL OFF. Every artificial light fixture in the scene (ceiling lights,
   pendants, spotlights, lamps, sconces, LED strips) is switched off: no glowing bulbs or
   diffusers, no light pools or hotspots cast by fixtures. The scene is lit only by natural

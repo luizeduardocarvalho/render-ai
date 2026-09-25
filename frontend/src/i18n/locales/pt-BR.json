@@ -93,14 +93,15 @@
     },
     "lightingPresets": {
       "morning_sun": "Sol da manhã",
+      "midday": "Meio-dia",
       "overcast": "Nublado",
-      "golden_hour": "Hora dourada",
-      "evening_interior_lights": "Luzes internas noturnas",
-      "night_exterior": "Externa noturna"
+      "afternoon_sun": "Sol da tarde",
+      "late_afternoon": "Fim da tarde",
+      "night": "Noite"
     },
     "lightDirection": {
       "label": "Direção da luz",
-      "placeholder": "ex.: sol baixo vindo do oeste"
+      "placeholder": "ex.: vindo da esquerda, pela janela"
     },
     "interiorLights": {
       "label": "Luzes artificiais",
@@ -276,6 +277,7 @@
     "totalLatency": "Latência total",
     "promptTokens": "Tokens de entrada",
     "outputTokens": "Tokens de saída",
+    "attempts": "Tentativas",
     "estimatedCost": "Custo estimado",
     "notAvailable": "n/d",
     "preservationCheck": "Verificação de preservação",

@@ -20,6 +20,10 @@ _Avoid_: Parent, original
 An area the user marks on a Render for an Edit, paired with a free-text instruction.
 _Avoid_: Mask (a Mask belongs to the pre-render screenshot and carries an asset)
 
+**Attempt**:
+One model call made to produce a Render. A Render that does not follow its screenshot is discarded and made again, so a Render can be the result of several Attempts; only the kept one is ever shown.
+_Avoid_: Retry, regen (in user-facing text)
+
 **Mask**:
 An area painted on a view's screenshot before rendering, tied to an asset.
 

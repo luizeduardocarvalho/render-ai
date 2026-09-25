@@ -470,9 +470,13 @@ export function updateInventory(pid: string, vid: string, inventory: string): Pr
   });
 }
 
-export function generateInventory(pid: string, vid: string): Promise<{ inventory: string }> {
+export function generateInventory(
+  pid: string,
+  vid: string,
+  language: string,
+): Promise<{ inventory: string }> {
   return request<{ inventory: string }>(
-    `/api/projects/${pid}/views/${vid}/inventory/generate`,
+    `/api/projects/${pid}/views/${vid}/inventory/generate?lang=${encodeURIComponent(language)}`,
     { method: "POST" },
     60_000,
   );

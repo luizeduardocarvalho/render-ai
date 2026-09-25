@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"image/color"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -51,9 +49,9 @@ const staleRunningGrace = 120 * time.Second
 // stale-running rule gives up on. See buildRenderJobResponse.
 const staleRunningError = "render worker did not finish"
 
-// qualifyingMask is a non-hidden, painted mask bound to a library asset -
-// these are exactly the masks that drive the region map and the set of
-// asset reference photos sent to the model.
+// qualifyingMask is a non-hidden, painted mask bound to a library asset that
+// has a reference photo - these are exactly the masks that drive the region
+// map and the set of asset reference photos sent to the model.
 type qualifyingMask struct {
 	mask  *store.Mask
 	asset *store.Asset
@@ -320,7 +318,11 @@ func (s *Server) buildRenderJobResponse(pid string, job *store.RenderJob) (*rend
 
 	for i, v := range job.Variations {
 		status, errMsg := v.Status, v.Error
-		if status == store.RenderJobRunning && v.RunningAt != nil && now.Sub(*v.RunningAt) > staleAfter {
+		// A variation waiting for its regeneration task (queued, Attempt > 0)
+		// carries RunningAt from the hand-off, so a task that never arrives is
+		// given up on the same way a worker that never finished is.
+		inFlight := status == store.RenderJobRunning || (status == store.RenderJobQueued && v.Attempt > 0)
+		if inFlight && v.RunningAt != nil && now.Sub(*v.RunningAt) > staleAfter {
 			status = store.RenderJobFailed
 			msg := staleRunningError
 			errMsg = &msg
@@ -474,7 +476,7 @@ type renderAssembly struct {
 func (s *Server) assembleRenderRequest(pid, vid string, jobReq store.RenderJobRequest) (*renderAssembly, error) {
 	start := time.Now()
 
-	// withLibraryAssets so qualifyingMasks/appendAssetRefs below resolve
+	// withLibraryAssets so qualifyingMasks/buildRegionSet below resolve
 	// against the owner's asset library, exactly like the getProject
 	// handler - this is the worker path, so it needs its own call (see
 	// API_CONTRACT.md's asset library section).
@@ -499,18 +501,17 @@ func (s *Server) assembleRenderRequest(pid, vid string, jobReq store.RenderJobRe
 		return nil, internalErr("decoding stored screenshot: %v", err)
 	}
 
-	qualifying := qualifyingMasks(project, view)
+	regions, err := s.buildRegionSet(screenshotImg, qualifyingMasks(project, view), vid)
+	if err != nil {
+		return nil, err
+	}
 	images := [][]byte{screenshotBlob.Data}
 	var maskBitmaps []image.Image
 
-	hasRegionMap := len(qualifying) > 0
+	hasRegionMap := len(regions.assets) > 0
 	if hasRegionMap {
-		regionMapPNG, bitmaps, err := s.buildRegionMap(screenshotImg, qualifying)
-		if err != nil {
-			return nil, err
-		}
-		images = append(images, regionMapPNG)
-		maskBitmaps = bitmaps
+		images = append(images, regions.mapPNG)
+		maskBitmaps = regions.bitmaps
 	}
 
 	screenshotEdges := geometry.EdgeMap(screenshotImg)
@@ -532,7 +533,16 @@ func (s *Server) assembleRenderRequest(pid, vid string, jobReq store.RenderJobRe
 		}
 	}
 
-	images, assetRefs := s.appendAssetRefs(images, qualifying, vid)
+	var assetRefs []renderpkg.AssetRef
+	for _, ra := range regions.assets {
+		images = append(images, ra.ref)
+		assetRefs = append(assetRefs, renderpkg.AssetRef{
+			Index:       len(images),
+			Name:        ra.asset.Name,
+			Description: ra.asset.Description,
+			ColorName:   ra.swatch.Name,
+		})
+	}
 
 	promptData := renderpkg.TemplateData{
 		HasRegionMap:      hasRegionMap,
@@ -573,7 +583,7 @@ func (s *Server) assembleRenderRequest(pid, vid string, jobReq store.RenderJobRe
 		screenshotEdges: screenshotEdges,
 		screenshotBlob:  screenshotBlob,
 		maskBitmaps:     maskBitmaps,
-		qualifyingCount: len(qualifying),
+		qualifyingCount: regions.masks,
 		hasAnchor:       hasAnchor,
 		modelID:         modelID,
 		req:             renderReq,
@@ -596,7 +606,7 @@ func (s *Server) assembleRenderRequest(pid, vid string, jobReq store.RenderJobRe
 // Exported so cmd/server/main.go can wire it as the jobs.Inline handler and
 // so it satisfies jobs.Handler directly.
 func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
-	pid, jid, idx := task.ProjectID, task.JobID, task.Variation
+	pid, jid, idx, attempt := task.ProjectID, task.JobID, task.Variation, task.Attempt
 
 	// claimed (not just "the job now shows running") is what tells this
 	// delivery apart from a concurrent one: UpdateRenderJob's fn runs
@@ -614,8 +624,10 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 		if idx < 0 || idx >= len(j.Variations) {
 			return fmt.Errorf("variation index %d out of range (job has %d)", idx, len(j.Variations))
 		}
-		if j.Variations[idx].Status != store.RenderJobQueued {
-			return nil // already claimed/terminal: leave it alone, checked below
+		if j.Variations[idx].Status != store.RenderJobQueued || j.Variations[idx].Attempt != task.Attempt {
+			// Already claimed/terminal, or a redelivered task of an earlier
+			// attempt: leave it alone, checked below.
+			return nil
 		}
 		now := time.Now().UTC()
 		j.Variations[idx].Status = store.RenderJobRunning
@@ -636,6 +648,8 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 
 	variationStart := time.Now()
 	variations := job.Request.Variations
+	// held is the best flagged render of the earlier attempts, if any.
+	held := job.Variations[idx].Held
 
 	var assembly *renderAssembly
 	if job.Request.Edit != nil {
@@ -649,7 +663,7 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	if err != nil {
 		log.Printf("render worker: assembling project=%s job=%s view=%s variation=%d/%d: %v",
 			pid, jid, job.ViewID, idx+1, variations, err)
-		s.failVariation(pid, jid, idx, err.Error())
+		s.failOrSalvage(pid, jid, job.ViewID, idx, held, err.Error(), nil)
 		return
 	}
 
@@ -682,7 +696,11 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 		if ctx.Err() == context.DeadlineExceeded {
 			msg = fmt.Sprintf("render timed out after %ds", s.cfg.Server.RenderTimeoutSec)
 		}
-		s.failVariation(pid, jid, idx, msg)
+		var lostCost *float64
+		if failCostOK {
+			lostCost = &failCost
+		}
+		s.failOrSalvage(pid, jid, job.ViewID, idx, held, msg, lostCost)
 		return
 	}
 
@@ -703,10 +721,14 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	}
 	resultImageID, err := s.blobs.PutBlob(result.ImageData, mimeType)
 	if err != nil {
-		lostCost, _ := renderpkg.ImageCallCost(imgPricing, string(job.Request.Resolution), result.PromptTokens, result.TextOutputTokens, result.ThoughtsTokens)
+		lostCost, lostCostOK := renderpkg.ImageCallCost(imgPricing, string(job.Request.Resolution), result.PromptTokens, result.TextOutputTokens, result.ThoughtsTokens)
 		log.Printf("render: failed attempt project=%s job=%s view=%s variation=%d/%d model=%s resolution=%s stage=store costUsd=%.4f error=%v",
 			pid, jid, job.ViewID, idx+1, variations, assembly.modelID, job.Request.Resolution, lostCost, err)
-		s.failVariation(pid, jid, idx, fmt.Sprintf("storing render result: %v", err))
+		var lost *float64
+		if lostCostOK {
+			lost = &lostCost
+		}
+		s.failOrSalvage(pid, jid, job.ViewID, idx, held, fmt.Sprintf("storing render result: %v", err), lost)
 		return
 	}
 
@@ -764,7 +786,13 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	if haveCost {
 		metrics.EstimatedCostUsd = &totalCost
 	}
+	// The render's cost, latency and tokens cover every attempt made for it,
+	// the discarded ones included.
 	rec.Metrics = metrics
+	if held != nil {
+		rec.Metrics = accumulateMetrics(held.Metrics, metrics)
+	}
+	rec.Metrics.Attempts = attempt + 1
 
 	costDisplay := "n/a"
 	if metrics.EstimatedCostUsd != nil {
@@ -772,6 +800,18 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	}
 	log.Printf("render: project=%s job=%s view=%s variation=%d/%d model=%s resolution=%s regions=%d anchor=%v imageCallMs=%d totalMs=%d promptTokens=%d outputTokens=%d thoughtsTokens=%d costUsd=%s",
 		pid, jid, job.ViewID, idx+1, variations, assembly.modelID, job.Request.Resolution, assembly.qualifyingCount, assembly.hasAnchor, imageCallMs, totalMs, promptTokens, outputTokens, thoughtsTokens, costDisplay)
+
+	// Keep the better of this attempt and the best earlier one. Edits are never
+	// regenerated: they are blended over their source and carry no check.
+	rec = s.settleCandidates(held, rec)
+	if assembly.edit == nil && attempt < s.cfg.Preservation.MaxRegenerations && flaggedRender(rec) {
+		if s.requeueVariation(ctx, pid, jid, idx, attempt, rec) {
+			log.Printf("render: regenerating project=%s job=%s view=%s variation=%d/%d attempt=%d edgeScore=%.3f",
+				pid, jid, job.ViewID, idx+1, variations, attempt+1, rec.Preservation.EdgeScore)
+			return
+		}
+		// Could not hand the next attempt over: show what we have.
+	}
 
 	addedRec, err := s.repo.AddRender(pid, job.ViewID, rec)
 	if err != nil {
@@ -782,6 +822,138 @@ func (s *Server) RunRenderVariation(ctx context.Context, task jobs.Task) {
 	}
 
 	s.completeVariation(pid, jid, idx, addedRec.ID)
+}
+
+// flaggedRender reports whether the preservation check found the render not
+// to follow its screenshot.
+func flaggedRender(r *store.Render) bool {
+	return r.Preservation != nil && r.Preservation.EdgeFlag
+}
+
+// settleCandidates picks what to keep out of the best earlier attempt (held,
+// may be nil) and the attempt that just finished (cur): cur, unless both are
+// flagged and held scored better. The other one's image is deleted - a
+// discarded attempt is never shown. The result carries cur's metrics, which
+// are already cumulative over all attempts.
+func (s *Server) settleCandidates(held, cur *store.Render) *store.Render {
+	if held == nil {
+		return cur
+	}
+	winner, loser := cur, held
+	if flaggedRender(cur) && held.Preservation != nil && held.Preservation.EdgeScore > cur.Preservation.EdgeScore {
+		winner, loser = held, cur
+	}
+	s.blobs.DeleteBlob(loser.ResultImageID)
+	out := *winner
+	out.Metrics = cur.Metrics
+	out.CreatedAt = cur.CreatedAt
+	return &out
+}
+
+// requeueVariation hands a variation whose render was flagged over to a fresh
+// task for its next attempt, keeping keep (the best render so far, image
+// included) aside in case the remaining attempts do no better. It returns
+// false, leaving the variation exactly as it was, if the hand-off did not
+// happen - the caller then publishes keep.
+//
+// The variation is put back to "queued" with Attempt+1 before the task is
+// enqueued (a task can start the moment it exists), and only a task carrying
+// that Attempt can claim it; that persisted counter, checked against
+// cfg.Preservation.MaxRegenerations by the caller, is what stops the chain.
+func (s *Server) requeueVariation(ctx context.Context, pid, jid string, idx, attempt int, keep *store.Render) bool {
+	errStale := errors.New("variation is no longer on this attempt")
+	now := time.Now().UTC()
+	_, err := s.repo.UpdateRenderJob(pid, jid, func(j *store.RenderJob) error {
+		if idx < 0 || idx >= len(j.Variations) {
+			return errStale
+		}
+		v := &j.Variations[idx]
+		if v.Status != store.RenderJobRunning || v.Attempt != attempt {
+			return errStale
+		}
+		v.Status = store.RenderJobQueued
+		v.RunningAt = &now
+		v.Attempt = attempt + 1
+		v.Held = keep
+		return nil
+	})
+	if err != nil {
+		log.Printf("render worker: requeueing project=%s job=%s variation=%d attempt=%d: %v", pid, jid, idx, attempt, err)
+		return false
+	}
+
+	// The render timeout may be nearly spent by now, and the hand-off must not
+	// be cut short by it.
+	enqueueCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	if err := s.queue.Enqueue(enqueueCtx, jobs.Task{ProjectID: pid, JobID: jid, Variation: idx, Attempt: attempt + 1}); err != nil {
+		log.Printf("render worker: enqueueing regeneration project=%s job=%s variation=%d attempt=%d: %v", pid, jid, idx, attempt+1, err)
+		// The variation now says queued but no task exists for it. The caller
+		// completes it straight away, which overwrites that.
+		return false
+	}
+	return true
+}
+
+// failOrSalvage ends a variation whose attempt failed with msg: it fails (and
+// is refunded) if it has nothing to show, but if an earlier attempt left a
+// held render - flagged, yet a real render - that one is published instead,
+// with the failed attempt counted in its cost when lostCostUsd is known.
+func (s *Server) failOrSalvage(pid, jid, viewID string, idx int, held *store.Render, msg string, lostCostUsd *float64) {
+	if held == nil {
+		s.failVariation(pid, jid, idx, msg)
+		return
+	}
+	out := *held
+	out.Metrics = held.Metrics
+	out.Metrics.Attempts++
+	if lostCostUsd != nil && out.Metrics.EstimatedCostUsd != nil {
+		sum := *out.Metrics.EstimatedCostUsd + *lostCostUsd
+		out.Metrics.EstimatedCostUsd = &sum
+	}
+	out.CreatedAt = time.Now().UTC()
+	added, err := s.repo.AddRender(pid, viewID, &out)
+	if err != nil {
+		log.Printf("render worker: saving held render project=%s job=%s variation=%d: %v", pid, jid, idx, err)
+		s.failVariation(pid, jid, idx, msg)
+		return
+	}
+	log.Printf("render: attempt failed, keeping the best earlier one project=%s job=%s variation=%d: %s", pid, jid, idx, msg)
+	s.completeVariation(pid, jid, idx, added.ID)
+}
+
+// accumulateMetrics adds the latency, token and cost figures of one more
+// attempt (cur) to those of the attempts before it (prev); the descriptive
+// fields are cur's. A missing token count is zero, but the cost is only known
+// if it is known for every attempt.
+func accumulateMetrics(prev, cur store.RenderMetrics) store.RenderMetrics {
+	out := cur
+	out.ImageCallMs += prev.ImageCallMs
+	out.TotalMs += prev.TotalMs
+	out.PromptTokens = sumPtr(prev.PromptTokens, cur.PromptTokens)
+	out.OutputTokens = sumPtr(prev.OutputTokens, cur.OutputTokens)
+	out.ThoughtsTokens = sumPtr(prev.ThoughtsTokens, cur.ThoughtsTokens)
+	out.EstimatedCostUsd = nil
+	if prev.EstimatedCostUsd != nil && cur.EstimatedCostUsd != nil {
+		sum := *prev.EstimatedCostUsd + *cur.EstimatedCostUsd
+		out.EstimatedCostUsd = &sum
+	}
+	return out
+}
+
+func sumPtr[T int32 | float64](a, b *T) *T {
+	switch {
+	case a == nil && b == nil:
+		return nil
+	case a == nil:
+		v := *b
+		return &v
+	case b == nil:
+		v := *a
+		return &v
+	}
+	v := *a + *b
+	return &v
 }
 
 // failVariation marks one variation failed with msg and refunds its charged
@@ -848,6 +1020,11 @@ func (s *Server) completeVariation(pid, jid string, idx int, renderID string) {
 	}
 }
 
+// qualifyingMasks returns the view's masks that can steer a render: visible,
+// painted, bound to an asset that still exists, and that asset has a
+// reference photo. A region without a photo would be tinted on the region map
+// but have no product image or mapping line in the prompt, so it is skipped
+// rather than left as an unexplained colored area.
 func qualifyingMasks(project *store.Project, view *store.View) []qualifyingMask {
 	var out []qualifyingMask
 	for _, m := range view.Masks {
@@ -855,7 +1032,7 @@ func qualifyingMasks(project *store.Project, view *store.View) []qualifyingMask 
 			continue
 		}
 		asset := findAssetIn(project, *m.AssetID)
-		if asset == nil {
+		if asset == nil || !asset.HasReferenceImage {
 			continue
 		}
 		out = append(out, qualifyingMask{mask: m, asset: asset})
@@ -863,72 +1040,130 @@ func qualifyingMasks(project *store.Project, view *store.View) []qualifyingMask 
 	return out
 }
 
-// buildRegionMap composites the region map PNG and returns the decoded mask
-// bitmaps too (needed later to build the preservation-check exclusion mask).
-func (s *Server) buildRegionMap(screenshotImg image.Image, qualifying []qualifyingMask) ([]byte, []image.Image, error) {
-	regions := make([]geometry.Region, 0, len(qualifying))
-	bitmaps := make([]image.Image, 0, len(qualifying))
+// regionAsset is one distinct asset steering a render: its reference photo and
+// the palette swatch that marks its regions on the region map and names them
+// in the prompt.
+type regionAsset struct {
+	asset  *store.Asset
+	ref    []byte
+	swatch geometry.Swatch
+}
+
+// regionSet is everything the masks contribute to a render request.
+type regionSet struct {
+	mapPNG []byte
+	// bitmaps are the decoded bitmaps of the masks actually used, needed later
+	// to build the preservation-check exclusion mask.
+	bitmaps []image.Image
+	// assets are the distinct assets used, in order of first appearance.
+	assets []regionAsset
+	// masks is how many masks were used (the render's regionCount metric).
+	masks int
+}
+
+// baseRenderImages is how many images always precede the asset reference
+// photos: screenshot, region map, edge map and the optional style anchor.
+const baseRenderImages = 4
+
+// buildRegionSet turns the qualifying masks into the region map and the asset
+// reference photos, so the two always agree: an asset is used only if its
+// reference photo loads, and every used asset gets its own palette swatch.
+//
+// Regions are painted from geometry.RenderPalette, not from the asset's own
+// display color: the prompt names the swatch ("magenta tinted region"), and a
+// hex code would never match the semi-transparent tint the model actually
+// sees. AssignSwatches steers each asset away from hues already present in the
+// scene so a real object of that color is not mistaken for a region.
+//
+// The palette also caps how many distinct assets one request can use, which
+// keeps the total within MaxInputImages; assets beyond the cap (the
+// lowest-priority, last-encountered) are dropped with their masks and logged.
+func (s *Server) buildRegionSet(screenshotImg image.Image, qualifying []qualifyingMask, vid string) (*regionSet, error) {
+	type group struct {
+		asset   *store.Asset
+		ref     []byte
+		bitmaps []image.Image
+	}
+	type usedMask struct {
+		bitmap image.Image
+		group  int
+	}
+	maxAssets := min(len(geometry.RenderPalette), renderpkg.MaxInputImages-baseRenderImages)
+
+	var groups []*group
+	groupOf := map[string]int{}
+	skipped := map[string]bool{}
+	var used []usedMask
+	dropped := 0
 	for _, q := range qualifying {
+		id := q.asset.ID
+		if skipped[id] {
+			continue
+		}
+		gi, known := groupOf[id]
+		if !known {
+			refBlob, ok := s.blobs.GetBlob(q.asset.ReferenceImageID)
+			if !ok {
+				log.Printf("render: skipping asset %s in view %s: reference photo blob is missing", id, vid)
+				skipped[id] = true
+				continue
+			}
+			if len(groups) >= maxAssets {
+				dropped++
+				skipped[id] = true
+				continue
+			}
+			gi = len(groups)
+			groupOf[id] = gi
+			groups = append(groups, &group{asset: q.asset, ref: refBlob.Data})
+		}
 		bitmapBlob, ok := s.blobs.GetBlob(q.mask.ID)
 		if !ok {
-			return nil, nil, internalErr("mask bitmap blob missing for mask %s", q.mask.ID)
+			return nil, internalErr("mask bitmap blob missing for mask %s", q.mask.ID)
 		}
 		bitmapImg, _, err := imageutil.Decode(bitmapBlob.Data)
 		if err != nil {
-			return nil, nil, internalErr("decoding mask bitmap for mask %s: %v", q.mask.ID, err)
+			return nil, internalErr("decoding mask bitmap for mask %s: %v", q.mask.ID, err)
 		}
-		col, err := parseHexColor(q.asset.Color)
-		if err != nil {
-			return nil, nil, badRequest("asset %s has an invalid color %q: %v", q.asset.ID, q.asset.Color, err)
-		}
-		regions = append(regions, geometry.Region{Bitmap: bitmapImg, Color: col})
-		bitmaps = append(bitmaps, bitmapImg)
+		groups[gi].bitmaps = append(groups[gi].bitmaps, bitmapImg)
+		used = append(used, usedMask{bitmap: bitmapImg, group: gi})
+	}
+	if dropped > 0 {
+		log.Printf("render: dropped %d asset(s) beyond the %d-asset limit, with their masks (view %s)", dropped, maxAssets, vid)
+	}
+	if len(groups) == 0 {
+		return &regionSet{}, nil
+	}
+
+	bitmapGroups := make([][]image.Image, len(groups))
+	for i, g := range groups {
+		bitmapGroups[i] = g.bitmaps
+	}
+	swatches, err := geometry.AssignSwatches(screenshotImg, bitmapGroups, geometry.RenderPalette)
+	if err != nil {
+		return nil, internalErr("choosing region colors: %v", err)
+	}
+
+	regions := make([]geometry.Region, len(used))
+	bitmaps := make([]image.Image, len(used))
+	for i, u := range used {
+		regions[i] = geometry.Region{Bitmap: u.bitmap, Color: swatches[u.group].Color}
+		bitmaps[i] = u.bitmap
 	}
 	regionMapImg, err := geometry.CompositeRegionMap(screenshotImg, regions)
 	if err != nil {
-		return nil, nil, internalErr("compositing region map: %v", err)
+		return nil, internalErr("compositing region map: %v", err)
 	}
 	regionMapPNG, err := imageutil.EncodePNG(regionMapImg)
 	if err != nil {
-		return nil, nil, internalErr("encoding region map: %v", err)
+		return nil, internalErr("encoding region map: %v", err)
 	}
-	return regionMapPNG, bitmaps, nil
-}
 
-// appendAssetRefs adds one reference photo per distinct asset used by a
-// qualifying mask (skipping assets with no reference photo), enforcing the
-// MaxInputImages budget by dropping the lowest-priority (last-encountered)
-// refs and logging a warning.
-func (s *Server) appendAssetRefs(images [][]byte, qualifying []qualifyingMask, vid string) ([][]byte, []renderpkg.AssetRef) {
-	var assetRefs []renderpkg.AssetRef
-	seen := map[string]bool{}
-	dropped := 0
-	for _, q := range qualifying {
-		if seen[q.asset.ID] || !q.asset.HasReferenceImage {
-			continue
-		}
-		if len(images)+1 > renderpkg.MaxInputImages {
-			dropped++
-			continue
-		}
-		refBlob, ok := s.blobs.GetBlob(q.asset.ReferenceImageID)
-		if !ok {
-			continue
-		}
-		seen[q.asset.ID] = true
-		images = append(images, refBlob.Data)
-		assetRefs = append(assetRefs, renderpkg.AssetRef{
-			Index:       len(images),
-			Name:        q.asset.Name,
-			Description: q.asset.Description,
-			ColorName:   q.asset.Color,
-		})
+	assets := make([]regionAsset, len(groups))
+	for i, g := range groups {
+		assets[i] = regionAsset{asset: g.asset, ref: g.ref, swatch: swatches[i]}
 	}
-	if dropped > 0 {
-		log.Printf("render: dropped %d asset reference photo(s) to stay within the %d-image budget (view %s)",
-			dropped, renderpkg.MaxInputImages, vid)
-	}
-	return images, assetRefs
+	return &regionSet{mapPNG: regionMapPNG, bitmaps: bitmaps, assets: assets, masks: len(used)}, nil
 }
 
 // runPreservationCheck computes the edge-IoU score between the screenshot
@@ -983,18 +1218,6 @@ func findAssetIn(p *store.Project, aid string) *store.Asset {
 		}
 	}
 	return nil
-}
-
-func parseHexColor(s string) (color.RGBA, error) {
-	h := strings.TrimPrefix(s, "#")
-	if len(h) != 6 {
-		return color.RGBA{}, fmt.Errorf("expected 6 hex digits, got %q", s)
-	}
-	v, err := strconv.ParseUint(h, 16, 32)
-	if err != nil {
-		return color.RGBA{}, err
-	}
-	return color.RGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 255}, nil
 }
 
 func inventoryOrPlaceholder(inv string) string {

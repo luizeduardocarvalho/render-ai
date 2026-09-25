@@ -5,9 +5,10 @@ export type ScenePreset = "interior" | "exterior";
 export type LightingPreset =
   | "morning_sun"
   | "overcast"
-  | "golden_hour"
-  | "evening_interior_lights"
-  | "night_exterior";
+  | "midday"
+  | "afternoon_sun"
+  | "late_afternoon"
+  | "night";
 
 // Artificial lights: switched off, or on at a color temperature. Empty on
 // projects created before the setting existed (the prompt then omits it).
@@ -50,6 +51,11 @@ export interface RenderMetrics {
   outputTokens?: number;
   thoughtsTokens?: number;
   estimatedCostUsd?: number;
+  // How many model calls it took to get this render (1 unless earlier
+  // attempts were discarded for not following the screenshot). Latencies,
+  // tokens and estimatedCostUsd above cover all of them. Absent on renders
+  // made before this existed.
+  attempts?: number;
 }
 
 export interface PreservationReport {
@@ -237,10 +243,11 @@ export interface AdminUsersResponse {
 
 export const LIGHTING_PRESETS: { value: LightingPreset; labelKey: `style.lightingPresets.${LightingPreset}` }[] = [
   { value: "morning_sun", labelKey: "style.lightingPresets.morning_sun" },
+  { value: "midday", labelKey: "style.lightingPresets.midday" },
   { value: "overcast", labelKey: "style.lightingPresets.overcast" },
-  { value: "golden_hour", labelKey: "style.lightingPresets.golden_hour" },
-  { value: "evening_interior_lights", labelKey: "style.lightingPresets.evening_interior_lights" },
-  { value: "night_exterior", labelKey: "style.lightingPresets.night_exterior" },
+  { value: "afternoon_sun", labelKey: "style.lightingPresets.afternoon_sun" },
+  { value: "late_afternoon", labelKey: "style.lightingPresets.late_afternoon" },
+  { value: "night", labelKey: "style.lightingPresets.night" },
 ];
 
 type InteriorLightsValue = Exclude<InteriorLights, "">;

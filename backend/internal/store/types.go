@@ -32,11 +32,18 @@ const (
 	SceneInterior ScenePreset = "interior"
 	SceneExterior ScenePreset = "exterior"
 
-	LightingMorningSun            LightingPreset = "morning_sun"
-	LightingOvercast              LightingPreset = "overcast"
-	LightingGoldenHour            LightingPreset = "golden_hour"
-	LightingEveningInteriorLights LightingPreset = "evening_interior_lights"
-	LightingNightExterior         LightingPreset = "night_exterior"
+	LightingMorningSun    LightingPreset = "morning_sun"
+	LightingMidday        LightingPreset = "midday"
+	LightingOvercast      LightingPreset = "overcast"
+	LightingAfternoonSun  LightingPreset = "afternoon_sun"
+	LightingLateAfternoon LightingPreset = "late_afternoon"
+	LightingNight         LightingPreset = "night"
+
+	// Lighting presets projects were saved with before the list became the
+	// six times of day above. canonical maps them onto the new ones.
+	legacyLightingGoldenHour            LightingPreset = "golden_hour"
+	legacyLightingEveningInteriorLights LightingPreset = "evening_interior_lights"
+	legacyLightingNightExterior         LightingPreset = "night_exterior"
 
 	InteriorLightsOff   InteriorLights = "off"
 	InteriorLights3000K InteriorLights = "3000k"
@@ -132,6 +139,11 @@ type RenderMetrics struct {
 	OutputTokens     *int32     `json:"outputTokens,omitempty"`
 	ThoughtsTokens   *int32     `json:"thoughtsTokens,omitempty"`
 	EstimatedCostUsd *float64   `json:"estimatedCostUsd,omitempty"`
+	// Attempts is how many times the model was called to get this render: 1
+	// normally, more when earlier attempts were discarded for not following
+	// the screenshot (see PreservationConfig.MaxRegenerations). Every
+	// cumulative figure above (latencies, tokens, cost) covers all of them.
+	Attempts int `json:"attempts,omitempty"`
 }
 
 // PreservationReport is attached to a Render when preservationCheck was on.
@@ -229,6 +241,28 @@ func defaultStyle() StyleSettings {
 	}
 }
 
+// canonical maps a lighting preset saved before the current list onto the
+// current one, and returns any other value unchanged. Golden hour is late
+// afternoon. The two night presets are night: whether the fixtures are lit is
+// the separate interiorLights setting.
+func (l LightingPreset) canonical() LightingPreset {
+	switch l {
+	case legacyLightingGoldenHour:
+		return LightingLateAfternoon
+	case legacyLightingEveningInteriorLights, legacyLightingNightExterior:
+		return LightingNight
+	}
+	return l
+}
+
+// canonical returns s with values saved by older versions mapped onto the
+// current ones. Both stores apply it whenever they build a Project, so
+// nothing above them ever sees a retired preset id.
+func (s StyleSettings) canonical() StyleSettings {
+	s.Lighting = s.Lighting.canonical()
+	return s
+}
+
 // clone returns a deep copy of the project, so callers can freely read or
 // JSON-encode it after the store's lock has been released.
 func (p *Project) clone() *Project {
@@ -240,7 +274,7 @@ func (p *Project) clone() *Project {
 		CreatedAt:           p.CreatedAt,
 		UpdatedAt:           p.UpdatedAt,
 		DeletedAt:           clonePtr(p.DeletedAt),
-		Style:               p.Style,
+		Style:               p.Style.canonical(),
 		StyleAnchorRenderID: clonePtr(p.StyleAnchorRenderID),
 		Assets:              make([]*Asset, len(p.Assets)),
 		Views:               make([]*View, len(p.Views)),
@@ -349,6 +383,17 @@ type RenderJobVariation struct {
 	// the variation failed, so a redelivered task or a second failure
 	// observation can never refund it twice. Not surfaced to the frontend.
 	Refunded bool `json:"-"`
+	// Attempt is the 0-based attempt this variation is on: how many times it
+	// has been regenerated. It only ever grows, and is what bounds the chain
+	// of regenerations - see Server.RunRenderVariation. Not surfaced to the
+	// frontend.
+	Attempt int `json:"-"`
+	// Held is the best flagged Render of the earlier attempts, kept (image
+	// blob included) but not yet in the view's history: it is what the user
+	// gets if the remaining attempts fail or are flagged too. Its Metrics
+	// are cumulative over the attempts so far. Nil on the first attempt. Not
+	// surfaced to the frontend.
+	Held *Render `json:"-"`
 }
 
 // RenderJob is one POST .../render request turned into a job: one Cloud
@@ -393,6 +438,9 @@ func (v RenderJobVariation) clone() RenderJobVariation {
 	out.RenderID = clonePtr(v.RenderID)
 	out.Error = clonePtr(v.Error)
 	out.RunningAt = clonePtr(v.RunningAt)
+	if v.Held != nil {
+		out.Held = v.Held.clone()
+	}
 	return out
 }
 
