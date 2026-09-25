@@ -282,7 +282,9 @@
     "notAvailable": "n/d",
     "preservationCheck": "Verificação de preservação",
     "edgeScore": "Pontuação de bordas {{score}}",
-    "belowThreshold": " - abaixo do limite"
+    "belowThreshold": " - abaixo do limite",
+    "assetColors": "Distância de cor dos ativos",
+    "assetColorHint": "Quão longe estão as cores da área pintada de cada ativo da foto de referência dele. Quanto menor, melhor: cerca de 5 é variação normal de iluminação, 20 ou mais é uma cor claramente diferente. Apenas informativo."
   },
   "beforeAfterSlider": {
     "before": "Antes",
