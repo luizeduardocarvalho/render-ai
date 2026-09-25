@@ -442,12 +442,15 @@ can itself be edited. See `CONTEXT.md` for the vocabulary.
   regions filled in distinct colors, and the view's original screenshot as the
   ground truth for what the room holds, plus a prompt listing each color's
   instruction (`backend/prompts/edit.tmpl`); no style settings, asset photos or
-  preservation check are sent. The answer is scaled to the source's size, any
-  pixels of it that still carry a region's overlay color within ~2% of the
-  shorter side of that region's border (or of the image's edge, where a region
-  reaches it) are repaired from the texture around them
-  (`geometry.ScrubOverlayColors` - the model sometimes traces the colored
-  areas' borders in their colors despite being told not to), and it is
+  preservation check are sent. The answer is scaled to the source's size, then
+  scrubbed of overlay colors (`geometry.ScrubOverlayColors`): the model
+  sometimes draws lines in the regions' label colors despite being told not to,
+  along a region's border, along the image's edge, or along a layout of its own
+  that matches no region. Inside the edited area, anything in a region's own
+  color within ~2% of the shorter side of that region's border, and any thin
+  line (under ~1.2% of the shorter side wide) in any region's color, is
+  repaired from the texture around it; wider blobs of a label color are scene
+  content and kept. The answer is then
   blended over the source through the union of the regions, grown by
   ~0.5% of the shorter side and blurred with a sigma of ~0.5% of it
   (`geometry.EditAlpha`), so the edit fades in at its edge and **every pixel

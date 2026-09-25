@@ -6,73 +6,116 @@ import (
 )
 
 // The edit overlay paints each region in a flat label color, and the model is
-// told the colors are labels only. It still sometimes traces the border of a
-// region in that color, leaving a colored outline along the region's edge
-// (including along the edges of the image, where a region reaches them) that
-// the compositor would then keep. ScrubOverlayColors removes those lines.
+// told the colors are labels only. It still sometimes draws lines in those
+// colors: along the border of a region, along the edges of the image, or along
+// a layout of its own that matches no region at all (a divider between two
+// areas it imagined). The compositor would keep them. ScrubOverlayColors
+// removes those lines.
 const (
-	// A pixel counts as a leak of a region's label color if it is saturated
-	// enough, close enough in hue and not too far in lightness. Hue rather than
-	// a plain color distance, because the anti-aliased fringe of a drawn line is
-	// a paler or darker version of the same hue, and the fringe is what is left
-	// behind if only the core of the line is caught.
+	// A pixel counts as a leak of a label color if it is saturated enough,
+	// close enough in hue and not too far in lightness. Hue rather than a plain
+	// color distance, because the anti-aliased fringe of a drawn line is a paler
+	// or darker version of the same hue, and the fringe is what is left behind
+	// if only the core of the line is caught.
 	overlayLeakMinChroma = 40.0 // CIELAB chroma; keeps pale and gray pixels out
 	overlayLeakMaxHue    = 22.0 // degrees of CIELAB hue
 	overlayLeakMaxLight  = 40.0 // CIELAB lightness
 	// overlayBandFraction is how far from a region's border, as a fraction of
-	// the image's shorter side, a leak is looked for on either side of it.
+	// the image's shorter side, anything in that region's own label color is
+	// treated as a leak, whatever its shape (a thick stroke, a glow).
 	overlayBandFraction = 0.02
+	// overlayLineFraction is the half-width, as a fraction of the shorter side,
+	// of the widest line looked for in the interior: colored structures thinner
+	// than about twice this are lines, anything wider is scene content.
+	overlayLineFraction = 0.006
 	// overlayGrowPx widens what was found so the anti-aliased fringe of a line
 	// goes with it.
 	overlayGrowPx = 3
 )
 
-// ScrubOverlayColors repairs, in place, pixels of img that still carry a
-// region's overlay color near that region's border, and returns how many it
+// ScrubOverlayColors repairs, in place, pixels of img that still carry the
+// overlay's label colors where they should not, and returns how many it
 // repaired. img is the model's answer at the source's size; each Region is a
 // bitmap (white is inside, any size) and the label color it was painted in on
 // the overlay.
 //
-// Only a narrow band around each region's border is searched, and only for its
-// own label color, so a region that is itself green or blue is not disturbed
-// where it is a natural green or blue away from the border. A repaired pixel
+// Two things count as a leak, and only inside the edited area (the regions
+// grown by the search band), since nothing outside it reaches the result:
+//   - anything in a region's own label color near that region's border, and
+//   - any thin line (see overlayLineFraction) in any region's label color,
+//     wherever it is, because the model may draw lines that follow no region.
+//
+// A blob of a label color wider than a line, in the interior, is left alone: a
+// red sofa in a region labelled red is the scene, not a leak. A repaired pixel
 // takes the color of the untouched pixel that mirrors it across the edge of the
 // damaged strip, so the texture on both sides carries on through it.
 func ScrubOverlayColors(img *image.NRGBA, regions []Region) int {
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
-	if w == 0 || h == 0 {
+	if w == 0 || h == 0 || len(regions) == 0 {
 		return 0
 	}
-	band := max(3, int(float64(min(w, h))*overlayBandFraction))
+	minSide := min(w, h)
+	band := max(3, int(float64(minSide)*overlayBandFraction))
 
-	leak := image.NewGray(image.Rect(0, 0, w, h))
-	for _, r := range regions {
+	type target struct{ l, hue float64 }
+	targets := make([]target, len(regions))
+	nears := make([]*image.Gray, len(regions))
+	zone := image.NewGray(image.Rect(0, 0, w, h))
+	for i, r := range regions {
 		mask := ToGray(r.Bitmap)
 		if mb := mask.Bounds(); mb.Dx() != w || mb.Dy() != h {
 			mask = ResizeGray(mask, w, h)
 		}
-		near := borderBand(mask, band)
-		tl, ta, tb := RGBToLab(r.Color.R, r.Color.G, r.Color.B)
-		targetHue := hueDegrees(ta, tb)
-		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
-				if near.Pix[y*near.Stride+x] == 0 {
+		nears[i] = borderBand(mask, band)
+		for j, v := range Dilate(mask, band).Pix {
+			if v >= 128 {
+				zone.Pix[j] = 255
+			}
+		}
+		l, a, bb := RGBToLab(r.Color.R, r.Color.G, r.Color.B)
+		targets[i] = target{l: l, hue: hueDegrees(a, bb)}
+	}
+
+	// labelled is every pixel of the edited area in any region's label color;
+	// ownLeak is the part of it in a region's own color near that region's border.
+	labelled := image.NewGray(image.Rect(0, 0, w, h))
+	ownLeak := image.NewGray(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if zone.Pix[y*zone.Stride+x] == 0 {
+				continue
+			}
+			i := y*img.Stride + x*4
+			l, a, bb := RGBToLab(img.Pix[i], img.Pix[i+1], img.Pix[i+2])
+			if chroma(a, bb) < overlayLeakMinChroma {
+				continue
+			}
+			hue := hueDegrees(a, bb)
+			for k, t := range targets {
+				if hueGap(hue, t.hue) > overlayLeakMaxHue || math.Abs(l-t.l) > overlayLeakMaxLight {
 					continue
 				}
-				i := y*img.Stride + x*4
-				l, a, bb := RGBToLab(img.Pix[i], img.Pix[i+1], img.Pix[i+2])
-				if chroma(a, bb) >= overlayLeakMinChroma &&
-					hueGap(hueDegrees(a, bb), targetHue) <= overlayLeakMaxHue &&
-					math.Abs(l-tl) <= overlayLeakMaxLight {
-					leak.Pix[y*leak.Stride+x] = 255
+				labelled.Pix[y*labelled.Stride+x] = 255
+				if nears[k].Pix[y*nears[k].Stride+x] != 0 {
+					ownLeak.Pix[y*ownLeak.Stride+x] = 255
 				}
 			}
 		}
 	}
 
-	holes := Dilate(leak, overlayGrowPx)
-	return fillFromNeighbours(img, holes)
+	// A line is what is left of the labelled pixels once everything that could
+	// hold a square wider than a line is taken out (a morphological opening).
+	lineRadius := max(2, int(float64(minSide)*overlayLineFraction+0.5))
+	kept := openWithBorder(labelled, lineRadius)
+	leak := image.NewGray(image.Rect(0, 0, w, h))
+	for j := range leak.Pix {
+		if ownLeak.Pix[j] != 0 || (labelled.Pix[j] != 0 && kept.Pix[j] < 128) {
+			leak.Pix[j] = 255
+		}
+	}
+
+	return fillFromNeighbours(img, Dilate(leak, overlayGrowPx))
 }
 
 func chroma(a, b float64) float64 { return math.Sqrt(a*a + b*b) }
@@ -86,6 +129,24 @@ func hueGap(h1, h2 float64) float64 {
 		d = 360 - d
 	}
 	return d
+}
+
+// openWithBorder is the morphological opening of the white area of mask by a
+// square of side 2*radius+1: what is left after taking out everything thinner
+// than the square. The image's edge counts as empty, so a line running along it
+// is as thin as one anywhere else.
+func openWithBorder(mask *image.Gray, radius int) *image.Gray {
+	w, h := mask.Bounds().Dx(), mask.Bounds().Dy()
+	padded := image.NewGray(image.Rect(0, 0, w+2*radius, h+2*radius))
+	for y := 0; y < h; y++ {
+		copy(padded.Pix[(y+radius)*padded.Stride+radius:(y+radius)*padded.Stride+radius+w], mask.Pix[y*mask.Stride:y*mask.Stride+w])
+	}
+	opened := Dilate(Erode(padded, radius), radius)
+	out := image.NewGray(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		copy(out.Pix[y*out.Stride:y*out.Stride+w], opened.Pix[(y+radius)*opened.Stride+radius:(y+radius)*opened.Stride+radius+w])
+	}
+	return out
 }
 
 // borderBand is white within band pixels of the border of the white area of
