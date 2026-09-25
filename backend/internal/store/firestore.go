@@ -1023,6 +1023,7 @@ type renderJobDoc struct {
 	Request                  RenderJobRequest     `firestore:"request"`
 	Variations               []RenderJobVariation `firestore:"variations"`
 	ChargedUnitsPerVariation int64                `firestore:"chargedUnitsPerVariation"`
+	SeenAt                   *time.Time           `firestore:"seenAt"`
 }
 
 func renderJobDocFrom(j *RenderJob) renderJobDoc {
@@ -1033,6 +1034,7 @@ func renderJobDocFrom(j *RenderJob) renderJobDoc {
 		Request:                  j.Request,
 		Variations:               j.Variations,
 		ChargedUnitsPerVariation: j.ChargedUnitsPerVariation,
+		SeenAt:                   j.SeenAt,
 	}
 }
 
@@ -1045,6 +1047,7 @@ func (jd *renderJobDoc) toRenderJob(id string) *RenderJob {
 		Request:                  jd.Request,
 		Variations:               jd.Variations,
 		ChargedUnitsPerVariation: jd.ChargedUnitsPerVariation,
+		SeenAt:                   jd.SeenAt,
 	}).clone()
 }
 
@@ -1120,6 +1123,31 @@ func (f *FirestoreStore) GetRenderJob(pid, jid string) (*RenderJob, error) {
 		return nil, err
 	}
 	return jd.toRenderJob(jid), nil
+}
+
+// ListRenderJobs filters on updatedAt alone (a single-field range, served by
+// the automatic index, so no composite index is needed) and sorts in Go, the
+// way ListProjects does.
+func (f *FirestoreStore) ListRenderJobs(pid string, since time.Time) ([]*RenderJob, error) {
+	ctx := context.Background()
+	pref := f.projects().Doc(pid)
+	if err := f.projectAlive(ctx, pref); err != nil {
+		return nil, err
+	}
+	snaps, err := f.renderJobs(pid).Where("updatedAt", ">=", since).Documents(ctx).GetAll()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*RenderJob, 0, len(snaps))
+	for _, snap := range snaps {
+		var jd renderJobDoc
+		if err := snap.DataTo(&jd); err != nil {
+			return nil, err
+		}
+		out = append(out, jd.toRenderJob(snap.Ref.ID))
+	}
+	sortRenderJobsNewestFirst(out)
+	return out, nil
 }
 
 // UpdateRenderJob runs fn against the job inside a Firestore transaction and

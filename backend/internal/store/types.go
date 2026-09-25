@@ -6,6 +6,7 @@ package store
 
 import (
 	"slices"
+	"sort"
 	"time"
 )
 
@@ -461,6 +462,11 @@ type RenderJob struct {
 	// a refund gives back. 0 when auth was disabled at creation time (no
 	// credits were ever charged, so none are ever refunded either).
 	ChargedUnitsPerVariation int64 `json:"-"`
+	// SeenAt is when the user opened the job's notification (or the render it
+	// made). Nil until then; a finished job with a nil SeenAt is an unread
+	// notification. Not part of the job's own JSON - the API reports it as
+	// "seen" on the notification list.
+	SeenAt *time.Time `json:"-"`
 }
 
 // clone returns a deep copy of the job, so callers can freely read or
@@ -473,6 +479,7 @@ func (j *RenderJob) clone() *RenderJob {
 		out.Request.Edit = &edit
 	}
 	out.Request.Upscale = clonePtr(j.Request.Upscale)
+	out.SeenAt = clonePtr(j.SeenAt)
 	out.Variations = make([]RenderJobVariation, len(j.Variations))
 	for i, v := range j.Variations {
 		out.Variations[i] = v.clone()
@@ -489,6 +496,18 @@ func (v RenderJobVariation) clone() RenderJobVariation {
 		out.Held = v.Held.clone()
 	}
 	return out
+}
+
+// sortRenderJobsNewestFirst orders jobs by creation time, newest first, with
+// the ID as a tie-break for a stable order. It sorts by CreatedAt, not
+// UpdatedAt, because marking a job seen bumps UpdatedAt.
+func sortRenderJobsNewestFirst(jobs []*RenderJob) {
+	sort.Slice(jobs, func(i, j int) bool {
+		if jobs[i].CreatedAt.Equal(jobs[j].CreatedAt) {
+			return jobs[i].ID < jobs[j].ID
+		}
+		return jobs[i].CreatedAt.After(jobs[j].CreatedAt)
+	})
 }
 
 func clonePtr[T any](p *T) *T {

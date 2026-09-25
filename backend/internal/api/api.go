@@ -140,6 +140,7 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("POST /api/projects/{pid}/views/{vid}/renders/{rid}/edit", owned(s.startEdit))
 	mux.HandleFunc("POST /api/projects/{pid}/views/{vid}/renders/{rid}/upscale", owned(s.startUpscale))
 	mux.HandleFunc("GET /api/projects/{pid}/render-jobs/{jid}", owned(s.getRenderJob))
+	mux.HandleFunc("POST /api/projects/{pid}/render-jobs/{jid}/seen", owned(s.markRenderJobSeen))
 
 	// Mint a signed URL for an image blob. Project-scoped so the ownership gate
 	// above enforces per-user access; the {id} is the blob's own id.
@@ -150,6 +151,7 @@ func (s *Server) Router() http.Handler {
 	// so it needs no ownership check either.
 	mux.HandleFunc("GET /api/me", s.handle(s.requireAuth(s.getMe)))
 	mux.HandleFunc("GET /api/me/credits", s.handle(s.requireAuth(s.getMeCredits)))
+	mux.HandleFunc("GET /api/me/render-jobs", s.handle(s.requireAuth(s.listMyRenderJobs)))
 	mux.HandleFunc("GET /api/pricing", s.handle(s.requireAuth(s.getPricing)))
 
 	// The user-wide asset library (see API_CONTRACT.md's asset library

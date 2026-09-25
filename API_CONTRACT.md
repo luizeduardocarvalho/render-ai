@@ -517,6 +517,49 @@ never touched. See `CONTEXT.md` for the vocabulary.
   or no more pixels in the history under the name of an upscale. Like an Edit,
   an upscale is never regenerated.
 
+### Notifications
+
+The header bell lists the user's recent render jobs (a Render, an Edit or an
+Upscale each make one) so a user who left the screen, the project or the page
+can see what is running and what finished, and open it. The list is the source
+of truth: the frontend keeps no job state of its own across reloads.
+
+- `GET    /api/me/render-jobs` -> `Notification[]`
+  Any signed-in user (not project-gated): the caller's own projects only, jobs
+  last updated within the past 24 hours, newest **created** first (marking a job
+  seen bumps its `updatedAt`, so that is not the order). A job whose view has
+  been deleted, or whose project is soft-deleted, is left out - there is
+  nothing to open. Status is derived exactly as for `GET .../render-jobs/{jid}`
+  (including the stale-running rule), but no `Render` objects are loaded.
+
+```ts
+interface Notification {
+  projectId: string;
+  projectName: string;
+  viewId: string;
+  viewName: string;
+  jobId: string;
+  kind: "render" | "edit" | "upscale";
+  status: "queued" | "running" | "done" | "failed";
+  createdAt: string;     // ISO
+  updatedAt: string;     // ISO
+  variations: { done: number; failed: number; total: number };
+  renderId?: string;     // the first finished variation's Render, once there is one
+  error?: string;        // set iff status == "failed"
+  seen: boolean;         // the user has opened this outcome
+}
+```
+
+  A notification is **unread** when `status` is `"done"` or `"failed"` and
+  `seen` is `false`. Jobs from before this feature have no `seen`, so for the
+  first 24 hours after it ships they all show as unread.
+
+- `POST   /api/projects/{pid}/render-jobs/{jid}/seen` -> `204`
+  Records that the user has seen the job's outcome (`seen` becomes `true`).
+  Idempotent: a second call changes nothing. A job that has not finished yet is
+  left unseen (its outcome is still to come), also with `204`. `404` for an
+  unknown project or job, or one that belongs to another user.
+
 ### Pricing
 - `GET /api/pricing` -> `PricingResponse`. Requires only a signed-in user (like
   `/api/me`), not project ownership - it's a static price list, not project

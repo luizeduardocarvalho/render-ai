@@ -31,6 +31,10 @@ _Avoid_: Retry, regen (in user-facing text)
 **Mask**:
 An area painted on a view's screenshot before rendering, tied to an asset.
 
+**Notification**:
+One entry in the header bell for a job that makes a Render, an Edit or an Upscale: shown while the job runs, and kept for a day after it finishes. It is unread until the user opens it, and opening it goes to the project, view and Render it made.
+_Avoid_: Alert, toast (a toast is only how a finished Notification may first show up), message
+
 ## Relationships
 
 - An **Edit** is a **Render** and has exactly one **Source render**
@@ -38,6 +42,7 @@ An area painted on a view's screenshot before rendering, tied to an asset.
 - A **Render** can have many **Edits** and many **Upscales**, and an **Edit** can itself be edited or upscaled
 - A 4K **Render** cannot be upscaled
 - An **Edit** is made of one or more **Edit regions**, each with its own instruction
+- A **Notification** belongs to exactly one job, and so to one view of one project; a job that makes several Renders (variations) is still one **Notification**
 - Render history shows an **Edit** or an **Upscale** directly under its **Source render**, indented and joined by an arrow
 
 ## Example dialogue
