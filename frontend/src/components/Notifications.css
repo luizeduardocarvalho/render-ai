@@ -91,7 +91,7 @@
   max-height: min(520px, calc(100vh - 80px));
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
@@ -274,7 +274,7 @@
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-left: 3px solid var(--success);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   animation: notif-toast-in 0.18s ease-out;
 }

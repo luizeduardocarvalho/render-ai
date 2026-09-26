@@ -11,7 +11,8 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-6);
+  min-height: 60px;
+  padding: var(--space-2) var(--space-6);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
@@ -45,7 +46,9 @@
 }
 
 .picker-heading {
-  font-size: 22px;
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1.15;
   margin-bottom: var(--space-1);
 }
 
@@ -90,7 +93,7 @@
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   cursor: pointer;
   transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
 }

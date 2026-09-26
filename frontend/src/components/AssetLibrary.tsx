@@ -19,7 +19,7 @@ const SUGGESTED_COLORS = [
 
 function nextSuggestedColor(used: string[]): string {
   const lower = used.map((c) => c.toLowerCase());
-  return SUGGESTED_COLORS.find((c) => !lower.includes(c.toLowerCase())) ?? "#4338ca";
+  return SUGGESTED_COLORS.find((c) => !lower.includes(c.toLowerCase())) ?? SUGGESTED_COLORS[0];
 }
 
 export function AssetLibrary() {
@@ -30,7 +30,7 @@ export function AssetLibrary() {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [color, setColor] = useState("#4338ca");
+  const [color, setColor] = useState(SUGGESTED_COLORS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

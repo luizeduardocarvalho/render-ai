@@ -487,5 +487,9 @@
       "prompt": "Get an alert when a render finishes and this tab is in the background.",
       "enable": "Turn on"
     }
+  },
+  "theme": {
+    "toDark": "Switch to dark mode",
+    "toLight": "Switch to light mode"
   }
 }

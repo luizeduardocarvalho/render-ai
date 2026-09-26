@@ -13,7 +13,8 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-6);
+  min-height: 60px;
+  padding: var(--space-2) var(--space-6);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   position: sticky;
@@ -23,7 +24,7 @@
 
 .app-topbar-left {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-3);
   min-width: 0;
 }
@@ -36,9 +37,46 @@
   white-space: nowrap;
 }
 
+/* ---------------------------------------------------------------------- */
+/* Brand mark (symbol + wordmark), used in every top bar                  */
+/* ---------------------------------------------------------------------- */
+
+.brand-mark-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.brand-symbol {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: block;
+}
+
+/* Matched to the Studio3D logo: "Studio" tracked out, then "IA" in a
+   heavier, tightly set bold with a thin stroke (the logo's "3D" is heavier
+   than the stock bold). See landing/styles.css .brand-name. */
+.brand-name {
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.06em;
+}
+
+.brand-name b {
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  margin-left: 0.1em;
+  -webkit-text-stroke: 0.035em currentColor;
+}
+
 .app-project-name {
-  font-size: 13px;
-  color: var(--text-faint);
+  font-size: 14px;
+  color: var(--text-muted);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -53,13 +91,28 @@
 .app-project-name::before {
   content: "/";
   margin-right: var(--space-3);
-  color: var(--border-strong);
+  color: var(--text-faint);
 }
 
 .app-topbar-right {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+/* Light/dark toggle (ThemeToggle): an outline icon, like the landing page's. */
+.theme-toggle {
+  flex: none;
+}
+
+.theme-icon {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* On a phone the two groups of the header do not fit side by side: the
@@ -78,6 +131,16 @@
     flex: 1 1 100%;
     flex-wrap: wrap;
     justify-content: flex-end;
+    gap: 6px;
+  }
+
+  /* Tighter controls so the account row fits one line at 360px+. */
+  .app-topbar-right .btn-sm {
+    padding: 0 var(--space-2);
+  }
+
+  .lang-switcher .segmented-btn {
+    padding: 0 9px;
   }
 }
 
@@ -166,6 +229,7 @@
 /* ---------------------------------------------------------------------- */
 
 .auth-screen {
+  position: relative;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -174,14 +238,29 @@
   gap: var(--space-5);
   padding: var(--space-5);
   background: var(--bg);
+  overflow: hidden;
+}
+
+/* The one place inside the app the brand's full-color texture is welcome
+   (see brand/studio3d/README.md and frontend/DESIGN.md > Clerk). */
+.auth-screen-texture {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: clamp(48px, 8vw, 72px);
+  background: url("./assets/texture/texture.svg") center / cover no-repeat;
+}
+
+/* Below the texture band, not over it. */
+.auth-screen-toggle {
+  position: absolute;
+  top: calc(clamp(48px, 8vw, 72px) + var(--space-4));
+  right: var(--space-4);
 }
 
 .auth-screen-brand {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent);
+  margin-top: var(--space-5);
 }
 
 .not-authorized-card {
@@ -234,9 +313,11 @@
 
 .segmented {
   display: inline-flex;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
   width: fit-content;
 }
 
@@ -244,17 +325,13 @@
   height: 30px;
   padding: 0 var(--space-4);
   border: none;
-  border-right: 1px solid var(--border-strong);
-  background: var(--surface);
+  border-radius: var(--radius-full);
+  background: transparent;
   color: var(--text-muted);
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
   transition: background-color 0.12s ease, color 0.12s ease;
-}
-
-.segmented-btn:last-child {
-  border-right: none;
 }
 
 .segmented-btn:hover:not(:disabled) {
@@ -262,14 +339,10 @@
   color: var(--text);
 }
 
-.segmented-btn-active {
-  background: var(--accent);
-  color: var(--text-on-accent);
-}
-
+.segmented-btn-active,
 .segmented-btn-active:hover:not(:disabled) {
-  background: var(--accent-hover);
-  color: var(--text-on-accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .segmented-btn:disabled {
@@ -278,7 +351,7 @@
 }
 
 .lang-switcher .segmented-btn {
-  height: 28px;
+  height: 26px;
   padding: 0 var(--space-3);
 }
 
@@ -327,8 +400,9 @@
 }
 
 .credits-chip-value {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .credits-chip-label {
@@ -412,6 +486,36 @@
   background: var(--surface);
 }
 
+/* Thumb beside name + description; actions (and any error) get their own
+   full-width row, so they fit the sidebar's narrow card on one line. */
+.asset-card:not(.asset-card-editing) {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-rows: auto 1fr; /* description sits right under the name */
+  column-gap: var(--space-3);
+  row-gap: 2px;
+  align-items: start;
+}
+
+.asset-card:not(.asset-card-editing) .asset-card-body {
+  display: contents;
+}
+
+.asset-card:not(.asset-card-editing) .asset-card-thumb {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+
+.asset-card:not(.asset-card-editing) .asset-card-name,
+.asset-card:not(.asset-card-editing) .asset-card-desc {
+  grid-column: 2;
+}
+
+.asset-card:not(.asset-card-editing) .asset-card-error,
+.asset-card:not(.asset-card-editing) .asset-card-actions {
+  grid-column: 1 / -1;
+}
+
 .asset-card-editing {
   display: flex;
   flex-direction: column;
@@ -484,10 +588,15 @@
 
 .asset-card-actions {
   display: flex;
-  gap: var(--space-2);
+  gap: 2px;
   margin-top: var(--space-1);
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+/* Tighter pills so the three actions fit the sidebar's narrow card. */
+.asset-card-actions .btn-sm {
+  padding: 0 var(--space-2);
 }
 
 .asset-card-editing .asset-card-actions {
@@ -518,11 +627,11 @@
   flex-shrink: 0;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   cursor: pointer;
   max-width: 220px;
-  transition: border-color 0.12s ease, background-color 0.12s ease;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
 }
 
 .view-tab:hover {
@@ -530,8 +639,8 @@
 }
 
 .view-tab-active {
-  border-color: var(--accent-border);
-  background: var(--accent-soft);
+  border-color: transparent;
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .view-tab-thumb {
@@ -703,6 +812,10 @@
 
 .render-row-selected td {
   color: var(--text);
+}
+
+.render-row-selected td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 /* ---------------------------------------------------------------------- */

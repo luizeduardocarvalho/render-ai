@@ -5,8 +5,10 @@ import { Link } from "react-router-dom";
 import { ApiError, getAdminUserCredits, grantAdminCredits, listAdminUsers } from "../api";
 import type { AdminUser, CreditEntry } from "../types";
 import { formatCredits } from "../lib/credits";
+import { BrandMark } from "./BrandMark";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { Modal } from "./Modal";
+import { ThemeToggle } from "./ThemeToggle";
 import "./AdminPage.css";
 
 const PAGE_SIZE = 50;
@@ -58,12 +60,16 @@ export function AdminPage() {
   return (
     <div className="picker-screen">
       <header className="picker-topbar">
-        <div className="app-brand">{t("app.brand")} · {t("admin.title")}</div>
+        <div className="app-topbar-left">
+          <BrandMark />
+          <div className="app-project-name">{t("admin.title")}</div>
+        </div>
         <div className="app-topbar-right">
           <Link to="/" className="btn btn-ghost btn-sm">
             {t("admin.backToApp")}
           </Link>
           <LanguageSwitcher />
+          <ThemeToggle />
           <UserButton afterSignOutUrl="/sign-in" />
         </div>
       </header>
