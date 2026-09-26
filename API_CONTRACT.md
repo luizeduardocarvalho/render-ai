@@ -355,6 +355,10 @@ runs once per project and every existing mask binding keeps resolving.
       response is `429` with `code: "rate_limited"` (the client shows a "busy,
       try again in a minute" message). Any other failure, including a 503 that
       persists, is `502`.
+      The project's `style.materialNotes` (as saved, not an unsaved draft) are
+      sent along with the screenshot, so the list uses the material a note names
+      for an object or surface instead of guessing a second, different one.
+      `?lang=pt-BR` writes the list in Portuguese, anything else in English.
 
 ### Masks (per view)
 - `POST   /api/projects/{pid}/views/{vid}/masks` `{ assetId? }` -> `Mask`
@@ -382,6 +386,13 @@ see `backend/DEPLOY.md`) does the actual Vertex AI call for each.
   sample from the model (no seed is exposed, so repeated calls already
   differ) and becomes its own `Render` record, appended to the view's
   `renders` list once its task completes.
+
+  When the view has no `inventory`, the server generates one before queueing
+  the tasks (same call as `inventory/generate`, same `?lang=`, saved on the
+  view, once per job), so the renderer always gets the object checklist and
+  material spec. It is best effort: if the text call fails or the owner has no
+  balance, the render starts anyway without a list. An existing list, including
+  one the user edited, is never overwritten.
   Synchronous checks are unchanged from before: 400 for a bad model/
   resolution/variations count or flash+non-1K, 404 if the project or view
   doesn't exist, 400 if the view has no screenshot, 500 if the renderer isn't

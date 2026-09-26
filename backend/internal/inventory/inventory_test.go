@@ -87,7 +87,7 @@ func fakeGemini(t *testing.T, statuses ...int) (*TextModel, *atomic.Int32) {
 
 func TestGenerateInventoryRetriesRateLimit(t *testing.T) {
 	m, calls := fakeGemini(t, 429, 429)
-	text, _, _, err := m.GenerateInventory(context.Background(), []byte("png"), "en")
+	text, _, _, err := m.GenerateInventory(context.Background(), []byte("png"), "en", "")
 	if err != nil {
 		t.Fatalf("expected recovery after two 429s, got %v", err)
 	}
@@ -98,11 +98,32 @@ func TestGenerateInventoryRetriesRateLimit(t *testing.T) {
 
 func TestGenerateInventoryGivesUpOnPersistentRateLimit(t *testing.T) {
 	m, calls := fakeGemini(t, 429, 429, 429, 429)
-	_, _, _, err := m.GenerateInventory(context.Background(), []byte("png"), "en")
+	_, _, _, err := m.GenerateInventory(context.Background(), []byte("png"), "en", "")
 	if !IsRateLimited(err) {
 		t.Fatalf("expected a rate-limit error, got %v", err)
 	}
 	if calls.Load() != int32(retryAttempts) {
 		t.Errorf("calls=%d, want %d attempts", calls.Load(), retryAttempts)
+	}
+}
+
+func TestBuildPromptFoldsInMaterialNotes(t *testing.T) {
+	cases := map[string]struct{ lang, closing, base string }{
+		"en":    {"en", "Write the catalogue in English.", inventoryPromptEN},
+		"pt-BR": {"pt-BR", "Escreva o catálogo em português do Brasil.", inventoryPromptPTBR},
+	}
+	for name, c := range cases {
+		withNotes := buildPrompt(c.lang, "  the floor should use dark wood  ")
+		if !strings.Contains(withNotes, "the floor should use dark wood") {
+			t.Errorf("%s: prompt does not carry the material notes", name)
+		}
+		if !strings.HasSuffix(withNotes, c.closing) {
+			t.Errorf("%s: the language line should stay last, got tail %q", name, withNotes[len(withNotes)-60:])
+		}
+		for _, empty := range []string{"", "   \n"} {
+			if buildPrompt(c.lang, empty) != c.base {
+				t.Errorf("%s: blank notes %q should leave the prompt untouched", name, empty)
+			}
+		}
 	}
 }

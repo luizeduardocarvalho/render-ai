@@ -80,6 +80,50 @@ Piso, ambiente todo - carvalho europeu em réguas largas, acabamento fosco com �
 
 Escreva o catálogo em português do Brasil.`
 
+// The user's material notes are appended to the prompt when there are any. The
+// render prompt lets the notes win over the list, so a list that repeats the
+// floor as "oak" while the notes say "dark wood" would give the renderer two
+// specs for one surface. The catalogue therefore has to fold the notes in.
+const materialNotesIntroEN = `
+
+The user also wrote these material notes for the whole scene:
+
+%s
+
+Treat the notes as instructions, not as extra objects. Where a note names an object or
+surface, use that material on its line instead of your own guess, and fill in the detail the
+note leaves out (finish, texture scale, direction) so the line stays specific. The list must
+never contradict the notes. Objects the notes do not mention keep your own guess.`
+
+const materialNotesIntroPTBR = `
+
+O usuário também escreveu estas notas de materiais para a cena inteira:
+
+%s
+
+Trate as notas como instruções, não como objetos extras. Quando uma nota citar um objeto ou
+superfície, use esse material na linha dele no lugar do seu palpite, e complete o detalhe que a
+nota deixa de fora (acabamento, escala da textura, direção) para a linha continuar específica.
+A lista nunca deve contradizer as notas. Objetos que as notas não citam ficam com o seu palpite.`
+
+// buildPrompt returns the catalogue prompt in the given language ("pt-BR" or
+// anything else, which falls back to English), with the material notes folded
+// in when the user wrote any.
+func buildPrompt(language, materialNotes string) string {
+	prompt, intro := inventoryPromptEN, materialNotesIntroEN
+	if language == "pt-BR" {
+		prompt, intro = inventoryPromptPTBR, materialNotesIntroPTBR
+	}
+	notes := strings.TrimSpace(materialNotes)
+	if notes == "" {
+		return prompt
+	}
+	// The closing "Write the catalogue in ..." line stays last, so the notes
+	// go before it.
+	i := strings.LastIndex(prompt, "\n\n")
+	return prompt[:i] + fmt.Sprintf(intro, notes) + prompt[i:]
+}
+
 // Vertex answers 429 RESOURCE_EXHAUSTED when the per-minute quota of the model
 // is used up, which usually clears within seconds. The inventory call is cheap
 // and a user is waiting on it, so it retries a few times with backoff before
@@ -117,14 +161,12 @@ func IsRateLimited(err error) bool {
 
 // GenerateInventory asks the text model for a concise object inventory of
 // the screenshot (counts, rough positions and materials), written in the given
-// language ("pt-BR" or anything else, which falls back to English).
+// language ("pt-BR" or anything else, which falls back to English). Any
+// materialNotes the user wrote for the scene are folded into the materials.
 // outputTokens includes any thinking tokens the model billed, alongside its
 // text output.
-func (t *TextModel) GenerateInventory(ctx context.Context, screenshotPNG []byte, language string) (text string, promptTokens, outputTokens int32, err error) {
-	prompt := inventoryPromptEN
-	if language == "pt-BR" {
-		prompt = inventoryPromptPTBR
-	}
+func (t *TextModel) GenerateInventory(ctx context.Context, screenshotPNG []byte, language, materialNotes string) (text string, promptTokens, outputTokens int32, err error) {
+	prompt := buildPrompt(language, materialNotes)
 	parts := []*genai.Part{
 		genai.NewPartFromBytes(screenshotPNG, "image/png"),
 		genai.NewPartFromText(prompt),

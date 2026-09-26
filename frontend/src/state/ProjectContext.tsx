@@ -654,13 +654,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       opts?: { onProgress?: (job: RenderJob) => void; signal?: AbortSignal },
     ) => {
       const p = requireProject();
-      const renders = await api.renderView(p.id, vid, req, announcingJob(opts));
+      const hadInventory = p.views.find((v) => v.id === vid)?.inventory.trim() !== "";
+      const renders = await api.renderView(p.id, vid, req, i18n.language, announcingJob(opts));
+      // A render on a view with no list makes one on the server; pick it up so
+      // the Inventory panel shows what the renderer was given.
+      const inventory = hadInventory
+        ? null
+        : await api.getView(p.id, vid).then((v) => v.inventory, () => null);
       setProject((prev) =>
-        prev ? replaceView(prev, vid, (v) => withRenders(v, renders)) : prev,
+        prev
+          ? replaceView(prev, vid, (v) => {
+              const withNew = withRenders(v, renders);
+              return inventory && !v.inventory.trim() ? { ...withNew, inventory } : withNew;
+            })
+          : prev,
       );
       return renders;
     },
-    [requireProject],
+    [requireProject, i18n.language],
   );
 
   const editRenderFn = useCallback(
