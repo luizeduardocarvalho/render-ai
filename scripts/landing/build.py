@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Builds the landing page in each language from one template.
+"""Builds the landing site's pages in each language from shared templates.
 
-  scripts/landing/index.html          the template ({{key}} placeholders)
-  scripts/landing/strings/<lang>.json the text for each language
-    -> landing/index.html             English, at /
-    -> landing/pt-br/index.html       Portuguese (Brazil), at /pt-br
+  scripts/landing/pages/<page>.html    one template per page ({{key}} placeholders)
+  scripts/landing/partials/<name>.html shared pieces, included with {{> name}}
+  scripts/landing/strings/<lang>.json  the text for each language
+    -> landing/index.html, landing/about/index.html              (English)
+    -> landing/pt-br/index.html, landing/pt-br/sobre/index.html  (Portuguese)
+    -> landing/sitemap.xml   (every page, with hreflang alternates)
 
-Every language must define exactly the keys English defines; the build fails
-on a missing, extra or unknown key, so the pages cannot drift apart. String
-values may contain inline HTML (e.g. <strong>, &nbsp;) and are inserted as-is.
+Every language must define exactly the keys English defines, and every key
+must be used; the build fails otherwise, so the languages cannot drift apart.
+String values may contain inline HTML (e.g. <strong>, &nbsp;) and are inserted
+as-is.
 
 Usage:
   python3 scripts/landing/build.py
-Run it after editing the template or any strings file, and commit the output.
+Run it after editing a template, a partial or a strings file, and commit the output.
 """
 
 import json
@@ -22,79 +25,150 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 SITE = "https://render-ai-studio.web.app"
+INSTAGRAM = "https://www.instagram.com/studio3d_v.a/"
 
-# code -> page settings. `path` is the public URL path, `out` the file under landing/.
 LANGS = {
-    "en": {"path": "/", "out": "index.html", "og_locale": "en_US", "short": "EN", "name": "View in English"},
-    "pt-BR": {"path": "/pt-br", "out": "pt-br/index.html", "og_locale": "pt_BR", "short": "PT", "name": "Ver em português"},
+    "en": {"og_locale": "en_US", "short": "EN", "name": "View in English"},
+    "pt-BR": {"og_locale": "pt_BR", "short": "PT", "name": "Ver em português"},
 }
 DEFAULT = "en"
 
-PLACEHOLDER = re.compile(r"\{\{([\w.]+)\}\}")
+# page -> language -> public path. The output file is <path>/index.html.
+PAGES = {
+    "home": {"en": "/", "pt-BR": "/pt-br"},
+    "about": {"en": "/about", "pt-BR": "/pt-br/sobre"},
+}
+
+PLACEHOLDER = re.compile(r"\{\{([\w.-]+)\}\}")
+INCLUDE = re.compile(r"\{\{> ([\w-]+)\}\}")
 
 
-def alternates():
+def out_file(path):
+    return ROOT / "landing" / path.strip("/") / "index.html"
+
+
+def expand(template):
+    """Inline {{> partial}} includes (partials may include partials)."""
+    for _ in range(5):
+        new = INCLUDE.sub(
+            lambda m: (HERE / "partials" / f"{m.group(1)}.html").read_text().rstrip("\n"), template
+        )
+        if new == template:
+            return new
+        template = new
+    raise SystemExit("partials nest too deep (or include each other)")
+
+
+def alternates(page):
     lines = [
-        f'    <link rel="alternate" hreflang="{code}" href="{SITE}{cfg["path"]}" />'
-        for code, cfg in LANGS.items()
+        f'    <link rel="alternate" hreflang="{code}" href="{SITE}{PAGES[page][code]}" />'
+        for code in LANGS
     ]
-    lines.append(f'    <link rel="alternate" hreflang="x-default" href="{SITE}{LANGS[DEFAULT]["path"]}" />')
+    lines.append(
+        f'    <link rel="alternate" hreflang="x-default" href="{SITE}{PAGES[page][DEFAULT]}" />'
+    )
     return "\n".join(lines)
 
 
-def page_values(code):
-    cfg = LANGS[code]
-    # The switch links to the other language (two languages today).
+def page_values(page, code, strings):
     other = next(c for c in LANGS if c != code)
-    other_cfg = LANGS[other]
-    return {
+    values = {
         "lang": code,
-        "url": f"{SITE}{cfg['path']}",
-        "alternates": alternates(),
+        "url": f"{SITE}{PAGES[page][code]}",
+        "alternates": alternates(page),
         "ogImage": f"{SITE}/og-image{'' if code == DEFAULT else '-' + code.lower()}.png",
-        "ogLocale": cfg["og_locale"],
-        "ogLocaleAlt": other_cfg["og_locale"],
-        "switch.href": other_cfg["path"],
+        "ogLocale": LANGS[code]["og_locale"],
+        "ogLocaleAlt": LANGS[other]["og_locale"],
+        "home": PAGES["home"][code],
+        "about": PAGES["about"][code],
+        "instagram.url": INSTAGRAM,
+        # Product screenshots are taken in each language's UI.
+        "shots.dir": f"/images/about/{code.lower()}",
+        # The header switch links to this same page in the other language.
+        "switch.href": PAGES[page][other],
         "switch.hreflang": other,
-        "switch.label": other_cfg["name"],
-        "switch.text": other_cfg["short"],
+        "switch.label": LANGS[other]["name"],
+        "switch.text": LANGS[other]["short"],
+        # Page metadata comes from the <page>.meta.* / <page>.og.* strings.
+        "page.title": strings[f"{page}.meta.title"],
+        "page.description": strings[f"{page}.meta.description"],
+        "page.ogTitle": strings[f"{page}.og.title"],
+        "page.ogDescription": strings[f"{page}.og.description"],
+        "page.headExtra": expand("{{> jsonld-home}}") if page == "home" else "",
     }
+    for c in LANGS:
+        values[f"lang.{c}.href"] = PAGES[page][c]
+        values[f"lang.{c}.current"] = ' aria-current="page"' if c == code else ""
+    return values
+
+
+def fill(template, values, used):
+    def sub(match):
+        key = match.group(1)
+        if key not in values:
+            raise SystemExit(f"template uses unknown key {{{{{key}}}}}")
+        used.add(key)
+        return values[key]
+
+    # Values may contain placeholders themselves (page.headExtra does), so
+    # substitute until nothing is left.
+    for _ in range(3):
+        new = PLACEHOLDER.sub(sub, template)
+        if new == template:
+            return new
+        template = new
+    return template
+
+
+def sitemap():
+    urls = []
+    for paths in PAGES.values():
+        links = "".join(
+            f'\n    <xhtml:link rel="alternate" hreflang="{c}" href="{SITE}{paths[c]}" />' for c in LANGS
+        ) + f'\n    <xhtml:link rel="alternate" hreflang="x-default" href="{SITE}{paths[DEFAULT]}" />'
+        for code in LANGS:
+            urls.append(f"  <url>\n    <loc>{SITE}{paths[code]}</loc>{links}\n  </url>")
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        "<!-- Generated by scripts/landing/build.py -->\n"
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+        'xmlns:xhtml="http://www.w3.org/1999/xhtml">\n' + "\n".join(urls) + "\n</urlset>\n"
+    )
 
 
 def main():
-    template = (HERE / "index.html").read_text()
     strings = {code: json.loads((HERE / "strings" / f"{code}.json").read_text()) for code in LANGS}
-
     base_keys = set(strings[DEFAULT])
     for code, table in strings.items():
         missing, extra = base_keys - set(table), set(table) - base_keys
         if missing or extra:
             raise SystemExit(f"{code}.json: missing {sorted(missing)}, extra {sorted(extra)}")
 
-    for code, cfg in LANGS.items():
-        values = {**strings[code], **page_values(code)}
+    used = set()
+    for page, paths in PAGES.items():
+        template = expand((HERE / "pages" / f"{page}.html").read_text())
+        for code in LANGS:
+            values = {**strings[code], **page_values(page, code, strings[code])}
+            html = fill(template, values, used)
+            html = html.replace(
+                "<!doctype html>\n",
+                "<!doctype html>\n<!-- Generated by scripts/landing/build.py"
+                " - edit the templates and strings there. -->\n",
+                1,
+            )
+            out = out_file(paths[code])
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(html)
+            print(f"Wrote {out.relative_to(ROOT)}")
 
-        def fill(match):
-            key = match.group(1)
-            if key not in values:
-                raise SystemExit(f"template uses unknown key {{{{{key}}}}}")
-            value = values[key]
-            return value
+    (ROOT / "landing" / "sitemap.xml").write_text(sitemap())
+    print("Wrote landing/sitemap.xml")
 
-        html = PLACEHOLDER.sub(fill, template)
-        html = html.replace(
-            "<!doctype html>\n",
-            "<!doctype html>\n<!-- Generated by scripts/landing/build.py - edit the template and strings there. -->\n",
-            1,
-        )
-        out = ROOT / "landing" / cfg["out"]
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(html)
-        print(f"Wrote landing/{cfg['out']}")
-
-    unused = base_keys - set(PLACEHOLDER.findall(template))
+    # Page metadata keys are read directly, not through placeholders.
+    meta = {k for k in base_keys if re.fullmatch(r"\w+\.(meta|og)\.(title|description)", k)}
+    unused = base_keys - used - meta
     if unused:
-        raise SystemExit(f"strings not used by the template: {sorted(unused)}")
+        raise SystemExit(f"strings not used by any template: {sorted(unused)}")
 
 
 if __name__ == "__main__":

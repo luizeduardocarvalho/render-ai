@@ -6,12 +6,15 @@ deployed on **Firebase Hosting**, with the contact form writing straight to
 
 ```
 scripts/landing/
-  index.html   the page template ({{key}} placeholders)
-  strings/     en.json, pt-BR.json - the page text per language
-  build.py     writes landing/index.html (/) and landing/pt-br/index.html (/pt-br)
+  pages/       home.html, about.html - one template per page ({{key}} placeholders)
+  partials/    head, symbol, header, footer - shared, included with {{> name}}
+  strings/     en.json, pt-BR.json - the text per language
+  build.py     writes every page in every language, and sitemap.xml
 landing/
-  index.html, pt-br/index.html
-               generated from the template - don't edit by hand
+  index.html, about/, pt-br/, pt-br/sobre/
+               generated from the templates - don't edit by hand
+  images/about/<lang>/
+               product screenshots for the About page, in each language's UI
   styles.css   Studio3D identity tokens + layout (light/dark) - see DESIGN.md
   ui.js        before/after slider, footer year
   contact.js   Firebase init + Firestore write for the contact form (SDK lazy-loaded)
@@ -35,21 +38,29 @@ The page is fully self-contained and follows Studio3D's visual identity
 (`brand/studio3d/README.md`), applied as described in `DESIGN.md`, including
 dark mode.
 
-## Editing the page
+## Editing the pages
 
-The page exists in English (`/`) and Portuguese (`/pt-br`), built from one
-template so the two cannot drift apart. Edit `scripts/landing/index.html` for
-structure and `scripts/landing/strings/*.json` for text (every language must
-have the same keys - the build fails otherwise), then run:
+The site has a home page (`/`, `/pt-br`) and an About page (`/about`,
+`/pt-br/sobre`), in English and Portuguese, built from shared templates so the
+languages cannot drift apart. Edit `scripts/landing/pages/*.html` and
+`partials/*.html` for structure and `strings/*.json` for text (every language
+must have the same keys, and every key must be used - the build fails
+otherwise), then run:
 
 ```bash
 python3 scripts/landing/build.py
 ```
 
-and commit the regenerated pages. The header's language switch links the two
-versions; `hreflang` alternates are in each page's `<head>` and in
-`sitemap.xml`. The light/dark button saves the visitor's choice in
-`localStorage`; without a choice the page follows the system setting.
+and commit the regenerated pages and `sitemap.xml`. Page paths, the site URL
+and the Studio3D Instagram link are constants at the top of `build.py`. The
+header's language switch links to the same page in the other language;
+`hreflang` alternates are in each page's `<head>` and in the sitemap. The
+light/dark button saves the visitor's choice in `localStorage`; without a
+choice the page follows the system setting.
+
+The About page's product screenshots come from the app itself (redesigned in
+the same identity), captured at 2x in each language's UI, cropped to 16:10 and
+saved as WebP. Retake them when the app's look changes.
 
 ## Brand assets
 

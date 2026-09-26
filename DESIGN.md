@@ -84,7 +84,17 @@ Portuguese; it has no arrow glyphs, so arrows are drawn (the compare grip).
 - **Contact:** dark band; about text with a fact list, and the form with white
   fields, as in the manual's site mockup.
 - **Footer:** the full-color texture repeated small (180px tile, two rows,
-  18px) as a strip, then the small print.
+  18px) as a strip; then a brand column (mark, one-line description, "A
+  Studio3D product") and Product / Company (with the Studio3D Instagram) /
+  Language link columns; then a bottom row with the copyright and "Back to
+  top".
+- **About page:** intro (headline + lede), the texture band, a Studio3D
+  section with the symbol large beside its meaning, a product gallery (one
+  large and two small app screenshots, 16px frames, watermark), the principles
+  on a dark band, and a centered call to action.
+
+Copy uses no dashes as punctuation (commas, colons, periods instead); page
+titles use " | " as the separator.
 
 ## Symbol, watermark, texture
 
