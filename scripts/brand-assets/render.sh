@@ -7,7 +7,9 @@
 #                    landing/icon-192.png, landing/icon-512.png (web manifest)
 #                    landing/favicon.ico           (16/32/48, for /favicon.ico requests)
 #
-# landing/favicon.svg is hand-written and is the icon modern browsers use.
+# Both sources draw the symbol from build-symbol.py's output (landing/symbol.svg,
+# and the inline copy it syncs), so run that first if the mark changed. The
+# vector favicon (landing/favicon.svg) also comes from build-symbol.py.
 # Run after changing the brand mark, the headline, or the hero illustration.
 #
 # Usage:

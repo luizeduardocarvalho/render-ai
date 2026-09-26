@@ -30,7 +30,8 @@ the scene matching the screenshot's perspective and lighting - not a generic
 "make it photoreal" pass. Cross-angle coherence comes from pinning a chosen
 render as a style anchor reused across other views. Preservation checks (edge-IoU
 against the screenshot) report when a render drifts from the original geometry.
-Runs locally and in memory - no cloud storage, no database.
+Projects are stored in the cloud (Firestore and Cloud Storage), private to each
+account.
 
 ## Operating Context
 
@@ -40,9 +41,9 @@ preset, light direction, material notes, extra instructions) -> render (choose
 model + resolution, 1-4 variations) -> optionally set a result as the style
 anchor and repeat for other views. Tools and artifacts in the user's world:
 SketchUp, product/spec sheets and reference photos, material sample boards,
-mask/region editing. The app is a local proof of concept (frontend on
-localhost:5173, Go backend on :8080); the landing page is a separate marketing
-surface.
+mask/region editing. The app is a proof of concept deployed on Firebase Hosting
+and Cloud Run (locally: frontend on localhost:5173, Go backend on :8080); the
+landing page is a separate marketing surface.
 
 ## Capabilities and Constraints
 
@@ -62,6 +63,9 @@ surface.
 ## Brand Commitments
 
 - Product name: **StudioIA** (one word: capital S, capital IA). Code, infrastructure and URLs keep the older `render-ai` identifiers.
+- Made by **Studio3D**, an architectural visualization studio. The landing page
+  wears Studio3D's visual identity (brand/studio3d/README.md, applied in
+  DESIGN.md); the wordmark is "Studio" regular + "IA" bold, like "Studio3D".
 - Built on Google's Gemini 3 image models ("Nano Banana Pro" / "Nano Banana 2")
   via Vertex AI - a real, nameable technical foundation.
 - Existing app design language: neutral gray scale with an indigo accent
@@ -82,5 +86,5 @@ surface.
 - Product-accurate, not just "photoreal": the specified real product must appear.
 - Preserve the architect's geometry; drift is measured and reported, not hidden.
 - Fast, single-call renders with visible cost/metrics - no black-box pipeline.
-- Local and private by design; nothing leaves the session.
+- Private by design; a user's projects are never shown to anyone else.
 - Honest proof over hype - it is a working PoC, claims stay truthful.

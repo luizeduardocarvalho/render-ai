@@ -15,3 +15,6 @@ infra/*/*.tfstate
 infra/*/*.tfstate.*
 infra/*/terraform.tfvars
 infra/*/imports.tf
+
+# Studio3D visual identity report (academic thesis, kept local - see brand/studio3d/README.md)
+brand/**/*.pdf
