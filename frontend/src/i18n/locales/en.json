@@ -192,8 +192,10 @@
     "renderButton_other": "Generate render ({{count}} variations)",
     "rendering": "Rendering... this can take up to a minute",
     "renderingProgress": "Rendering... {{done}} of {{count}} done",
-    "costPreview_one": "≈ {{cost}} ({{credits}} credits)",
-    "costPreview_other": "≈ {{cost}} for {{count}} variations ({{credits}} credits)",
+    "creditsUnit_one": "credit",
+    "creditsUnit_other": "credits",
+    "costPreview_one": "≈ {{cost}} ({{credits}} {{creditsUnit}})",
+    "costPreview_other": "≈ {{cost}} for {{count}} variations ({{credits}} {{creditsUnit}})",
     "error": "Render failed. Please try again.",
     "insufficientCredits": "Not enough credits ({{available}} available, {{required}} required). Ask an admin to top up your balance.",
     "insufficientCreditsError": "Render failed: insufficient credits. Ask an admin to top up your balance."
