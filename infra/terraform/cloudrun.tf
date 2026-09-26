@@ -32,12 +32,14 @@ resource "google_cloud_run_v2_service" "render_api" {
   name     = "render-ai-api"
   location = var.region
 
-  # Public HTTP endpoint (matches --allow-unauthenticated in deploy.sh).
-  # Cloud Run's own IAM invoker check is not used for per-request auth; the
-  # API's own Clerk auth still gates every route except the deliberately
-  # public GET /api/images/{id}. See google_cloud_run_v2_service_iam_member
-  # below.
-  ingress = "INGRESS_TRAFFIC_ALL"
+  # Public HTTP endpoint. Cloud Run's own IAM invoker check is turned off
+  # rather than granting roles/run.invoker to allUsers, because the
+  # organization's domain-restricted sharing policy
+  # (iam.allowedPolicyMemberDomains) rejects allUsers bindings. The API's
+  # own Clerk auth still gates every route except the deliberately public
+  # GET /api/images/{id}.
+  ingress              = "INGRESS_TRAFFIC_ALL"
+  invoker_iam_disabled = true
 
   template {
     service_account = google_service_account.render_api.email
@@ -107,25 +109,6 @@ resource "google_cloud_run_v2_service" "render_api" {
   }
 }
 
-# Public invoker binding, equivalent to `--allow-unauthenticated`.
-resource "google_cloud_run_v2_service_iam_member" "public_invoker" {
-  project  = google_cloud_run_v2_service.render_api.project
-  location = google_cloud_run_v2_service.render_api.location
-  name     = google_cloud_run_v2_service.render_api.name
-
-  role   = "roles/run.invoker"
-  member = "allUsers"
-}
-
-# The API image currently deployed, so the worker is created running real
-# code instead of the placeholder (which would answer every task with 200 and
-# silently drop it).
-data "google_cloud_run_v2_service" "render_api_deployed" {
-  project  = var.app_project_id
-  name     = "render-ai-api"
-  location = var.region
-}
-
 # Runs render tasks only, one per instance, so a render's memory never adds
 # up with other renders or with API traffic on the same instance. Not public:
 # only the render-tasks-invoker service account can call it (tasks.tf).
@@ -149,7 +132,12 @@ resource "google_cloud_run_v2_service" "render_worker" {
     }
 
     containers {
-      image = data.google_cloud_run_v2_service.render_api_deployed.template[0].containers[0].image
+      # Placeholder image on first create, like render-ai-api. It would
+      # answer every task with 200 and drop it, but nothing enqueues yet:
+      # render-ai-api runs the same placeholder until the first deploy, and
+      # the Deploy workflow rolls the real image out to this worker before
+      # the API.
+      image = "us-docker.pkg.dev/cloudrun/container/hello"
 
       resources {
         limits = {

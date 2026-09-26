@@ -1,8 +1,8 @@
 # One-time bootstrap: the GCP projects, their billing link, and the bucket
 # that stores infra/terraform's state. Everything else lives in
-# infra/terraform. This config starts with local state (the state bucket
-# doesn't exist yet); README.md explains moving it into the bucket after the
-# first apply.
+# infra/terraform. Its own state lives in that same bucket under the
+# `bootstrap` prefix; the very first apply in new projects starts with local
+# state instead, because the bucket doesn't exist yet (see README.md).
 
 terraform {
   required_version = ">= 1.6"
@@ -13,6 +13,10 @@ terraform {
       version = "~> 8.4"
     }
   }
+
+  # Partial backend config: bucket and prefix are passed at `terraform init`
+  # time via `-backend-config` (see README.md).
+  backend "gcs" {}
 }
 
 provider "google" {

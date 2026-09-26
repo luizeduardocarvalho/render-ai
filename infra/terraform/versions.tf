@@ -18,6 +18,10 @@ terraform {
       source  = "hashicorp/time"
       version = "~> 0.14"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.10"
+    }
   }
 
   # Partial backend config: the bucket/prefix are passed at `terraform init`
@@ -42,3 +46,8 @@ provider "google-beta" {
 provider "github" {
   owner = split("/", var.github_repository)[0]
 }
+
+# Manages the app domain's DNS records (dns.tf). Reads the token from the
+# CLOUDFLARE_API_TOKEN env var: a token scoped to the one zone with
+# Zone / Zone: Read and Zone / DNS: Edit.
+provider "cloudflare" {}

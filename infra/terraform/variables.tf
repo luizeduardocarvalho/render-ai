@@ -6,7 +6,7 @@ variable "app_project_id" {
 variable "vertex_project_id" {
   type        = string
   default     = null
-  description = "GCP project id where Vertex AI is enabled and billed (may be a different, cross-project id such as labflux-project). Defaults to app_project_id when null, i.e. Vertex AI runs in the same project as the app."
+  description = "GCP project id where Vertex AI is enabled and billed (may be a different, cross-project id). Defaults to app_project_id when null, i.e. Vertex AI runs in the same project as the app."
 }
 
 variable "backup_project_id" {
@@ -101,4 +101,15 @@ variable "firebase_landing_site_id" {
 variable "firebase_app_site_id" {
   type        = string
   description = "Firebase Hosting site id for the app (.firebaserc target `app`)."
+}
+
+variable "domain" {
+  type        = string
+  description = "Apex domain, a Cloudflare zone. Serves the landing page (www redirects to it), the app at app.<domain>, and Clerk's production instance."
+}
+
+variable "clerk_dns_records" {
+  type        = map(string)
+  default     = {}
+  description = "CNAMEs Clerk's production instance asks for (Clerk dashboard -> Domains), keyed by the name under var.domain, e.g. { clerk = \"frontend-api.clerk.services\", accounts = \"accounts.clerk.services\", clkmail = \"mail.<id>.clerk.services\", \"clk._domainkey\" = \"dkim1.<id>.clerk.services\", \"clk2._domainkey\" = \"dkim2.<id>.clerk.services\" }."
 }

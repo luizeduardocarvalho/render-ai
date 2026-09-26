@@ -1,7 +1,8 @@
-# For the existing setup only: render-ai-studio already exists, so import it
-# instead of creating it. `cp imports.tf.example imports.tf`, apply once,
-# then delete imports.tf. A fresh setup in new projects needs none of this.
+# For the existing setup only: studioia-app was created by hand in the
+# console, so import it instead of creating it. `cp imports.tf.example
+# imports.tf`, apply once, then delete imports.tf. A fresh setup in new
+# projects needs none of this.
 import {
   to = google_project.this["app"]
-  id = "render-ai-studio"
+  id = "studioia-app"
 }

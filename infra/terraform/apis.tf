@@ -1,5 +1,6 @@
 # APIs required in the app project (Cloud Run, Firestore, the blob bucket,
-# IAM/SignBlob, the Clerk secret, and the Firestore export scheduler).
+# IAM/SignBlob, the Clerk secret, the Firestore export scheduler, and
+# Firebase with its Hosting sites and Firestore rules).
 locals {
   app_project_services = [
     "run.googleapis.com",
@@ -13,13 +14,15 @@ locals {
     "cloudscheduler.googleapis.com",
     "sts.googleapis.com",
     "cloudtasks.googleapis.com",
+    "firebase.googleapis.com",
+    "firebasehosting.googleapis.com",
+    "firebaserules.googleapis.com",
   ]
 
-  # Only enabled separately when Vertex AI lives in its own project (the
-  # common case: labflux-project). When vertex_project_id == app_project_id
-  # this is already covered by app_project_services... but aiplatform.
-  # googleapis.com is not in that list, so always enable it on whichever
-  # project actually runs Vertex AI.
+  # aiplatform.googleapis.com is not in app_project_services, so it is
+  # always enabled on whichever project runs Vertex AI: this list when that
+  # is a separate project (vertex_project_id), google_project_service.
+  # app_aiplatform below when it is the app project itself.
   vertex_project_services = ["aiplatform.googleapis.com"]
 
   backup_project_services = [

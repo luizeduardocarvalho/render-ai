@@ -20,7 +20,7 @@
 
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-render-ai-studio}"
+PROJECT_ID="${PROJECT_ID:-studioia-app}"
 what="${1:-all}"
 
 cd "$(dirname "$0")/.."

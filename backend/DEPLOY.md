@@ -8,7 +8,7 @@ managed as Terraform. See
 [`infra/terraform/README.md`](../infra/terraform/README.md) for:
 
 - Bootstrapping the Terraform state bucket.
-- Adopting the existing `render-ai-studio`/`labflux-project` setup with
+- Adopting the existing `studioia-app` project and GitHub environment with
   `import` blocks (first run).
 - Recreating the whole stack in a new GCP project by changing variables.
 
@@ -16,11 +16,10 @@ This file (`backend/DEPLOY.md`) covers what Terraform does *not* do: shipping
 code (step 5 below) and the restore runbook / drills for when a backup is
 actually needed.
 
-Vertex AI itself is NOT deployed by Terraform here in the app project by
-default - it runs in the existing `labflux-project` (models and
-billing/credits are enabled there), and the Cloud Run service is granted
-cross-project access to it. See `vertex_project_id` in
-`infra/terraform/variables.tf`.
+Vertex AI runs in the app project itself (`studioia-app`), where Terraform
+enables the API and grants the Cloud Run service account Vertex AI User.
+`vertex_project_id` in `infra/terraform/variables.tf` can point it at a
+separate project instead.
 
 ## 5. Deploy
 
@@ -41,7 +40,7 @@ service's configuration on the new revision. In short, it runs:
 gcloud run deploy render-ai-api \
   --source . \
   --region us-central1 \
-  --project render-ai-studio
+  --project studioia-app
 ```
 
 Storage env vars (set by Terraform, not `deploy.sh` - documented here because
@@ -52,10 +51,10 @@ they're read by `internal/config/config.go`):
 - `BLOB_BUCKET` must match the bucket Terraform created
   (`infra/terraform/variables.tf`'s `blob_bucket_name`).
 - `STORAGE_PROJECT` is optional and defaults to the **ambient Cloud Run
-  project** (`render-ai-studio`) - which is where Terraform created the
+  project** (`studioia-app`) - which is where Terraform created the
   Firestore DB and bucket. It is deliberately independent of
-  `GOOGLE_CLOUD_PROJECT` (which stays `labflux-project` for cross-project
-  Vertex AI). Set it only if Firestore lives in a different project than the
+  `GOOGLE_CLOUD_PROJECT` (the Vertex AI project, which may be a separate
+  one). Set it only if Firestore lives in a different project than the
   one Cloud Run runs in.
 - `FIRESTORE_DATABASE` is optional (defaults to the project's `(default)`
   database).

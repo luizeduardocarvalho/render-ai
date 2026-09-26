@@ -64,16 +64,15 @@ Your user (or the ADC principal) needs the **Vertex AI User** role
 The backend reads these (env overrides `config/config.yaml`):
 
 ```bash
-export GOOGLE_CLOUD_PROJECT=labflux-project       # already the default in config/config.yaml
+export GOOGLE_CLOUD_PROJECT=studioia-app         # already the default in config/config.yaml
 export GOOGLE_CLOUD_LOCATION=global               # image models require the global endpoint
 export GOOGLE_CLOUD_TEXT_LOCATION=us-central1     # text model endpoint (optional; defaults to config)
 # ADC is picked up automatically from the gcloud login above.
 ```
 
-> The default project is `labflux-project` (the same GCP project as the pipecat / cold-call
-> stack, where Vertex AI and the credits live). Note it uses `us-central1` for its chat agent,
-> but the Nano Banana image models run **only** on the `global` endpoint, so keep location
-> `global` here.
+> The default project is `studioia-app`, the same project the app runs in on Cloud Run, where
+> Vertex AI is enabled and billed. The Nano Banana image models run **only** on the `global`
+> endpoint, so keep location `global` here.
 
 ## Run
 

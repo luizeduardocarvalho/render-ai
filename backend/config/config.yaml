@@ -8,7 +8,7 @@ server:
 vertex:
   # Set via env instead if you prefer: GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION.
   # Image models run ONLY on the global endpoint.
-  project: "labflux-project" # GCP project with Vertex AI enabled (env GOOGLE_CLOUD_PROJECT overrides)
+  project: "studioia-app"    # GCP project with Vertex AI enabled (env GOOGLE_CLOUD_PROJECT overrides)
   location: "global"          # required for the Gemini 3 image models (do NOT use us-central1 here)
   textLocation: "us-central1" # text model endpoint; text models are NOT served from "global"
 

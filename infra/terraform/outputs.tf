@@ -62,3 +62,14 @@ output "artifact_registry_repository" {
   value       = "${google_artifact_registry_repository.app.location}-docker.pkg.dev/${google_artifact_registry_repository.app.project}/${google_artifact_registry_repository.app.repository_id}"
   description = "Docker repository for backend images. Set as GCP_ARTIFACT_REPO in the GitHub production environment."
 }
+
+output "firebase_required_dns" {
+  value = {
+    for k, d in {
+      landing = google_firebase_hosting_custom_domain.landing
+      www     = google_firebase_hosting_custom_domain.www
+      app     = google_firebase_hosting_custom_domain.app
+    } : k => try(d.required_dns_updates[0].desired, [])
+  }
+  description = "DNS records Firebase Hosting asks for, per custom domain. Should match cloudflare_dns_record.app (dns.tf)."
+}

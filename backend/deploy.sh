@@ -11,13 +11,13 @@
 # them to gcloud's defaults. See infra/terraform/README.md for the one-time
 # setup and infra/terraform/cloudrun.tf for what's configured.
 #
-# PROJECT/REGION default to the real render-ai-studio project; override via
+# PROJECT/REGION default to the real studioia-app project; override via
 # env vars for a different project (e.g. after `terraform apply` elsewhere).
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-PROJECT="${PROJECT:-render-ai-studio}"
+PROJECT="${PROJECT:-studioia-app}"
 REGION="${REGION:-us-central1}"
 
 gcloud run deploy render-ai-api \

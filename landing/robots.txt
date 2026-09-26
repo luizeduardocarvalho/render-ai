@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://render-ai-studio.web.app/sitemap.xml
+Sitemap: https://studioia.app/sitemap.xml

@@ -55,9 +55,13 @@ deploy access):
 
 ## Where things live
 
-- Firebase/GCP project: `render-ai-studio`
-- Landing site: `render-ai-studio` (`https://render-ai-studio.web.app`)
-- App site: `render-ai-studio-app` (`https://render-ai-studio-app.web.app`)
+- Firebase/GCP project: `studioia-app`, in the `studioia.app` organization
+- Landing site: `studioia-landing`, at `https://studioia.app` (`www` redirects
+  there; `https://studioia-landing.web.app` also works)
+- App site: `studioia-app`, at `https://app.studioia.app` (also
+  `https://studioia-app.web.app`)
+- The custom domains and their DNS records (Cloudflare) are Terraform, in
+  `infra/terraform/dns.tf`.
 
 The `landing` and `app` Hosting targets in `firebase.json` are bound to those
 sites in `.firebaserc`.
@@ -91,7 +95,7 @@ PROJECT_ID=<project-id> ./scripts/deploy-hosting.sh
 (it's the publishable key, not a secret, so this is fine). After the first
 deploy:
 
-- Add the deployed app Hosting URL (`https://render-ai-studio-app.web.app`)
+- Add the deployed app Hosting URL (`https://studioia-app.web.app`)
   to the Clerk dev instance's allowed origins so sign-in/sign-up work from
   that domain.
 - Expect Clerk's "Development mode" banner to keep showing until the app has

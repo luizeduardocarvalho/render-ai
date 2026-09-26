@@ -1,15 +1,15 @@
 {
   "projects": {
-    "default": "render-ai-studio"
+    "default": "studioia-app"
   },
   "targets": {
-    "render-ai-studio": {
+    "studioia-app": {
       "hosting": {
         "landing": [
-          "render-ai-studio"
+          "studioia-landing"
         ],
         "app": [
-          "render-ai-studio-app"
+          "studioia-app"
         ]
       }
     }

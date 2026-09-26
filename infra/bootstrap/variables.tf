@@ -17,29 +17,29 @@ variable "folder_id" {
 
 variable "app_project_id" {
   type        = string
-  description = "Project for Cloud Run, Firestore, the image bucket and Firebase Hosting (today: render-ai-studio)."
+  description = "Project for Cloud Run, Firestore, the image bucket and Firebase Hosting (today: studioia-app)."
 }
 
 variable "app_project_name" {
   type        = string
-  default     = "render-ai"
+  default     = "StudioIA"
   description = "Display name of the app project."
 }
 
 variable "backup_project_id" {
   type        = string
-  description = "Separate project for backups and Terraform state (e.g. render-ai-backups)."
+  description = "Separate project for backups and Terraform state (e.g. studioia-backups)."
 }
 
 variable "backup_project_name" {
   type        = string
-  default     = "render-ai backups"
+  default     = "StudioIA backups"
   description = "Display name of the backup project."
 }
 
 variable "state_bucket_name" {
   type        = string
-  description = "Globally unique bucket name for infra/terraform state (e.g. render-ai-tfstate)."
+  description = "Globally unique bucket name for infra/terraform state (e.g. studioia-tfstate)."
 }
 
 variable "region" {

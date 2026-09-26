@@ -27,9 +27,9 @@ matches the app visually (including dark mode).
 
 The page's `<head>` carries the canonical URL, Open Graph / X card tags, and
 schema.org JSON-LD. All of them, plus `robots.txt` and `sitemap.xml`, use the
-absolute site URL `https://render-ai-studio.web.app`. When the custom domain is
-live, replace that string everywhere it appears in `landing/`
-(`grep -rl render-ai-studio.web.app landing`).
+absolute site URL `https://studioia.app`, the custom domain
+(`infra/terraform/dns.tf`). If it changes, replace that string everywhere it
+appears in `landing/` (`grep -rl studioia.app landing`).
 
 The share image and PNG icons are rendered from the HTML sources in
 `scripts/brand-assets/`. After changing the headline, the hero illustration, or

@@ -49,31 +49,50 @@ can be recreated in new GCP projects by changing variables:
 ## What you need before running it
 
 - `gcloud` signed in (`gcloud auth application-default login`) as someone
-  who can create projects, link billing, and set IAM on the Vertex AI project
-  (`labflux-project` today).
+  who can create projects in the `studioia.app` organization, link billing,
+  and set IAM on the Vertex AI project (the app project itself today).
 - Terraform 1.6 or later.
 - A **GitHub fine-grained token** for this repository with *Administration*,
   *Environments* and *Variables* set to read/write (plus the default
   *Metadata: read*). Export it as `GITHUB_TOKEN` when running
   `infra/terraform`. It is only used on your machine and is never stored.
+- A **Cloudflare API token** for the `var.domain` zone (`dns.tf`): a custom
+  token with *Zone / Zone: Read* and *Zone / DNS: Edit*, scoped to that one
+  zone. Export it as `CLOUDFLARE_API_TOKEN`; on macOS, keep it in the
+  Keychain (`security add-generic-password -U -a studioia -s
+  cloudflare-api-token -w "$(pbpaste)"`) and export it with
+  `$(security find-generic-password -s cloudflare-api-token -w)`.
+- **Firebase added to the app project in the Firebase console**, once per
+  Google account: "Add Firebase to a Google Cloud project" accepts the
+  Firebase terms, which the API can't do (it answers 403 until then).
 
 ## 1. Bootstrap (once)
 
+Bootstrap keeps its state in the bucket it creates, under the `bootstrap`
+prefix. For the existing setup, that's all `init` needs:
+
 ```bash
 cd infra/bootstrap
-cp terraform.tfvars.example terraform.tfvars   # billing account, project ids, state bucket name
-# Existing setup only: render-ai-studio already exists, so adopt it.
-cp imports.tf.example imports.tf
-terraform init
-terraform apply
-rm -f imports.tf
+cp terraform.tfvars.example terraform.tfvars   # billing account, org, project ids, state bucket name
+terraform init -backend-config="bucket=studioia-tfstate" -backend-config="prefix=bootstrap"
+terraform plan
 ```
 
-Bootstrap starts with local state, because the state bucket doesn't exist
-until this apply. Keep `infra/bootstrap/terraform.tfstate` somewhere safe, or
-move it into the new bucket: add `backend "gcs" {}` to the `terraform` block
-in `main.tf`, then run
-`terraform init -migrate-state -backend-config="bucket=<state bucket>" -backend-config="prefix=bootstrap"`.
+**The very first apply in new projects** has no bucket to keep state in
+yet, so it runs on local state and moves it into the bucket afterwards:
+
+```bash
+cd infra/bootstrap
+cp terraform.tfvars.example terraform.tfvars
+# Only if the app project was created by hand (studioia-app was): adopt it.
+cp imports.tf.example imports.tf
+# Comment out `backend "gcs" {}` in main.tf for this one apply, then:
+terraform init && terraform apply
+rm -f imports.tf
+# Restore `backend "gcs" {}`, then move the local state into the bucket:
+terraform init -migrate-state -backend-config="bucket=<state bucket>" -backend-config="prefix=bootstrap"
+rm terraform.tfstate terraform.tfstate.backup
+```
 
 ## 2. Main config
 
@@ -81,32 +100,35 @@ in `main.tf`, then run
 cd infra/terraform
 cp terraform.tfvars.example terraform.tfvars   # project ids, buckets, CORS origins, Clerk publishable key, Hosting site ids, reviewers
 export GITHUB_TOKEN=<fine-grained token>
-terraform init -backend-config="bucket=render-ai-tfstate" -backend-config="prefix=render-ai"
+export CLOUDFLARE_API_TOKEN=<zone DNS token>
+terraform init -backend-config="bucket=studioia-tfstate" -backend-config="prefix=render-ai"
 ```
 
-**Adopting the existing `render-ai-studio` setup (first run only):**
+**First run in new projects:** almost everything is created fresh, but the
+GitHub `production` environment and its variables already exist from the
+previous setup, and so do Firebase and its default Hosting site (from the
+console step above).
 
-1. `cp imports.tf.example imports.tf`. It imports what was created by hand:
-   the Firestore database, image bucket, `render-ai-api` service account and
-   roles, secret, Cloud Run service, Firebase project and Hosting sites.
-2. `terraform plan`, and read it before applying. Existing resources must
-   show as **import**, at most with in-place updates. New resources show as
-   **create**: backups, the backup bucket, the transfer job, the export, the
-   GitHub sign-in, the deployer account, the image repository and the GitHub
-   environment and variables. If anything existing shows as **destroy** or
-   **replace**, stop.
-3. `terraform apply`, then `rm imports.tf`.
+1. `cp imports.tf.example imports.tf`. It adopts those, so Terraform
+   overwrites their values instead of failing on "already exists".
+2. Create the Clerk secret and give it a value first - Cloud Run refuses to
+   create a service whose secret has no version:
+   ```bash
+   terraform apply -target=google_secret_manager_secret.clerk_secret_key
+   pbpaste | gcloud secrets versions add CLERK_SECRET_KEY \
+     --project=<app project> --data-file=-   # the Clerk secret key, copied
+   ```
+3. `terraform plan`, and read it before applying. The imported resources
+   must show as **import**, at most with in-place updates; everything else
+   shows as **create**. If anything shows as **destroy** or **replace**, stop.
+4. `terraform apply`, then `rm imports.tf`.
 
-**A fresh setup** skips the imports: `terraform apply` creates everything.
+A setup with no GitHub environment yet skips the imports: `terraform apply`
+creates everything.
 
 ## 3. After apply
 
-1. Add the Clerk secret's value:
-   ```bash
-   printf '%s' "$CLERK_SECRET_KEY_VALUE" | gcloud secrets versions add \
-     CLERK_SECRET_KEY --project=<app project> --data-file=-
-   ```
-2. Deploy: GitHub → Actions → **Deploy** → Run workflow → `both`. If
+1. Deploy: GitHub → Actions → **Deploy** → Run workflow → `both`. If
    `github_deploy_reviewers` is set, approve the run.
 
    **`terraform apply` must run before this the first time the render queue
@@ -119,7 +141,7 @@ terraform init -backend-config="bucket=render-ai-tfstate" -backend-config="prefi
    backend image that actually reads those env vars). Deploying the image
    first is harmless but the worker route won't have a queue to serve until
    Terraform has applied.
-3. The **Backup check** workflow runs daily by itself once Terraform has set
+2. The **Backup check** workflow runs daily by itself once Terraform has set
    its variables. For 8 days after setup, a backup that doesn't exist yet
    (the Firestore export is weekly) is only a warning; after that, a missing,
    failed or stale backup fails the run and GitHub emails you.
@@ -130,14 +152,14 @@ terraform init -backend-config="bucket=render-ai-tfstate" -backend-config="prefi
    imports).
 2. In `infra/terraform/terraform.tfvars`, set the new ids. Hosting site ids
    and bucket names must be globally unique. To run Vertex AI in the app
-   project instead of `labflux-project`, set `vertex_project_id` to the app
-   project (or leave it out).
+   project, leave `vertex_project_id` out (or null); set it only to use a
+   separate Vertex AI project.
 3. Update `.firebaserc` so the `landing` and `app` targets point at the new
    project and site ids, and `firebase.json` if the region changes.
-4. `terraform init` with the new state bucket, then `terraform apply` (no
-   imports).
-5. Add the Clerk secret value, update the Clerk dashboard's allowed origins
-   for the new URLs, and run the Deploy workflow.
+4. `terraform init` with the new state bucket, then follow "First run in
+   new projects" above.
+5. Update the Clerk dashboard's allowed origins for the new URLs, and run the
+   Deploy workflow.
 6. **Move data**, if this is a move rather than a fresh start:
    - Firestore: `gcloud firestore export gs://<bucket>/migration` in the old
      project, then `gcloud firestore import gs://<bucket>/migration` in the
@@ -147,6 +169,11 @@ terraform init -backend-config="bucket=render-ai-tfstate" -backend-config="prefi
 
 ## Notes
 
+- The `studioia.app` organization enforces domain-restricted sharing
+  (`iam.allowedPolicyMemberDomains`): IAM bindings may only name principals
+  from its own Workspace, never `allUsers` or accounts from another domain.
+  That is why `render-ai-api` is public through `invoker_iam_disabled`
+  instead of an `allUsers` invoker binding.
 - `retention` on `google_firestore_backup_schedule` for a weekly recurrence
   tops out at 14 weeks; this config uses 8 weeks (`4838400s`).
 - `google_project_service_identity` (`export.tf`) and the Firebase resources
@@ -154,5 +181,5 @@ terraform init -backend-config="bucket=render-ai-tfstate" -backend-config="prefi
 - The backup bucket's `retention_policy` is only ever created unlocked.
   Locking it can't be undone (see `backend/DEPLOY.md`, "Backups and
   recovery") and is left as a deliberate manual step.
-- A few import IDs in `imports.tf.example` are marked "verify". If an import
-  fails, `terraform plan` names the resource and the expected ID format.
+- If an import in `imports.tf.example` fails, `terraform plan` names the
+  resource and the expected ID format.
