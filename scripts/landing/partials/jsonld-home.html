@@ -1,0 +1,32 @@
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://render-ai-studio.web.app/#organization",
+            "name": "StudioIA",
+            "url": "https://render-ai-studio.web.app/",
+            "logo": "https://render-ai-studio.web.app/icon-512.png"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://render-ai-studio.web.app/#website",
+            "name": "StudioIA",
+            "url": "https://render-ai-studio.web.app/",
+            "publisher": { "@id": "https://render-ai-studio.web.app/#organization" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "StudioIA",
+            "url": "https://render-ai-studio.web.app/",
+            "applicationCategory": "DesignApplication",
+            "operatingSystem": "Web",
+            "description": "{{ld.description}}",
+            "image": "{{ogImage}}",
+            "inLanguage": "{{lang}}",
+            "publisher": { "@id": "https://render-ai-studio.web.app/#organization" }
+          }
+        ]
+      }
+    </script>

@@ -1,0 +1,48 @@
+    <footer class="site-footer">
+      <div class="texture-strip" aria-hidden="true"></div>
+      <div class="wrap footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="{{home}}" aria-label="{{nav.home}}">
+            <svg class="brand-mark" aria-hidden="true"><use href="#brand-symbol" /></svg>
+            <span class="brand-name">Studio<b>IA</b></span>
+          </a>
+          <p class="footer-tagline">{{footer.tagline}}</p>
+          <p class="footer-maker">{{footer.madeBy}}</p>
+        </div>
+
+        <nav class="footer-col" aria-labelledby="footerProduct">
+          <h2 class="footer-title" id="footerProduct">{{footer.product}}</h2>
+          <ul>
+            <li><a href="{{home}}#capabilities">{{nav.capabilities}}</a></li>
+            <li><a href="{{home}}#method">{{nav.method}}</a></li>
+            <li><a href="{{home}}#contact">{{cta.requestAccess}}</a></li>
+          </ul>
+        </nav>
+
+        <nav class="footer-col" aria-labelledby="footerCompany">
+          <h2 class="footer-title" id="footerCompany">{{footer.company}}</h2>
+          <ul>
+            <li><a href="{{about}}">{{footer.about}}</a></li>
+            <li><a href="{{home}}#contact">{{nav.contact}}</a></li>
+            <li>
+              <a class="footer-instagram" href="{{instagram.url}}" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" /></svg>
+                {{footer.instagram}}
+              </a>
+            </li>
+          </ul>
+        </nav>
+
+        <div class="footer-col">
+          <h2 class="footer-title">{{footer.language}}</h2>
+          <ul>
+            <li><a href="{{lang.en.href}}" hreflang="en" lang="en"{{lang.en.current}}>English</a></li>
+            <li><a href="{{lang.pt-BR.href}}" hreflang="pt-BR" lang="pt-BR"{{lang.pt-BR.current}}>Português</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="wrap footer-bottom">
+        <span>© <span id="year"></span> StudioIA · Studio3D</span>
+        <a href="#top" class="footer-top">{{footer.top}}</a>
+      </div>
+    </footer>

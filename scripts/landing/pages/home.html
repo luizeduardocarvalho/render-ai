@@ -1,0 +1,250 @@
+{{> head}}
+  <body>
+    {{> symbol}}
+
+    {{> header}}
+
+    <main>
+      <!-- ============================ Hero ============================ -->
+      <section class="wrap hero">
+        <div class="hero-copy">
+          <h1 class="hero-title">
+            {{hero.title}}
+          </h1>
+          <p class="lede">
+            {{hero.lede}}
+          </p>
+
+          <div class="hero-actions">
+            <a class="btn btn-solid" href="#contact">{{cta.requestAccess}}</a>
+            <a class="btn btn-outline" href="#method">{{cta.seeHow}}</a>
+          </div>
+
+          <dl class="facts">
+            <div class="fact"><dt>{{fact.output.label}}</dt><dd>{{fact.output.value}}</dd></div>
+            <div class="fact"><dt>{{fact.placement.label}}</dt><dd>{{fact.placement.value}}</dd></div>
+            <div class="fact"><dt>{{fact.access.label}}</dt><dd>{{fact.access.value}}</dd></div>
+          </dl>
+        </div>
+
+        <figure class="figure">
+          <div class="compare" id="ba">
+            <div class="compare-layer compare-after">
+              <!-- Photograph -->
+              <svg viewBox="0 0 480 360" preserveAspectRatio="xMidYMid slice" role="img" aria-label="{{figure.photoAlt}}">
+                  <defs>
+                    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stop-color="#c4d2df" />
+                      <stop offset="1" stop-color="#dfe6ec" />
+                    </linearGradient>
+                    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stop-color="#e7e0d4" />
+                      <stop offset="1" stop-color="#d8cfbf" />
+                    </linearGradient>
+                    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stop-color="#c2a681" />
+                      <stop offset="1" stop-color="#a2855f" />
+                    </linearGradient>
+                    <linearGradient id="sofa" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stop-color="#33604a" />
+                      <stop offset="1" stop-color="#1f4231" />
+                    </linearGradient>
+                    <radialGradient id="glow" cx="0.72" cy="0.24" r="0.85">
+                      <stop offset="0" stop-color="#fbf3dd" stop-opacity="0.8" />
+                      <stop offset="1" stop-color="#fbf3dd" stop-opacity="0" />
+                    </radialGradient>
+                  </defs>
+                  <rect width="480" height="360" fill="url(#wall)" />
+                  <rect x="0" y="228" width="480" height="132" fill="url(#floor)" />
+                  <rect x="300" y="44" width="150" height="150" fill="url(#sky)" stroke="#cdc4b4" stroke-width="6" />
+                  <line x1="375" y1="44" x2="375" y2="194" stroke="#cdc4b4" stroke-width="4" />
+                  <line x1="300" y1="119" x2="450" y2="119" stroke="#cdc4b4" stroke-width="4" />
+                  <rect width="480" height="360" fill="url(#glow)" />
+                  <ellipse cx="210" cy="312" rx="170" ry="34" fill="#b08a62" opacity="0.5" />
+                  <rect x="70" y="214" width="210" height="70" rx="8" fill="url(#sofa)" />
+                  <rect x="70" y="196" width="210" height="44" rx="8" fill="#396a51" />
+                  <rect x="88" y="214" width="80" height="40" rx="6" fill="#3f745a" />
+                  <rect x="182" y="214" width="80" height="40" rx="6" fill="#3f745a" />
+                  <rect x="60" y="222" width="26" height="70" rx="6" fill="#2a5340" />
+                  <rect x="264" y="222" width="26" height="70" rx="6" fill="#2a5340" />
+                  <rect x="404" y="250" width="34" height="42" rx="2" fill="#b0855a" />
+                  <path d="M421 250 C400 214 402 196 421 176 C440 196 442 214 421 250 Z" fill="#437c58" />
+                  <line x1="300" y1="292" x2="300" y2="200" stroke="#5b5147" stroke-width="4" />
+                  <path d="M284 200 h32 l-8 -26 h-16 z" fill="#f1e2bc" />
+              </svg>
+            </div>
+
+            <div class="compare-layer compare-before" id="baBefore">
+              <!-- Model line-art -->
+              <svg viewBox="0 0 480 360" preserveAspectRatio="xMidYMid slice" role="img" aria-label="{{figure.modelAlt}}">
+                  <rect width="480" height="360" fill="var(--bg)" />
+                  <g fill="none" stroke="var(--ink)" stroke-width="2.2" stroke-linejoin="round">
+                    <line x1="0" y1="228" x2="480" y2="228" />
+                    <rect x="300" y="44" width="150" height="150" />
+                    <line x1="375" y1="44" x2="375" y2="194" />
+                    <line x1="300" y1="119" x2="450" y2="119" />
+                    <ellipse cx="210" cy="312" rx="170" ry="34" stroke-dasharray="5 6" />
+                    <rect x="70" y="196" width="210" height="88" rx="6" />
+                    <line x1="70" y1="240" x2="280" y2="240" />
+                    <line x1="175" y1="196" x2="175" y2="284" />
+                    <rect x="60" y="222" width="26" height="70" rx="5" />
+                    <rect x="264" y="222" width="26" height="70" rx="5" />
+                    <rect x="404" y="250" width="34" height="42" />
+                    <path d="M421 250 C400 214 402 196 421 176 C440 196 442 214 421 250 Z" />
+                    <line x1="300" y1="292" x2="300" y2="200" />
+                    <path d="M284 200 h32 l-8 -26 h-16 z" />
+                  </g>
+              </svg>
+            </div>
+
+            <div class="compare-handle" id="baPlumb" aria-hidden="true"></div>
+            <span class="compare-tag compare-tag-after">{{figure.tagPhoto}}</span>
+            <span class="compare-tag compare-tag-before">{{figure.tagModel}}</span>
+            <svg class="watermark" aria-hidden="true"><use href="#brand-symbol" /></svg>
+
+            <input
+              id="baRange"
+              class="compare-range"
+              type="range"
+              min="0"
+              max="100"
+              value="52"
+              aria-label="{{figure.rangeLabel}}"
+            />
+          </div>
+          <figcaption>
+            {{figure.caption}}
+          </figcaption>
+        </figure>
+      </section>
+
+      <div class="texture-band" aria-hidden="true"></div>
+
+      <!-- ======================= Capabilities ======================= -->
+      <section class="band-dark" id="capabilities">
+        <div class="wrap">
+          <h2 class="section-title">{{cap.title}}</h2>
+
+          <ul class="capabilities">
+            <li class="capability">
+              <h3>{{cap.1.title}}</h3>
+              <p>{{cap.1.text}}</p>
+            </li>
+            <li class="capability">
+              <h3>{{cap.2.title}}</h3>
+              <p>{{cap.2.text}}</p>
+            </li>
+            <li class="capability">
+              <h3>{{cap.3.title}}</h3>
+              <p>{{cap.3.text}}</p>
+            </li>
+            <li class="capability">
+              <h3>{{cap.4.title}}</h3>
+              <p>{{cap.4.text}}</p>
+            </li>
+            <li class="capability">
+              <h3>{{cap.5.title}}</h3>
+              <p>{{cap.5.text}}</p>
+            </li>
+            <li class="capability">
+              <h3>{{cap.6.title}}</h3>
+              <p>{{cap.6.text}}</p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ======================= How it works ======================= -->
+      <section class="wrap section" id="method">
+        <h2 class="section-title section-title-accent">{{steps.title}}</h2>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="step-num">01</span>
+            <h3>{{step.1.title}}</h3>
+            <p>{{step.1.text}}</p>
+          </li>
+          <li class="step">
+            <span class="step-num">02</span>
+            <h3>{{step.2.title}}</h3>
+            <p>{{step.2.text}}</p>
+          </li>
+          <li class="step">
+            <span class="step-num">03</span>
+            <h3>{{step.3.title}}</h3>
+            <p>{{step.3.text}}</p>
+          </li>
+          <li class="step">
+            <span class="step-num">04</span>
+            <h3>{{step.4.title}}</h3>
+            <p>{{step.4.text}}</p>
+          </li>
+        </ol>
+      </section>
+
+      <!-- ========================== Contact ========================== -->
+      <section class="band-dark" id="contact">
+        <div class="wrap contact-grid">
+          <div class="contact-about">
+            <h2 class="section-title">{{contact.title}}</h2>
+            <p class="contact-lead">
+              {{contact.lead}}
+            </p>
+            <dl class="facts facts-on-dark">
+              <div class="fact"><dt>{{contact.fact1.label}}</dt><dd>{{contact.fact1.value}}</dd></div>
+              <div class="fact"><dt>{{contact.fact2.label}}</dt><dd>{{contact.fact2.value}}</dd></div>
+              <div class="fact"><dt>{{contact.fact3.label}}</dt><dd>{{contact.fact3.value}}</dd></div>
+            </dl>
+          </div>
+
+          <div class="contact-form-wrap">
+            <p class="contact-invite">
+              {{contact.invite}}
+            </p>
+            <form
+              id="contactForm"
+              class="contact-form"
+              novalidate
+              data-msg-invalid-email="{{form.msg.invalidEmail}}"
+              data-msg-empty="{{form.msg.empty}}"
+              data-msg-too-long="{{form.msg.tooLong}}"
+              data-msg-not-connected="{{form.msg.notConnected}}"
+              data-msg-sending="{{form.msg.sending}}"
+              data-msg-success="{{form.msg.success}}"
+              data-msg-error="{{form.msg.error}}"
+            >
+              <div class="field">
+                <label for="email">{{form.emailLabel}}</label>
+                <input
+                  type="email"
+                  id="email"
+                  name="email"
+                  placeholder="{{form.emailPlaceholder}}"
+                  autocomplete="email"
+                  required
+                />
+              </div>
+              <div class="field">
+                <label for="message">{{form.messageLabel}}</label>
+                <textarea
+                  id="message"
+                  name="message"
+                  rows="4"
+                  placeholder="{{form.messagePlaceholder}}"
+                  required
+                ></textarea>
+              </div>
+              <button class="btn btn-solid btn-block" type="submit" id="submitBtn">{{form.submit}}</button>
+              <p class="form-status" id="formStatus" role="status" aria-live="polite"></p>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    {{> footer}}
+
+    <script type="module" src="/contact.js"></script>
+    <script src="/ui.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,95 @@
+{{> head}}
+  <body>
+    {{> symbol}}
+
+    {{> header}}
+
+    <main>
+      <section class="wrap about-hero">
+        <h1 class="hero-title">{{about.title}}</h1>
+        <p class="lede">{{about.lede}}</p>
+      </section>
+
+      <div class="texture-band" aria-hidden="true"></div>
+
+      <!-- ========================== Studio3D ========================== -->
+      <section class="wrap section about-studio">
+        <svg class="about-symbol" viewBox="0 0 348 354" aria-hidden="true"><use href="#brand-symbol" /></svg>
+        <div>
+          <h2 class="section-title section-title-accent">{{about.studio.title}}</h2>
+          <p class="about-text">{{about.studio.text}}</p>
+          <a class="btn btn-outline about-instagram" href="{{instagram.url}}" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" /></svg>
+            {{about.studio.instagram}}
+          </a>
+        </div>
+      </section>
+
+      <!-- ========================== Product ========================== -->
+      <section class="wrap section about-product">
+        <h2 class="section-title">{{about.product.title}}</h2>
+        <p class="about-text">{{about.product.text}}</p>
+
+        <div class="shots">
+          <figure class="shot shot-main">
+            <div class="shot-frame">
+              <img src="{{shots.dir}}/editor.webp" width="1600" height="1000" alt="{{about.shot.editor.alt}}" loading="lazy" decoding="async" />
+              <svg class="watermark" aria-hidden="true"><use href="#brand-symbol" /></svg>
+            </div>
+            <figcaption>{{about.shot.editor.caption}}</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot-frame">
+              <img src="{{shots.dir}}/projects.webp" width="1600" height="1000" alt="{{about.shot.projects.alt}}" loading="lazy" decoding="async" />
+              <svg class="watermark" aria-hidden="true"><use href="#brand-symbol" /></svg>
+            </div>
+            <figcaption>{{about.shot.projects.caption}}</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot-frame">
+              <img src="{{shots.dir}}/render.webp" width="1600" height="1000" alt="{{about.shot.render.alt}}" loading="lazy" decoding="async" />
+              <svg class="watermark" aria-hidden="true"><use href="#brand-symbol" /></svg>
+            </div>
+            <figcaption>{{about.shot.render.caption}}</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- ========================= Principles ========================= -->
+      <section class="band-dark">
+        <div class="wrap">
+          <h2 class="section-title">{{about.principles.title}}</h2>
+          <ul class="capabilities principles">
+            <li class="capability">
+              <h3>{{about.p1.title}}</h3>
+              <p>{{about.p1.text}}</p>
+            </li>
+            <li class="capability">
+              <h3>{{about.p2.title}}</h3>
+              <p>{{about.p2.text}}</p>
+            </li>
+            <li class="capability">
+              <h3>{{about.p3.title}}</h3>
+              <p>{{about.p3.text}}</p>
+            </li>
+            <li class="capability">
+              <h3>{{about.p4.title}}</h3>
+              <p>{{about.p4.text}}</p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ============================ CTA ============================ -->
+      <section class="wrap section about-cta">
+        <h2 class="section-title">{{about.cta.title}}</h2>
+        <p class="about-text">{{about.cta.text}}</p>
+        <a class="btn btn-solid" href="{{home}}#contact">{{cta.requestAccess}}</a>
+      </section>
+    </main>
+
+    {{> footer}}
+
+    <script src="/ui.js" defer></script>
+  </body>
+</html>

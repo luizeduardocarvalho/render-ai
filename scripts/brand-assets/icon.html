@@ -1,21 +1,18 @@
 <!doctype html>
 <!-- Source for the landing PNG icons (apple-touch-icon, manifest icons, favicon.ico).
-     Same mark as landing/favicon.svg, drawn full-bleed at 512x512 because iOS and
-     Android apply their own corner mask. Rendered by render.sh. -->
+     The symbol (landing/symbol.svg) centered on white at 512x512, full-bleed
+     because iOS and Android apply their own corner mask. Rendered by render.sh. -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <style>
   * { margin: 0; }
-  html, body { width: 512px; height: 512px; overflow: hidden; background: #efeae1; }
-  svg { display: block; width: 512px; height: 512px; }
+  html, body { width: 512px; height: 512px; overflow: hidden; background: #ffffff; }
+  body { display: grid; place-items: center; }
+  img { width: 340px; height: auto; display: block; }
 </style>
 </head>
 <body>
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-    <rect fill="#efeae1" width="32" height="32" />
-    <path fill="#1a1917" d="M6 6h10v20H6z" />
-    <path fill="none" stroke="#1a1917" stroke-width="2" d="M16 7h9v18h-9" />
-  </svg>
+  <img src="../../landing/symbol.svg" alt="" />
 </body>
 </html>

@@ -1,49 +1,48 @@
 ---
-version: 1
+version: 2
 slug: "landing-index-html"
 primary_target: "landing/index.html"
-related_targets: []
+related_targets: ["landing/404.html"]
 ---
 
 ## Direction contract
 
-THESIS: StudioIA's landing page is a published architecture monograph - the
-kind of plate spread (El Croquis / 2G) where a building's drawing and its
-photograph sit side by side under an index. It refuses the SaaS gradient hero and
-the icon-card grid; the page proves the mechanism by showing the SketchUp study
-and its photograph as one figure.
+THESIS: StudioIA's landing page wears the visual identity of Studio3D, the
+architectural visualization studio that builds it. The brand manual
+(brand/studio3d/README.md) is binding; DESIGN.md is how this page applies it.
+The page proves the mechanism by showing a model view and its photograph as one
+before/after figure.
 
-OWN-WORLD: Ink-on-paper. Ground = warm trace-paper off-white (#EFEBE3); ink =
-warm near-black (#1A1917); poche = solid black; hairline rules (#D6D1C4, 1px) do
-the dividing, not boxes. One accent only - blueprint blue (#22406B), reserved
-strictly for live/actionable elements (drag handle, primary action, links,
-active state). Dark mode = cyanotype negative (charcoal ground, paper-white ink,
-lighter blueprint line). Display/labels in a self-hosted expanded grotesque
-(Archivo, width+weight axes); folios, plate numbers, captions, and all
-measurement/metric data in a mono (Spline Sans Mono). No shadows as decoration -
-print is flat; rules and poche carry structure. Drawn hairline icons, one stroke.
+OWN-WORLD: White ground, brand black (#2A2929) type, D-DIN regular with bold
+for one key word (as in the "Studio3D" wordmark). The four brand colors -
+orange #C25939, teal #18726E, navy #263E5A, red #A53B3F - live in the symbol,
+the tile texture, 3px separators and ticks, and step numbers. Orange only at
+large sizes (4.4:1 on white). Dark bands (#2A2929) carry capabilities and
+contact, as in the manual's site layout. Rounded shapes echo the symbol's
+pieces. Watermark on product images: one-color symbol, 50%, bottom-right.
+Never recolor the symbol or wordmark, never set the logo on a solid color
+block.
 
-STORY: A first-time architect visitor understands in seconds that a SketchUp
-screenshot becomes a real photograph with their specified product in it, sees it
-demonstrated in the hero figure, believes it because the geometry is preserved
-and the products are real, and acts by requesting access (or reading the method).
+STORY: A first-time architect visitor understands in seconds that a screenshot
+of their 3D model becomes a real photograph with their specified product in it,
+sees it demonstrated in the hero figure, believes it because the geometry is
+preserved and the products are real, and acts by requesting access (or reading
+how it works).
 
-FIRST VIEWPORT: Running header/folio - "StudioIA" left, nav center-right,
-"PLATE 01 / STUDY" mono right, full-width hairline rule under it. Below, a
-two-plate spread: left column carries the headline in big expanded grotesque
-("Turn a SketchUp screenshot into a photograph."), a one-line deck, the primary
-action (blueprint-blue "Request access"), and a mono tabular ledger of facts
-(OUTPUT up to 4K / PLACEMENT product-accurate / SESSION local & private /
-ENGINE Gemini 3 - Vertex AI). Right column is the before/after figure framed like
-a published plate with a mono figure caption ("Fig. 1 - SketchUp study, redrawn
-as a photograph. Drag to compare."). Primary action sits under the headline,
-left column.
+FIRST VIEWPORT: Sticky header - symbol + "StudioIA" wordmark left; nav, the
+EN/PT language switch, the light/dark button and a small "Request access" pill
+right. The hero plus the texture band fill the first screen. Hero: headline
+"Turn a 3D model screenshot into a photograph." (regular, "photograph" bold), a
+lede, "Request access" and "See how it works", three facts with colored ticks
+(Output up to 4K / Placement product-accurate / Access private per account); the
+before/after figure right. The full-color texture band follows the hero.
 
-FORM: Architecture monograph (assigned index 5 of the grounded list; ordered by
-resonance). Seed key afc88d30. Raised by the daylight-section hand (single
-committed accent that travels only to the live element) and the consumer-app hand
-(accent appears ONLY where something is actionable).
+COPY: The page ships in English and Portuguese from one template
+(scripts/landing/); change text in both strings files. It is a product, not a
+proof of concept. Do not name SketchUp on this page (other pages may). Do not
+claim local or in-memory processing - projects are stored in the cloud, private
+per account.
 
-FINISH: unreviewed and undocumented is unfinished; this build ends with the
-finish review, the verdict, DESIGN.md, and every shipping raster carrying its
-provenance.
+FINISH: unreviewed and undocumented is unfinished; changes end with a desktop,
+mobile, light and dark check, DESIGN.md kept current, and regenerated brand
+assets (scripts/brand-assets/).

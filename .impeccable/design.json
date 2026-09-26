@@ -1,57 +1,67 @@
 {
   "$schema": "impeccable/design",
   "surface": "landing",
-  "world": "architecture-monograph",
+  "world": "studio3d-identity",
   "mode": "persuade",
-  "colorStrategy": "restrained",
+  "colorStrategy": "brand-palette-as-structure",
+  "authority": "brand/studio3d/README.md (Studio3D brand manual, 2021)",
   "themes": {
     "light": {
-      "paper": "#efeae1",
-      "paper2": "#e7e1d5",
-      "ink": "#1a1917",
-      "ink2": "#56534b",
-      "ink3": "#6f6b5f",
-      "rule": "#d0cabb",
-      "ruleStrong": "#b6af9d",
-      "accent": "#22406b",
-      "accentHover": "#2c5187",
-      "accentInk": "#f4f1ea"
+      "bg": "#ffffff",
+      "ink": "#2a2929",
+      "ink2": "#5b5858",
+      "ink3": "#6e6a68",
+      "rule": "#dadada",
+      "link": "#18726e",
+      "band": "#2a2929",
+      "bandInk": "#ffffff"
     },
     "dark": {
-      "paper": "#14161a",
-      "paper2": "#191c21",
-      "ink": "#e8e3d8",
-      "ink2": "#a6a294",
-      "ink3": "#837f73",
-      "rule": "#2b2e34",
-      "ruleStrong": "#3b3f47",
-      "accent": "#6f9bcd",
-      "accentHover": "#8bb0da",
-      "accentInk": "#12141a"
+      "bg": "#1e1d1d",
+      "ink": "#f3f1f0",
+      "ink2": "#c9c5c3",
+      "ink3": "#a8a3a0",
+      "rule": "#3a3838",
+      "link": "#7cc4bd",
+      "band": "#2a2929",
+      "bandInk": "#ffffff"
     }
   },
-  "accentRule": "actionable-only: primary button, links on hover, compare plumb line, spec indices, form focus and caret",
+  "brand": {
+    "black": "#2a2929",
+    "orange": "#c25939",
+    "teal": "#18726e",
+    "red": "#a53b3f",
+    "navy": "#263e5a",
+    "tints": ["#f6e6e1", "#dfe2e6", "#ddeae9", "#f2e2e2", "#dadada"]
+  },
+  "colorRules": "orange only at >=30px (4.4:1 on white); brand colors as symbol, texture, 3px separators/ticks, step numbers; never recolor the symbol or wordmark",
   "type": {
-    "display": { "family": "Archivo", "axes": "wght 100-900, wdth 62-125", "use": "expanded+heavy for display and structural labels", "file": "landing/fonts/archivo-var.woff2" },
-    "sans": { "family": "Archivo", "use": "body at normal width" },
-    "mono": { "family": "Spline Sans Mono", "use": "folios, plate numbers, ledger (tabular-nums), captions, labels, buttons", "file": "landing/fonts/spline-mono-var.woff2" },
+    "family": "D-DIN",
+    "weights": [400, 700],
+    "files": ["landing/fonts/d-din-400.woff2", "landing/fonts/d-din-700.woff2"],
+    "license": "SIL OFL 1.1 (landing/fonts/D-DIN-OFL.txt)",
+    "tracking": "default (manual: no spacing changes)",
     "scale": {
-      "heroDisplay": "clamp(40px,6vw,76px)",
-      "plateHeading": "clamp(26px,3.4vw,40px)",
-      "body": "16-18px @ 62-72ch",
-      "monoLabel": "12-14px uppercase +0.1em"
-    },
-    "emphasis": "weight/size or drawn underline; never color or gradient text"
+      "hero": "clamp(40px,5vw,64px) regular, one word bold",
+      "section": "clamp(30px,3.6vw,44px) regular",
+      "body": "16-20px",
+      "label": "13px uppercase +0.08em"
+    }
   },
   "layout": {
-    "sheetMax": "1200px",
-    "gutter": "clamp(20px,5vw,72px)",
-    "corners": { "button": "2px", "plate": "0", "field": "0" },
-    "elevation": "none (rules, poche, paper - no decorative shadows)"
+    "wrapMax": "1200px",
+    "gutter": "clamp(16px,5vw,64px)",
+    "corners": { "button": "pill", "tag": "pill", "figure": "20px", "field": "12px" },
+    "elevation": "none, except the compare grip"
   },
-  "motion": "one on-load moment: hero rise + rules draw-in, once; disabled under prefers-reduced-motion",
-  "browserSurfaces": ["selection", "focus-visible ring", "caret", "scrollbar", "tabular-nums"],
+  "motion": "one on-load moment: hero rise, once; disabled under prefers-reduced-motion",
+  "brandAssets": {
+    "symbol": "scripts/brand-assets/build-symbol.py -> landing/symbol.svg, landing/favicon.svg, inline <symbol id=brand-symbol>",
+    "texture": "scripts/brand-assets/build-texture.py -> landing/texture.svg, landing/texture-tint.svg",
+    "rasters": "scripts/brand-assets/render.sh -> og-image.png, icons, favicon.ico"
+  },
   "syntheticAssets": [
-    { "id": "hero-before-after", "kind": "inline-svg", "note": "SketchUp line-art -> schematic photograph stand-in, labeled Fig. 1; replace with real screenshot+render pair" }
+    { "id": "hero-before-after", "kind": "inline-svg", "note": "model line-art -> schematic photograph stand-in; replace with a real screenshot + render pair" }
   ]
 }
