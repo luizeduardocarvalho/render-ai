@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "brand" / "studio3d" / "texture.png"
@@ -30,7 +30,7 @@ COLORS = {
     "red": ((165, 59, 63), "#F2E2E2"),
     "navy": ((38, 62, 90), "#DFE2E6"),
 }
-UPSCALE = 2  # trace at 2x for smoother curves
+UPSCALE = 3  # trace at 3x for smoother curves
 
 
 def hexcolor(rgb):
@@ -45,18 +45,29 @@ def main():
     w, h = big.size
     px = big.load()
 
-    masks = {name: Image.new("1", big.size, 1) for name in COLORS}
-    mpx = {name: m.load() for name, m in masks.items()}
+    # Label every pixel (0 = background/gap, 1-4 = a color), then take the
+    # majority label of each pixel's neighborhood. Anti-aliased pixels where two
+    # pieces meet blend both colors and would otherwise land on the wrong one,
+    # leaving notches in the traced edges.
+    names = list(COLORS)
+    labels = Image.new("L", big.size, 0)
+    lpx = labels.load()
     for y in range(h):
         for x in range(w):
             r, g, b, a = px[x, y]
             if a < 128 or (r > 225 and g > 225 and b > 225):
                 continue  # background and the white gaps between pieces
-            name = min(
-                COLORS,
+            nearest = min(
+                names,
                 key=lambda n: sum((c - v) ** 2 for c, v in zip(COLORS[n][0], (r, g, b))),
             )
-            mpx[name][x, y] = 0
+            lpx[x, y] = names.index(nearest) + 1
+    labels = labels.filter(ImageFilter.ModeFilter(7))
+
+    masks = {
+        name: labels.point(lambda v, i=i: 0 if v == i + 1 else 255).convert("1")
+        for i, name in enumerate(names)
+    }
 
     paths = {}
     with tempfile.TemporaryDirectory() as tmp:

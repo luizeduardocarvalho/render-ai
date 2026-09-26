@@ -1,8 +1,8 @@
 # StudioIA
 
-Local proof of concept: turn SketchUp screenshots into photorealistic architectural
-photographs, placing specific real products into user-masked regions, using Google's
-Gemini 3 image models (Nano Banana Pro / Nano Banana 2) through **Vertex AI**.
+Turn SketchUp screenshots into photorealistic architectural photographs, placing
+specific real products into user-masked regions, using Google's Gemini 3 image
+models (Nano Banana Pro / Nano Banana 2) through **Vertex AI**.
 
 Projects are **persisted per user**: the deployed backend stores structured data in
 Firestore and image blobs (screenshots, masks, renders) in a Google Cloud Storage

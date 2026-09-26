@@ -59,8 +59,9 @@ Contrast rules (WCAG AA, checked):
 400 and bold 700, default letter spacing as the manual requires. It covers
 Portuguese; it has no arrow glyphs, so arrows are drawn (the compare grip).
 
-- Wordmark: "Studio" regular + "IA" bold, like "Studio" + "3D" in the logo.
-  Always set as live text next to the inline symbol.
+- Wordmark: matched to the logo - "Studio" regular, tracked +0.06em, a small
+  gap, then "IA" bold with a thin stroke (the logo's "3D" is heavier than the
+  stock bold), tracked -0.04em. Always live text next to the inline symbol.
 - Headings: regular weight, large (hero `clamp(40px, 5vw, 64px)`, sections
   `clamp(30px, 3.6vw, 44px)`); one key word may go bold, echoing the wordmark.
 - Labels: 13px uppercase, +0.08em.
@@ -69,17 +70,21 @@ Portuguese; it has no arrow glyphs, so arrows are drawn (the compare grip).
 ## Composition
 
 - **Wrap:** centered, `max-width 1200px`, gutter `clamp(16px, 5vw, 64px)`.
-- **Header:** sticky, translucent white, symbol + wordmark left, nav and a
-  small primary button right.
+- **Header:** sticky, translucent white, symbol + wordmark left; nav, the
+  language switch (EN/PT pill), the light/dark button and a small primary
+  button right.
 - **Hero:** headline, lede, two buttons, and three facts (label over value,
-  a brand-color tick above each) beside the before/after figure.
+  a brand-color tick above each) beside the before/after figure. The hero and
+  the texture band under it fill the first screen, so the next section starts
+  at the fold.
 - **Texture band:** full-bleed full-color texture between the hero and the
   first dark band, as on the manual's cover.
 - **Capabilities:** dark band, three columns, a brand-color 3px rule over each.
 - **How it works:** white, four numbered steps, numbers in the brand colors.
 - **Contact:** dark band; about text with a fact list, and the form with white
   fields, as in the manual's site mockup.
-- **Footer:** the tint texture as a thin strip, then the small print.
+- **Footer:** the full-color texture repeated small (180px tile, two rows,
+  18px) as a strip, then the small print.
 
 ## Symbol, watermark, texture
 
@@ -91,15 +96,22 @@ Portuguese; it has no arrow glyphs, so arrows are drawn (the compare grip).
   opacity in its bottom-right corner (manual rule). Image tags go top.
 - Never place the full logo on a solid color block, around an image's edges, or
   as the identification inside an image (manual's incorrect uses).
-- Texture: `texture.svg` (full color) for bands; `texture-tint.svg` for quiet
-  strips on light grounds. On dark grounds the tint would glare, so the strip
-  uses the full-color texture at 35% opacity.
+- Texture: `texture.svg` (full color) for the band and the footer strip;
+  `texture-tint.svg` for quiet backgrounds on light grounds only (on dark it
+  would glare).
 
 ## Shape and depth
 
 Rounded, echoing the symbol's pieces: buttons and tags are pills, the figure
 has 20px corners, form fields 12px. No decorative shadows, except the compare
 grip, which needs to read over any image.
+
+## Theme and language
+
+Colors are `light-dark()` tokens: the page follows the system, and the header
+button forces a theme by setting `data-theme` on `<html>` (saved in
+`localStorage`, applied before first paint). The page ships in English and
+Portuguese from one template (`scripts/landing/`); D-DIN covers Portuguese.
 
 ## Motion
 

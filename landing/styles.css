@@ -30,32 +30,45 @@
   --brand-red: #a53b3f;
   --brand-navy: #263e5a;
 
-  --bg: #ffffff;
-  --ink: #2a2929;
-  --ink-2: #5b5858;
-  --ink-3: #6e6a68;
-  --rule: #dadada;
+  /* Theme: every color token is light-dark(light, dark). The page follows the
+     system; the header toggle forces one by setting data-theme on <html>,
+     which only switches color-scheme (below). */
+  --bg: light-dark(#ffffff, #1e1d1d);
+  --ink: light-dark(#2a2929, #f3f1f0);
+  --ink-2: light-dark(#5b5858, #c9c5c3);
+  --ink-3: light-dark(#6e6a68, #a8a3a0);
+  --rule: light-dark(#dadada, #3a3838);
+  /* Brand orange is 3.9:1 on the dark ground - still fine for large headings. */
   --heading-accent: var(--brand-orange);
-  --link: var(--brand-teal);
-  --focus: var(--brand-teal);
+  --link: light-dark(var(--brand-teal), #7cc4bd);
+  --focus: light-dark(var(--brand-teal), #7cc4bd);
 
-  /* Dark bands (services, contact) */
+  /* Brand colors where they carry meaning on the page ground: teal, navy and
+     red are lifted in dark mode to stay legible. */
+  --accent-teal: light-dark(var(--brand-teal), #4fa39c);
+  --accent-navy: light-dark(var(--brand-navy), #6f93bd);
+  --accent-red: light-dark(var(--brand-red), #d0676b);
+
+  /* Dark bands (services, contact) - the same in both themes */
   --band: #2a2929;
   --band-ink: #ffffff;
   --band-ink-2: #cfcbc9;
   --band-rule: #4a4747;
 
-  --btn-bg: var(--brand-black);
-  --btn-ink: #ffffff;
-  --btn-bg-hover: #444141;
+  --btn-bg: light-dark(var(--brand-black), #f3f1f0);
+  --btn-ink: light-dark(#ffffff, #2a2929);
+  --btn-bg-hover: light-dark(#444141, #ffffff);
 
-  /* Symbol pieces (inline <symbol>); dark mode swaps the black piece. */
-  --sym-black: var(--brand-black);
+  /* Symbol pieces (inline <symbol>). Manual's dark-ground signature: the
+     black piece turns light. */
+  --sym-black: light-dark(var(--brand-black), #f3f1f0);
 
   --font: "D-DIN", "DIN Alternate", "Bahnschrift", "Roboto Condensed", Arial, sans-serif;
 
   --wrap-max: 1200px;
   --gutter: clamp(16px, 5vw, 64px);
+  --header-h: 69px; /* 68px row + 1px border */
+  --band-h: clamp(56px, 7vw, 96px);
 
   color-scheme: light dark;
   font-family: var(--font);
@@ -67,27 +80,12 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1e1d1d;
-    --ink: #f3f1f0;
-    --ink-2: #c9c5c3;
-    --ink-3: #a8a3a0;
-    --rule: #3a3838;
-    /* Brand orange is 3.9:1 on this ground - still fine for large headings. */
-    --link: #7cc4bd;
-    --focus: #7cc4bd;
+:root[data-theme="light"] {
+  color-scheme: light;
+}
 
-    --band: #2a2929;
-    --band-rule: #4a4747;
-
-    --btn-bg: #f3f1f0;
-    --btn-ink: #2a2929;
-    --btn-bg-hover: #ffffff;
-
-    /* Manual's dark-ground signature: the black piece turns light. */
-    --sym-black: #f3f1f0;
-  }
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 * {
@@ -96,7 +94,7 @@
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 84px;
+  scroll-padding-top: var(--header-h);
 }
 
 body {
@@ -212,8 +210,12 @@ svg {
 .header-row {
   display: flex;
   align-items: center;
-  gap: 32px;
-  height: 68px;
+  gap: 12px;
+  height: calc(var(--header-h) - 1px);
+}
+
+.header-row .brand {
+  margin-right: 20px;
 }
 
 .brand {
@@ -230,21 +232,28 @@ svg {
   flex: none;
 }
 
-/* Wordmark: "Studio" regular + "IA" bold, D-DIN, default spacing (manual). */
+/* Wordmark, matched to the Studio3D logo: D-DIN "Studio" tracked out, a small
+   gap, then the second word in a heavier, tightly set bold (D-DIN Bold plus a
+   thin stroke, as the logo's "3D" is heavier than the stock bold). */
 .brand-name {
   font-size: 25px;
   font-weight: 400;
   line-height: 1;
+  letter-spacing: 0.06em;
 }
 
 .brand-name b {
   font-weight: 700;
+  letter-spacing: -0.04em;
+  margin-left: 0.1em;
+  -webkit-text-stroke: 0.035em currentColor;
 }
 
 .site-nav {
   display: flex;
   gap: 28px;
   margin-left: auto;
+  margin-right: 16px;
 }
 
 .site-nav a {
@@ -261,17 +270,83 @@ svg {
   border-bottom-color: var(--brand-orange);
 }
 
+/* Language switch: the other language's short code, as a pill. */
+.lang-switch {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.lang-switch:hover {
+  border-color: var(--ink);
+}
+
+/* Light/dark toggle: shows the icon of the theme it switches to. */
+.theme-toggle {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--ink);
+}
+
+.theme-toggle[hidden] {
+  display: none;
+}
+
+.theme-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.theme-toggle[data-target="light"] .theme-icon-moon,
+.theme-toggle[data-target="dark"] .theme-icon-sun {
+  display: none;
+}
+
 /* ---------------------------------------------------------------------- */
 /* Hero                                                                   */
 /* ---------------------------------------------------------------------- */
 
+/* The hero and the texture band under it fill the first screen exactly
+   (header excluded), so the next section starts at the fold. */
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   gap: clamp(32px, 5vw, 72px);
   align-items: center;
-  padding-top: clamp(40px, 7vw, 96px);
-  padding-bottom: clamp(48px, 7vw, 96px);
+  align-content: center;
+  min-height: calc(100vh - var(--header-h) - var(--band-h));
+  min-height: calc(100svh - var(--header-h) - var(--band-h));
+  padding-top: clamp(32px, 5vw, 64px);
+  padding-bottom: clamp(32px, 5vw, 64px);
 }
 
 .hero-title {
@@ -315,11 +390,11 @@ svg {
 }
 
 .fact:nth-child(2) {
-  --tick: var(--brand-teal);
+  --tick: var(--accent-teal);
 }
 
 .fact:nth-child(3) {
-  --tick: var(--brand-navy);
+  --tick: var(--accent-navy);
 }
 
 .fact dt {
@@ -461,21 +536,16 @@ figcaption {
 /* ---------------------------------------------------------------------- */
 
 .texture-band {
-  height: clamp(56px, 7vw, 96px);
+  height: var(--band-h);
   background: url("./texture.svg") center / cover no-repeat;
 }
 
+/* Footer separator: the full-color texture repeated at a small scale, so
+   each piece reads as a small tile (about 20px long). 18px is exactly two
+   rows of the weave at this scale, so no row is cut through. */
 .texture-strip {
-  height: 28px;
-  background: url("./texture-tint.svg") center / cover no-repeat;
-}
-
-@media (prefers-color-scheme: dark) {
-  /* The tint texture is near-white; on a dark ground it would glare. */
-  .texture-strip {
-    background-image: url("./texture.svg");
-    opacity: 0.35;
-  }
+  height: 18px;
+  background: url("./texture.svg") left top / 180px auto repeat-x;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -576,31 +646,15 @@ figcaption {
 }
 
 .step:nth-child(2) {
-  --num: var(--brand-teal);
+  --num: var(--accent-teal);
 }
 
 .step:nth-child(3) {
-  --num: var(--brand-navy);
+  --num: var(--accent-navy);
 }
 
 .step:nth-child(4) {
-  --num: var(--brand-red);
-}
-
-@media (prefers-color-scheme: dark) {
-  .fact:nth-child(3) {
-    --tick: #6f93bd;
-  }
-  /* Navy and teal numbers need lifting to stay legible on the dark ground. */
-  .step:nth-child(2) {
-    --num: #4fa39c;
-  }
-  .step:nth-child(3) {
-    --num: #6f93bd;
-  }
-  .step:nth-child(4) {
-    --num: #d0676b;
-  }
+  --num: var(--accent-red);
 }
 
 .step h3 {
@@ -824,7 +878,52 @@ figcaption {
   .site-nav {
     display: none;
   }
-  .header-cta {
+
+  /* Phone hero: copy, full-width actions and facts fill the first screen with
+     the texture band; the draggable figure is left out (a drag competes with
+     scrolling, and at this size it proves little). */
+  .figure {
+    display: none;
+  }
+  .hero {
+    gap: 0;
+    padding-top: 28px;
+    padding-bottom: 28px;
+  }
+  .hero-title {
+    font-size: clamp(36px, 10.5vw, 46px);
+  }
+  .lede {
+    margin-top: 18px;
+    font-size: 18px;
+  }
+  .hero-actions {
+    flex-direction: column;
+    margin-top: 26px;
+  }
+  .hero-actions .btn {
+    width: 100%;
+    min-height: 50px;
+  }
+  .facts:not(.facts-on-dark) {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 28px;
+  }
+  .facts:not(.facts-on-dark) .fact {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    border-top: 0;
+    border-left: 3px solid var(--tick, var(--brand-orange));
+    padding: 2px 0 2px 12px;
+  }
+  .facts:not(.facts-on-dark) .fact dd {
+    margin: 0;
+    text-align: right;
+  }
+  .lang-switch {
     margin-left: auto;
   }
   .contact-grid {
@@ -836,8 +935,10 @@ figcaption {
   :root {
     font-size: 16px;
   }
-  .facts:not(.facts-on-dark) {
-    grid-template-columns: 1fr 1fr;
+  /* The hero's own "Request access" is right below; the header keeps the
+     brand and the language/theme controls. */
+  .header-cta {
+    display: none;
   }
   .capabilities {
     grid-template-columns: 1fr;

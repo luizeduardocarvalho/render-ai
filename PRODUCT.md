@@ -41,7 +41,7 @@ preset, light direction, material notes, extra instructions) -> render (choose
 model + resolution, 1-4 variations) -> optionally set a result as the style
 anchor and repeat for other views. Tools and artifacts in the user's world:
 SketchUp, product/spec sheets and reference photos, material sample boards,
-mask/region editing. The app is a proof of concept deployed on Firebase Hosting
+mask/region editing. The app is deployed on Firebase Hosting
 and Cloud Run (locally: frontend on localhost:5173, Go backend on :8080); the
 landing page is a separate marketing surface.
 
@@ -77,7 +77,7 @@ landing page is a separate marketing surface.
 - Real product facts, model IDs, pipeline, and workflow: `README.md`,
   `API_CONTRACT.md`, `backend/`, `frontend/`.
 - No real customers, testimonials, pricing, benchmarks, or case studies exist
-  yet - future work must not fabricate them. It is a proof of concept.
+  yet - future work must not fabricate them.
 - No real before/after render screenshots are available in-repo yet; the landing
   page currently uses a schematic SVG illustration as a labeled stand-in.
 
@@ -87,4 +87,4 @@ landing page is a separate marketing surface.
 - Preserve the architect's geometry; drift is measured and reported, not hidden.
 - Fast, single-call renders with visible cost/metrics - no black-box pipeline.
 - Private by design; a user's projects are never shown to anyone else.
-- Honest proof over hype - it is a working PoC, claims stay truthful.
+- Honest proof over hype - claims stay truthful.

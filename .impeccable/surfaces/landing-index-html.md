@@ -29,15 +29,19 @@ sees it demonstrated in the hero figure, believes it because the geometry is
 preserved and the products are real, and acts by requesting access (or reading
 how it works).
 
-FIRST VIEWPORT: Sticky header - symbol + "StudioIA" wordmark left, nav and a
-small "Request access" pill right. Hero: headline "Turn a 3D model screenshot
-into a photograph." (regular, "photograph" bold), a lede, "Request access" and
-"See how it works", three facts with colored ticks (Output up to 4K / Placement
-product-accurate / Access private per account); the before/after figure right.
-The full-color texture band follows the hero.
+FIRST VIEWPORT: Sticky header - symbol + "StudioIA" wordmark left; nav, the
+EN/PT language switch, the light/dark button and a small "Request access" pill
+right. The hero plus the texture band fill the first screen. Hero: headline
+"Turn a 3D model screenshot into a photograph." (regular, "photograph" bold), a
+lede, "Request access" and "See how it works", three facts with colored ticks
+(Output up to 4K / Placement product-accurate / Access private per account); the
+before/after figure right. The full-color texture band follows the hero.
 
-COPY: Do not name SketchUp on this page (other pages may). Do not claim local
-or in-memory processing - projects are stored in the cloud, private per account.
+COPY: The page ships in English and Portuguese from one template
+(scripts/landing/); change text in both strings files. It is a product, not a
+proof of concept. Do not name SketchUp on this page (other pages may). Do not
+claim local or in-memory processing - projects are stored in the cloud, private
+per account.
 
 FINISH: unreviewed and undocumented is unfinished; changes end with a desktop,
 mobile, light and dark check, DESIGN.md kept current, and regenerated brand

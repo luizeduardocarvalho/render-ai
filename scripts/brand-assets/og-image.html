@@ -12,8 +12,8 @@
   .card { position: absolute; inset: 0 0 96px; padding: 52px 64px 0; display: grid; grid-template-columns: 1fr 470px; column-gap: 56px; grid-template-rows: auto 1fr; }
   .brand { grid-column: 1 / 3; display: flex; align-items: center; gap: 14px; }
   .brand svg { width: 44px; height: 45px; }
-  .brand span { font-size: 38px; line-height: 1; }
-  .brand b { font-weight: 700; }
+  .brand span { font-size: 38px; line-height: 1; letter-spacing: 0.06em; }
+  .brand b { font-weight: 700; letter-spacing: -0.04em; margin-left: 0.1em; -webkit-text-stroke: 0.035em currentColor; }
   h1 { align-self: center; font-size: 66px; font-weight: 400; line-height: 1.04; letter-spacing: -0.01em; }
   h1 strong { font-weight: 700; }
   .compare { align-self: center; position: relative; width: 470px; height: 352px; border-radius: 22px; overflow: hidden; box-shadow: inset 0 0 0 1px #dadada; }
@@ -39,7 +39,7 @@
     <!-- brand-symbol:end -->
   <div class="card">
     <div class="brand"><svg aria-hidden="true"><use href="#brand-symbol" /></svg><span>Studio<b>IA</b></span></div>
-    <h1>Turn a 3D&nbsp;model screenshot into a <strong>photograph</strong>.</h1>
+    <h1 id="headline">Turn a 3D&nbsp;model screenshot into a <strong>photograph</strong>.</h1>
     <div class="compare">
       <svg viewBox="0 0 480 360" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
                   <defs>
@@ -102,10 +102,27 @@
                   </g>
               </svg></div>
       <div class="handle"></div>
-      <span class="tag" style="left:14px">Photograph</span>
-      <span class="tag" style="right:14px">Model</span>
+      <span class="tag" id="tagPhoto" style="left:14px">Photograph</span>
+      <span class="tag" id="tagModel" style="right:14px">Model</span>
     </div>
   </div>
   <div class="band"></div>
+  <script>
+    // render.sh loads this page with ?lang=pt-BR for the Portuguese card.
+    var T = {
+      "pt-BR": {
+        headline: "Transforme a captura do seu modelo&nbsp;3D em <strong>fotografia</strong>.",
+        tagPhoto: "Fotografia",
+        tagModel: "Modelo",
+      },
+    };
+    var t = T[new URLSearchParams(location.search).get("lang")];
+    if (t) {
+      document.documentElement.lang = "pt-BR";
+      document.getElementById("headline").innerHTML = t.headline;
+      document.getElementById("tagPhoto").textContent = t.tagPhoto;
+      document.getElementById("tagModel").textContent = t.tagModel;
+    }
+  </script>
 </body>
 </html>

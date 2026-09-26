@@ -70,6 +70,10 @@ const submitBtn = document.getElementById("submitBtn");
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+// Status messages come from the form's data-msg-* attributes, so each language
+// version of the page shows its own.
+const msg = (name) => (form && form.dataset[name]) || name;
+
 function setStatus(message, kind) {
   if (!statusEl) return;
   statusEl.textContent = message;
@@ -96,31 +100,28 @@ if (form) {
 
     // Client-side validation (the Firestore rules validate again server-side).
     if (!EMAIL_RE.test(email)) {
-      setStatus("Please enter a valid email address.", "error");
+      setStatus(msg("msgInvalidEmail"), "error");
       form.email.focus();
       return;
     }
     if (message.length < 1) {
-      setStatus("Please add a short message.", "error");
+      setStatus(msg("msgEmpty"), "error");
       form.message.focus();
       return;
     }
     if (message.length > 5000) {
-      setStatus("That message is a bit long - please keep it under 5000 characters.", "error");
+      setStatus(msg("msgTooLong"), "error");
       return;
     }
 
     if (!isConfigured) {
-      setStatus(
-        "The contact form isn't connected yet. Add your Firebase config in contact.js to enable it.",
-        "error"
-      );
+      setStatus(msg("msgNotConnected"), "error");
       return;
     }
 
     submitBtn.disabled = true;
     const originalLabel = submitBtn.textContent;
-    submitBtn.textContent = "Sending...";
+    submitBtn.textContent = msg("msgSending");
     setStatus("");
 
     try {
@@ -131,10 +132,10 @@ if (form) {
         createdAt: serverTimestamp(),
       });
       form.reset();
-      setStatus("Thanks - your message is on its way. We'll be in touch.", "success");
+      setStatus(msg("msgSuccess"), "success");
     } catch (err) {
       console.error("Contact submission failed:", err);
-      setStatus("Something went wrong sending your message. Please try again.", "error");
+      setStatus(msg("msgError"), "error");
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = originalLabel;

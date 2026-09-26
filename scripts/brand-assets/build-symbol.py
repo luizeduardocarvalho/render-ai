@@ -139,8 +139,10 @@ def main():
         "    <!-- brand-symbol:end -->"
     )
     marker = re.compile(r"<!-- brand-symbol:start.*?<!-- brand-symbol:end -->", re.S)
-    sources = Path(__file__).resolve().parent  # og-image.html uses the inline copy too
-    for page in sorted([*landing.glob("**/*.html"), *sources.glob("*.html")]):
+    # Asset sources (og-image.html) and the landing template use the inline copy too.
+    scripts = Path(__file__).resolve().parents[1]
+    extra = [*scripts.glob("brand-assets/*.html"), *scripts.glob("landing/*.html")]
+    for page in sorted([*landing.glob("**/*.html"), *extra]):
         text = page.read_text()
         if marker.search(text):
             page.write_text(marker.sub(lambda _: block, text))

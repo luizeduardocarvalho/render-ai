@@ -10,6 +10,37 @@
     yearEl.textContent = String(new Date().getFullYear());
   }
 
+  // Light/dark toggle. The page follows the system until the visitor picks a
+  // theme here; the choice is saved and applied before paint by the inline
+  // script in <head>. The button shows the theme it switches to.
+  var toggle = document.getElementById("themeToggle");
+  if (toggle) {
+    var root = document.documentElement;
+    var systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+    var current = function () {
+      return root.dataset.theme || (systemDark.matches ? "dark" : "light");
+    };
+    var render = function () {
+      var target = current() === "dark" ? "light" : "dark";
+      // Labels come from the page (translated per language).
+      var label = target === "dark" ? toggle.dataset.labelDark : toggle.dataset.labelLight;
+      toggle.dataset.target = target;
+      toggle.setAttribute("aria-label", label);
+      toggle.title = label;
+    };
+    toggle.addEventListener("click", function () {
+      var next = current() === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try {
+        localStorage.setItem("theme", next);
+      } catch (e) {}
+      render();
+    });
+    systemDark.addEventListener("change", render);
+    render();
+    toggle.hidden = false;
+  }
+
   // Before / after comparison slider.
   // The range input is the single source of truth (keyboard + pointer
   // accessible); we mirror its value into a CSS custom property that drives

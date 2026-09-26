@@ -5,8 +5,13 @@ deployed on **Firebase Hosting**, with the contact form writing straight to
 **Cloud Firestore**.
 
 ```
+scripts/landing/
+  index.html   the page template ({{key}} placeholders)
+  strings/     en.json, pt-BR.json - the page text per language
+  build.py     writes landing/index.html (/) and landing/pt-br/index.html (/pt-br)
 landing/
-  index.html   hero, capabilities, how it works, contact form, footer
+  index.html, pt-br/index.html
+               generated from the template - don't edit by hand
   styles.css   Studio3D identity tokens + layout (light/dark) - see DESIGN.md
   ui.js        before/after slider, footer year
   contact.js   Firebase init + Firestore write for the contact form (SDK lazy-loaded)
@@ -30,13 +35,30 @@ The page is fully self-contained and follows Studio3D's visual identity
 (`brand/studio3d/README.md`), applied as described in `DESIGN.md`, including
 dark mode.
 
+## Editing the page
+
+The page exists in English (`/`) and Portuguese (`/pt-br`), built from one
+template so the two cannot drift apart. Edit `scripts/landing/index.html` for
+structure and `scripts/landing/strings/*.json` for text (every language must
+have the same keys - the build fails otherwise), then run:
+
+```bash
+python3 scripts/landing/build.py
+```
+
+and commit the regenerated pages. The header's language switch links the two
+versions; `hreflang` alternates are in each page's `<head>` and in
+`sitemap.xml`. The light/dark button saves the visitor's choice in
+`localStorage`; without a choice the page follows the system setting.
+
 ## Brand assets
 
 The brand only exists as raster files, so the page's vectors are rebuilt from
 them. After changing the mark or the texture source, run in order:
 
 ```bash
-python3 scripts/brand-assets/build-symbol.py
+python3 scripts/brand-assets/build-symbol.py   # also syncs the symbol into the template
+python3 scripts/landing/build.py
 nix shell nixpkgs#potrace -c python3 scripts/brand-assets/build-texture.py   # or any potrace on PATH
 ./scripts/brand-assets/render.sh
 ```
