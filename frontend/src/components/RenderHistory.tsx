@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { Render, View } from "../types";
 import { useProject } from "../state/ProjectContext";
+import { BrandSymbol } from "./BrandMark";
 
 // One row of the history table: a render, and how deeply it is nested under
 // the render it was edited or upscaled from.
@@ -53,6 +54,7 @@ export function RenderHistory({ view, selectedRenderId, onSelect }: RenderHistor
         </div>
         <div className="panel-body">
           <div className="empty-state">
+            <BrandSymbol oneColor className="empty-state-mark" />
             <strong>{t("renderHistory.empty.title")}</strong>
             <span>{t("renderHistory.empty.body")}</span>
           </div>

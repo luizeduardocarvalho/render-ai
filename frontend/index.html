@@ -6,8 +6,15 @@
     <title>StudioIA</title>
     <!-- The app sits behind sign-in; only the landing site should be indexed. -->
     <meta name="robots" content="noindex" />
-    <link rel="icon" href="/favicon.ico" sizes="48x48" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico?v=2" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
+    <!-- Apply a saved theme choice before first paint (no flash). -->
+    <script>
+      try {
+        var theme = localStorage.getItem("theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

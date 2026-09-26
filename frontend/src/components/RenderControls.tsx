@@ -228,6 +228,8 @@ export function RenderControls({ view, onRendered }: RenderControlsProps) {
               count: variations,
               cost: brlFormatter.format(estimatedTotalBrl),
               credits: estimatedTotalCredits !== undefined ? formatCredits(estimatedTotalCredits, i18n.language) : "",
+              // Pluralized by the credit amount, not by the variation count.
+              creditsUnit: t("renderControls.creditsUnit", { count: estimatedTotalCredits ?? 0 }),
             })}
           </div>
         )}

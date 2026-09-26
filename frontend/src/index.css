@@ -1,53 +1,105 @@
 /* ---------------------------------------------------------------------- */
+/* Fonts - D-DIN, same family as the landing page and the Studio3D manual  */
+/* ---------------------------------------------------------------------- */
+
+@font-face {
+  font-family: "D-DIN";
+  src: url("./assets/fonts/d-din-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "D-DIN";
+  src: url("./assets/fonts/d-din-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------------------------------------------------------------------- */
 /* Design tokens                                                          */
 /* ---------------------------------------------------------------------- */
 
 :root {
-  --gray-0: #ffffff;
-  --gray-50: #f7f7f8;
-  --gray-100: #eeeef1;
-  --gray-150: #e6e6ea;
-  --gray-200: #dcdde2;
-  --gray-300: #c3c4cc;
-  --gray-400: #9799a3;
-  --gray-500: #71737e;
-  --gray-600: #52545e;
-  --gray-700: #3a3b43;
-  --gray-800: #26272d;
-  --gray-900: #17181c;
+  /* Brand constants (Studio3D manual). Never recolor the symbol or wordmark. */
+  --brand-black: #2a2929;
+  --brand-orange: #c25939;
+  --brand-teal: #18726e;
+  --brand-red: #a53b3f;
+  --brand-navy: #263e5a;
 
-  --accent: #4338ca;
-  --accent-hover: #362cae;
-  --accent-active: #2d2591;
-  --accent-soft: rgba(67, 56, 202, 0.08);
-  --accent-soft-strong: rgba(67, 56, 202, 0.14);
-  --accent-border: rgba(67, 56, 202, 0.35);
-  --accent-contrast: #ffffff;
+  /* Warm neutrals - every color token is light-dark(light, dark). A
+     data-theme attribute on <html> forces one (see the theme toggle); with
+     no saved choice the app follows the system, via color-scheme below. */
+  --gray-0: light-dark(#ffffff, #333131);
+  --gray-50: light-dark(#f6f5f4, #262525);
+  --gray-100: light-dark(#efedeb, #2e2c2c);
+  --gray-150: light-dark(#e8e5e3, #363434);
+  --gray-200: light-dark(#e4e1df, #3a3838);
+  --gray-300: light-dark(#c9c5c2, #4f4c4b);
+  --gray-400: light-dark(#a8a3a0, #6e6a68);
+  --gray-500: light-dark(#847f7c, #918c89);
+  --gray-600: light-dark(#6e6a68, #a8a3a0);
+  --gray-700: light-dark(#5b5858, #c9c5c3);
+  --gray-800: light-dark(#3a3737, #e4e1df);
+  --gray-900: light-dark(#2a2929, #f3f1f0);
 
-  --danger: #d6293e;
-  --danger-hover: #b91f32;
-  --danger-soft: rgba(214, 41, 62, 0.08);
-  --success: #14804a;
-  --success-soft: rgba(20, 128, 74, 0.1);
-  --warning: #b5690a;
-  --warning-soft: rgba(181, 105, 10, 0.1);
-
-  --bg: var(--gray-50);
-  --surface: var(--gray-0);
-  --surface-raised: var(--gray-0);
-  --border: var(--gray-150);
-  --border-strong: var(--gray-300);
-  --text: var(--gray-800);
-  --text-muted: var(--gray-500);
-  --text-faint: var(--gray-400);
+  --bg: light-dark(#f6f5f4, #1e1d1d);
+  --surface: light-dark(#ffffff, #2a2929);
+  --surface-raised: light-dark(#ffffff, #333131);
+  --border: light-dark(#e4e1df, #3a3838);
+  --border-strong: light-dark(#c9c5c2, #4f4c4b);
+  --text: light-dark(#2a2929, #f3f1f0);
+  --text-muted: light-dark(#5b5858, #c9c5c3);
+  --text-faint: light-dark(#6e6a68, #a8a3a0);
   --text-on-accent: var(--accent-contrast);
 
-  --shadow-sm: 0 1px 2px rgba(15, 15, 20, 0.06);
-  --shadow-md: 0 4px 12px rgba(15, 15, 20, 0.08), 0 1px 3px rgba(15, 15, 20, 0.06);
-  --shadow-lg: 0 12px 32px rgba(15, 15, 20, 0.14), 0 2px 8px rgba(15, 15, 20, 0.08);
+  /* Signal colors: teal is the app's accent (selection, active, focus - never
+     the main call to action, which is brand black). */
+  --accent: light-dark(#18726e, #5fb3ac);
+  --accent-hover: light-dark(#135f5b, #74c2bb);
+  --accent-active: light-dark(#0f4f4c, #4fa39c);
+  --accent-contrast: light-dark(#ffffff, #1e1d1d);
+  --accent-soft: light-dark(rgba(24, 114, 110, 0.08), rgba(95, 179, 172, 0.14));
+  --accent-soft-strong: light-dark(rgba(24, 114, 110, 0.14), rgba(95, 179, 172, 0.22));
+  --accent-border: light-dark(rgba(24, 114, 110, 0.35), rgba(95, 179, 172, 0.4));
+
+  --danger: light-dark(#a53b3f, #e07a7e);
+  --danger-hover: light-dark(#8a3134, #e8969a);
+  --danger-soft: light-dark(rgba(165, 59, 63, 0.08), rgba(224, 122, 126, 0.14));
+  --success: light-dark(#2f6b4f, #6cbb92);
+  --success-soft: light-dark(rgba(47, 107, 79, 0.1), rgba(108, 187, 146, 0.14));
+  --warning: light-dark(#9a4a2e, #e39a7e);
+  --warning-soft: light-dark(rgba(154, 74, 46, 0.1), rgba(227, 154, 126, 0.14));
+
+  /* Primary buttons are brand black, not the accent - exactly like the
+     landing page. The accent is reserved for selected/active/focus. */
+  --btn-primary-bg: light-dark(#2a2929, #f3f1f0);
+  --btn-primary-ink: light-dark(#ffffff, #2a2929);
+  --btn-primary-hover: light-dark(#444141, #ffffff);
+
+  /* Brand symbol pieces (BrandMark). Manual's dark-ground signature: the
+     black piece turns light; the colored pieces keep their manual colors. */
+  --sym-black: light-dark(#2a2929, #f3f1f0);
+  --sym-orange: #c25939;
+  --sym-teal: #18726e;
+  --sym-red: #a53b3f;
+  --sym-navy: #263e5a;
+
+  /* light-dark() only takes colors, so the shadow colors switch and the
+     shadow shapes stay the same in both themes. */
+  --shadow-soft: light-dark(rgba(42, 41, 41, 0.08), rgba(0, 0, 0, 0.3));
+  --shadow-mid: light-dark(rgba(42, 41, 41, 0.1), rgba(0, 0, 0, 0.35));
+  --shadow-deep: light-dark(rgba(42, 41, 41, 0.16), rgba(0, 0, 0, 0.5));
+  --shadow-sm: 0 1px 2px var(--shadow-soft);
+  --shadow-md: 0 4px 12px var(--shadow-mid), 0 1px 3px var(--shadow-soft);
+  --shadow-lg: 0 14px 36px var(--shadow-deep), 0 2px 8px var(--shadow-soft);
 
   --radius-sm: 6px;
   --radius-md: 10px;
+  --radius-input: 12px;
   --radius-lg: 16px;
   --radius-full: 999px;
 
@@ -59,13 +111,12 @@
   --space-6: 28px;
   --space-7: 40px;
 
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial,
-    sans-serif;
+  --sans: "D-DIN", "DIN Alternate", "Bahnschrift", "Roboto Condensed", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
 
   color-scheme: light dark;
   font-family: var(--sans);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.5;
   color: var(--text);
   background: var(--bg);
@@ -74,41 +125,12 @@
   text-rendering: optimizeLegibility;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --gray-0: #1c1d22;
-    --gray-50: #17181c;
-    --gray-100: #202127;
-    --gray-150: #26272e;
-    --gray-200: #2e2f37;
-    --gray-300: #3d3f49;
-    --gray-400: #5c5e69;
-    --gray-500: #85868f;
-    --gray-600: #a5a6ae;
-    --gray-700: #c6c7cd;
-    --gray-800: #e5e5e9;
-    --gray-900: #f6f6f8;
+:root[data-theme="light"] {
+  color-scheme: light;
+}
 
-    --accent: #8b7ef0;
-    --accent-hover: #a094f5;
-    --accent-active: #786adf;
-    --accent-soft: rgba(139, 126, 240, 0.14);
-    --accent-soft-strong: rgba(139, 126, 240, 0.22);
-    --accent-border: rgba(139, 126, 240, 0.4);
-    --accent-contrast: #17181c;
-
-    --danger: #f0596b;
-    --danger-hover: #f37886;
-    --danger-soft: rgba(240, 89, 107, 0.14);
-    --success: #3fc37f;
-    --success-soft: rgba(63, 195, 127, 0.14);
-    --warning: #e0a545;
-    --warning-soft: rgba(224, 165, 69, 0.14);
-
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.3);
-    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
-  }
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 * {
@@ -130,7 +152,7 @@ h2,
 h3,
 h4 {
   margin: 0;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text);
   letter-spacing: -0.01em;
 }
@@ -148,7 +170,8 @@ textarea {
 }
 
 ::selection {
-  background: var(--accent-soft-strong);
+  background: var(--brand-teal);
+  color: #ffffff;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -169,14 +192,15 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  height: 32px;
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-sm);
+  height: 38px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-full);
   border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--text);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
   cursor: pointer;
   transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease,
     opacity 0.12s ease;
@@ -193,23 +217,23 @@ textarea {
 }
 
 .btn:focus-visible {
-  outline: 2px solid var(--accent-border);
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--text-on-accent);
+  background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
+  color: var(--btn-primary-ink);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--btn-primary-hover);
+  border-color: var(--btn-primary-hover);
 }
 
 .btn-primary:active:not(:disabled) {
-  background: var(--accent-active);
+  background: var(--btn-primary-hover);
 }
 
 .btn-danger {
@@ -225,7 +249,7 @@ textarea {
 .btn-danger-solid {
   background: var(--danger);
   border-color: var(--danger);
-  color: var(--text-on-accent);
+  color: #ffffff;
 }
 
 .btn-danger-solid:hover:not(:disabled) {
@@ -245,15 +269,16 @@ textarea {
 }
 
 .btn-sm {
-  height: 26px;
-  padding: 0 var(--space-2);
-  font-size: 12px;
+  height: 32px;
+  padding: 0 var(--space-3);
+  font-size: 13px;
 }
 
 .btn-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
+  border-radius: var(--radius-full);
 }
 
 .btn-block {
@@ -271,15 +296,15 @@ textarea {
 }
 
 .field-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-faint);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
 }
 
 .field-hint {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-faint);
 }
 
@@ -290,25 +315,24 @@ textarea {
   border: 1px solid var(--border-strong);
   background: var(--surface);
   color: var(--text);
-  border-radius: var(--radius-sm);
-  padding: 6px var(--space-3);
-  font-size: 13px;
+  border-radius: var(--radius-input);
+  padding: 7px var(--space-3);
+  font-size: 14px;
+  font-family: var(--sans);
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .textarea {
   resize: vertical;
   line-height: 1.5;
-  font-family: var(--mono);
-  font-size: 12.5px;
 }
 
 .input:focus,
 .select:focus,
 .textarea:focus {
-  outline: none;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .input::placeholder,
@@ -337,7 +361,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
   user-select: none;
 }
@@ -356,7 +380,6 @@ textarea {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
 }
 
 .panel-header {
@@ -368,13 +391,13 @@ textarea {
 }
 
 .panel-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
   color: var(--text);
 }
 
 .panel-subtitle {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-faint);
   margin-top: 2px;
 }
@@ -396,8 +419,8 @@ textarea {
   gap: var(--space-1);
   padding: 2px var(--space-2);
   border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
   letter-spacing: 0.02em;
   background: var(--gray-100);
   color: var(--text-muted);
@@ -434,13 +457,20 @@ textarea {
   color: var(--text-faint);
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);
-  font-size: 13px;
+  font-size: 14px;
+}
+
+.empty-state-mark {
+  width: 32px;
+  height: 33px;
+  color: var(--text-faint);
+  opacity: 0.7;
 }
 
 .empty-state strong {
   color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .error-banner {
@@ -451,7 +481,7 @@ textarea {
   border-radius: var(--radius-md);
   background: var(--danger-soft);
   color: var(--danger);
-  font-size: 13px;
+  font-size: 14px;
   border: 1px solid transparent;
   line-height: 1.5;
 }

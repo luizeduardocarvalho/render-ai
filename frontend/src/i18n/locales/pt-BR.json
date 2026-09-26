@@ -192,8 +192,10 @@
     "renderButton_other": "Gerar renderização ({{count}} variações)",
     "rendering": "Renderizando... isso pode levar até um minuto",
     "renderingProgress": "Renderizando... {{done}} de {{count}} concluídas",
-    "costPreview_one": "≈ {{cost}} ({{credits}} créditos)",
-    "costPreview_other": "≈ {{cost}} para {{count}} variações ({{credits}} créditos)",
+    "creditsUnit_one": "crédito",
+    "creditsUnit_other": "créditos",
+    "costPreview_one": "≈ {{cost}} ({{credits}} {{creditsUnit}})",
+    "costPreview_other": "≈ {{cost}} para {{count}} variações ({{credits}} {{creditsUnit}})",
     "error": "Falha na renderização. Tente novamente.",
     "insufficientCredits": "Créditos insuficientes ({{available}} disponíveis, {{required}} necessários). Peça a um administrador para recarregar seu saldo.",
     "insufficientCreditsError": "Falha na renderização: créditos insuficientes. Peça a um administrador para recarregar seu saldo."
@@ -487,5 +489,9 @@
       "prompt": "Receba um aviso quando um render terminar e esta aba estiver em segundo plano.",
       "enable": "Ativar"
     }
+  },
+  "theme": {
+    "toDark": "Mudar para o modo escuro",
+    "toLight": "Mudar para o modo claro"
   }
 }

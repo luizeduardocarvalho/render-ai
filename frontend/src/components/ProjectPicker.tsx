@@ -7,11 +7,13 @@ import { useRelativeTime } from "../hooks/useRelativeTime";
 import { useSignedImageUrl } from "../hooks/useSignedImageUrl";
 import { useProject } from "../state/ProjectContext";
 import type { ProjectSummary } from "../types";
+import { BrandMark } from "./BrandMark";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CreditsChip } from "./CreditsChip";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { NotificationsBell } from "./NotificationsBell";
 import { LibraryPanel } from "./LibraryPanel";
+import { ThemeToggle } from "./ThemeToggle";
 import "./ProjectPicker.css";
 
 type PickerTab = "projects" | "library";
@@ -96,7 +98,7 @@ export function ProjectPicker() {
   return (
     <div className="picker-screen">
       <header className="picker-topbar">
-        <div className="app-brand">{t("app.brand")}</div>
+        <BrandMark />
         <div className="app-topbar-right">
           <NotificationsBell />
           <CreditsChip />
@@ -106,6 +108,7 @@ export function ProjectPicker() {
             </Link>
           )}
           <LanguageSwitcher />
+          <ThemeToggle />
           <UserButton afterSignOutUrl="/sign-in" />
         </div>
       </header>
