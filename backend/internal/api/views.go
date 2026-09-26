@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"render-ai/backend/internal/inventory"
+	"render-ai/backend/internal/store"
 )
 
 // createView takes the screenshot either as a multipart "file" field or, for
@@ -107,26 +109,18 @@ func (s *Server) generateInventory(w http.ResponseWriter, r *http.Request) error
 	pid, vid := r.PathValue("pid"), r.PathValue("vid")
 
 	// Not charged (it's a cheap text-model call), but still gated on having
-	// some balance left - see API_CONTRACT.md's credits section. Skipped
-	// entirely when auth is disabled, like every credit check in this
-	// package.
-	if s.cfg.Auth.ClerkSecretKey != "" {
-		ownerID, err := s.repo.ProjectOwner(pid)
-		if err != nil {
-			return mapStoreErr(err, "project %s not found", pid)
-		}
-		units, err := s.repo.GetCredits(ownerID)
-		if err != nil {
-			return internalErr("checking credits: %v", err)
-		}
-		if units <= 0 {
-			return insufficientCreditsErr()
-		}
+	// some balance left - see API_CONTRACT.md's credits section.
+	if err := s.requireInventoryCredit(pid); err != nil {
+		return err
 	}
 
-	v, err := s.repo.GetView(pid, vid)
+	project, err := s.repo.GetProject(pid)
 	if err != nil {
-		return mapStoreErr(err, "view %s not found", vid)
+		return mapStoreErr(err, "project %s not found", pid)
+	}
+	v := findViewIn(project, vid)
+	if v == nil {
+		return notFoundErr("view %s not found", vid)
 	}
 	if !v.HasScreenshot {
 		return badRequest("view %s has no screenshot", vid)
@@ -134,21 +128,54 @@ func (s *Server) generateInventory(w http.ResponseWriter, r *http.Request) error
 	if s.textModel == nil {
 		return internalErr("text model is not configured (missing Vertex AI credentials)")
 	}
-	blob, ok := s.blobs.GetBlob(v.ScreenshotImageID)
-	if !ok {
-		return internalErr("screenshot blob missing for view %s", vid)
-	}
 
-	text, _, _, err := s.textModel.GenerateInventory(r.Context(), blob.Data, r.URL.Query().Get("lang"))
+	text, err := s.generateAndStoreInventory(r.Context(), project, v, r.URL.Query().Get("lang"))
 	if err != nil {
-		if inventory.IsRateLimited(err) {
-			return rateLimitedErr()
-		}
-		return badGateway("generating inventory: %v", err)
-	}
-	if _, err := s.repo.SetInventory(pid, vid, text); err != nil {
-		return mapStoreErr(err, "view %s not found", vid)
+		return err
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"inventory": text})
 	return nil
+}
+
+// requireInventoryCredit fails with the 402 error when the project owner has
+// no balance left. Skipped entirely when auth is disabled, like every credit
+// check in this package.
+func (s *Server) requireInventoryCredit(pid string) error {
+	if s.cfg.Auth.ClerkSecretKey == "" {
+		return nil
+	}
+	ownerID, err := s.repo.ProjectOwner(pid)
+	if err != nil {
+		return mapStoreErr(err, "project %s not found", pid)
+	}
+	units, err := s.repo.GetCredits(ownerID)
+	if err != nil {
+		return internalErr("checking credits: %v", err)
+	}
+	if units <= 0 {
+		return insufficientCreditsErr()
+	}
+	return nil
+}
+
+// generateAndStoreInventory asks the text model for the view's inventory,
+// folding in the project's material notes so the list and the notes describe
+// each surface the same way, and saves it on the view. The caller has checked
+// that s.textModel is set and the view has a screenshot.
+func (s *Server) generateAndStoreInventory(ctx context.Context, project *store.Project, v *store.View, lang string) (string, error) {
+	blob, ok := s.blobs.GetBlob(v.ScreenshotImageID)
+	if !ok {
+		return "", internalErr("screenshot blob missing for view %s", v.ID)
+	}
+	text, _, _, err := s.textModel.GenerateInventory(ctx, blob.Data, lang, project.Style.MaterialNotes)
+	if err != nil {
+		if inventory.IsRateLimited(err) {
+			return "", rateLimitedErr()
+		}
+		return "", badGateway("generating inventory: %v", err)
+	}
+	if _, err := s.repo.SetInventory(project.ID, v.ID, text); err != nil {
+		return "", mapStoreErr(err, "view %s not found", v.ID)
+	}
+	return text, nil
 }

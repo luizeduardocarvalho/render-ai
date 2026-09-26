@@ -537,8 +537,18 @@ export function deleteMask(pid: string, vid: string, mid: string): Promise<void>
 // variation and returns 202 with a RenderJob immediately, and the caller
 // polls GET .../render-jobs/{jid} until the job reaches a terminal status.
 
-function startRender(pid: string, vid: string, req: RenderRequest): Promise<RenderJob> {
-  return request<RenderJob>(`/api/projects/${pid}/views/${vid}/render`, json(req));
+// The server builds the view's object and material list first when it has none,
+// and writes it in the UI language, so it is passed along.
+function startRender(
+  pid: string,
+  vid: string,
+  req: RenderRequest,
+  language: string,
+): Promise<RenderJob> {
+  return request<RenderJob>(
+    `/api/projects/${pid}/views/${vid}/render?lang=${encodeURIComponent(language)}`,
+    json(req),
+  );
 }
 
 function getRenderJob(pid: string, jid: string): Promise<RenderJob> {
@@ -621,9 +631,10 @@ export async function renderView(
   pid: string,
   vid: string,
   req: RenderRequest,
+  language: string,
   opts?: RenderViewOptions,
 ): Promise<Render[]> {
-  return pollJob(pid, await startRender(pid, vid, req), opts);
+  return pollJob(pid, await startRender(pid, vid, req, language), opts);
 }
 
 /**

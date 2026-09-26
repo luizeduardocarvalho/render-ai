@@ -124,12 +124,37 @@ func (s *Server) startRender(w http.ResponseWriter, r *http.Request) error {
 		return badRequest("view %s has no screenshot", vid)
 	}
 
+	s.ensureInventory(r.Context(), project, view, r.URL.Query().Get("lang"))
+
 	resp, _, err := s.launchRenderJob(r.Context(), project, pid, vid, jobReq)
 	if err != nil {
 		return err
 	}
 	writeJSON(w, http.StatusAccepted, resp)
 	return nil
+}
+
+// ensureInventory builds the view's object and material list when it has none,
+// so a render never goes out without the checklist and the material spec the
+// prompt relies on. It is best effort: a render must not fail because the
+// cheap text call did, so any problem is logged and the render carries on with
+// the placeholder, exactly as it did before this existed. It runs once per
+// job, before the per-variation tasks are queued, so variations share one
+// list. The list is saved on the view, where the user can see and edit it.
+func (s *Server) ensureInventory(ctx context.Context, project *store.Project, view *store.View, lang string) {
+	if strings.TrimSpace(view.Inventory) != "" || s.textModel == nil {
+		return
+	}
+	// Skip the call when the render is about to be refused for lack of credits.
+	if err := s.requireInventoryCredit(project.ID); err != nil {
+		return
+	}
+	text, err := s.generateAndStoreInventory(ctx, project, view, lang)
+	if err != nil {
+		log.Printf("render: generating missing inventory project=%s view=%s: %v", project.ID, view.ID, err)
+		return
+	}
+	view.Inventory = text
 }
 
 // launchRenderJob is the part of starting a job that a render and an edit
